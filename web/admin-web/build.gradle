@@ -20,7 +20,7 @@ dependencies {
 bootJar {
     archiveBaseName = 'admin-web'
     archiveVersion = version
-    mainClass = 'com.yourcompany.admin.AdminApplication'
+    mainClass = 'com.vertex.admin.web.VertexApplication'
 }
 
 // 禁用普通jar
