@@ -1,0 +1,29 @@
+plugins {
+    id 'org.springframework.boot'
+}
+
+dependencies {
+    // 内部依赖
+    implementation project(':common:common-web')
+    implementation project(':service:user-service')
+    implementation project(':service:order-service')
+    implementation project(':service:product-service')
+
+    // Spring Boot Web
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // 配置处理
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+}
+
+// Spring Boot打包配置
+bootJar {
+    archiveBaseName = 'admin-web'
+    archiveVersion = version
+    mainClass = 'com.yourcompany.admin.AdminApplication'
+}
+
+// 禁用普通jar
+jar {
+    enabled = false
+}

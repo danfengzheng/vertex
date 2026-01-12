@@ -5,12 +5,12 @@ dependencies {
     api libs.hutool
     api libs.guava
     api libs.commons.lang3
-    api 'org.apache.commons:commons-collections4'
-    api 'commons-io:commons-io'
+    api libs.commons.collections4
+    api libs.commons.io
 
     // JSON
-    api 'com.alibaba.fastjson2:fastjson2'
+    api libs.fastjson2
 
     // 参数校验
-    api 'jakarta.validation:jakarta.validation-api'
+    api libs.jakarta.validation.api
 }
