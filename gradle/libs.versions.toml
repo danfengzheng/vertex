@@ -1,0 +1,59 @@
+[versions]
+# 工具包
+hutool = "5.8.24"
+guava = "33.0.0-jre"
+commons-lang3 = "3.14.0"
+commons-collections4 = "4.4"
+commons-io = "2.15.1"
+
+# JSON
+fastjson2 = "2.0.45"
+
+# 数据库
+mybatis-plus = "3.5.5"
+druid = "1.2.20"
+mysql = "8.2.0"
+
+# 中间件
+redis = "3.2.1"
+redisson = "3.25.2"
+
+# Spring
+spring-boot = "3.2.1"
+spring-cloud = "2023.0.0"
+
+# 其他
+lombok = "1.18.30"
+
+[libraries]
+# 工具包
+hutool = { module = "cn.hutool:hutool-all", version.ref = "hutool" }
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
+commons-lang3 = { module = "org.apache.commons:commons-lang3", version.ref = "commons-lang3" }
+commons-collections4 = { module = "org.apache.commons:commons-collections4", version.ref = "commons-collections4" }
+commons-io = { module = "commons-io:commons-io", version.ref = "commons-io" }
+
+# JSON
+fastjson2 = { module = "com.alibaba.fastjson2:fastjson2", version.ref = "fastjson2" }
+
+# 数据库
+mybatis-plus = { module = "com.baomidou:mybatis-plus-boot-starter", version.ref = "mybatis-plus" }
+druid = { module = "com.alibaba:druid-spring-boot-3-starter", version.ref = "druid" }
+mysql = { module = "com.mysql:mysql-connector-j", version.ref = "mysql" }
+
+# 中间件
+redis = { module = "org.springframework.boot:spring-boot-starter-data-redis" }
+redisson = { module = "org.redisson:redisson-spring-boot-starter", version.ref = "redisson" }
+
+# Lombok
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+
+[bundles]
+# 工具包组合
+commons = ["commons-lang3", "commons-collections4", "commons-io"]
+utils = ["hutool", "guava", "fastjson2"]
+database = ["mybatis-plus", "druid", "mysql"]
+
+[plugins]
+spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }
+spring-dependency-management = { id = "io.spring.dependency-management", version = "1.1.4" }

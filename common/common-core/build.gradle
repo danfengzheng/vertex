@@ -1,0 +1,16 @@
+description = 'common-core - 核心工具模块'
+
+dependencies {
+    // 工具包
+    api libs.hutool
+    api libs.guava
+    api libs.commons.lang3
+    api 'org.apache.commons:commons-collections4'
+    api 'commons-io:commons-io'
+
+    // JSON
+    api 'com.alibaba.fastjson2:fastjson2'
+
+    // 参数校验
+    api 'jakarta.validation:jakarta.validation-api'
+}

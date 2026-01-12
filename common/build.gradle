@@ -1,0 +1,14 @@
+// common模块本身不需要复杂配置
+// 它只是作为 common-core 和 common-web 的父目录
+
+description = 'common modules parent'
+
+// 如果common模块本身不产生jar包，可以禁用打包
+tasks.whenTaskAdded { task ->
+    if (task.name == 'jar' || task.name == 'bootJar') {
+        task.enabled = false
+    }
+}
+
+// 或者更简洁的写法：
+// 如果common不是一个实际的模块，这个文件甚至可以不存在

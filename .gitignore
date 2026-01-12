@@ -18,8 +18,31 @@
 *.zip
 *.tar.gz
 *.rar
-*.lock
+!gradle/wrapper/gradle-wrapper.jar
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Gradle
+.gradle/
+.gradletasknamecache
+**/build/
+!gradle/wrapper/gradle-wrapper.properties
+!gradle/libs.versions.toml
+*.lock
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.settings/
+.classpath
+.project
+.externalToolBuilders/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,29 +1,221 @@
 plugins {
-	id 'java'
-	id 'org.springframework.boot' version '4.0.1'
-	id 'io.spring.dependency-management' version '1.1.7'
+    id 'java'
+    id 'java-library'
+    id 'org.springframework.boot' version '3.2.1' apply false
+    id 'io.spring.dependency-management' version '1.1.4'
 }
 
-group = 'com.vertex'
-version = '0.0.1-SNAPSHOT'
-description = 'Demo project for Spring Boot'
+// 所有项目通用配置
+allprojects {
+    group = 'com.vertex'
+    version = '1.0.0'
 
-java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(17)
-	}
+    repositories {
+        // 阿里云Maven仓库
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/spring' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        mavenCentral()
+    }
 }
 
-repositories {
-	mavenCentral()
+// 所有子项目通用配置
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'java-library'
+    apply plugin: 'io.spring.dependency-management'
+
+    // JDK 21配置
+    java {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+
+    [compileJava, compileTestJava, javadoc]*.options*.encoding = 'UTF-8'
+
+    // 启用JDK 21新特性（可选）
+    tasks.withType(JavaCompile) {
+        options.encoding = 'UTF-8'
+        options.compilerArgs << '-parameters'
+        // 如果要使用预览特性，取消下面注释
+        // options.compilerArgs << '--enable-preview'
+    }
+
+    // 依赖版本管理 - 适配JDK 21
+    ext {
+        // ==================== Spring版本 ====================
+        // 注意：Spring Boot 3.x 是首个完全支持JDK 17+的版本
+        springBootVersion = '3.2.1'
+        springCloudVersion = '2023.0.0'
+        springCloudAlibabaVersion = '2022.0.0.0'
+
+        // ==================== 数据库 ====================
+        mybatisPlusVersion = '3.5.5'
+        dynamicDatasourceVersion = '4.2.0'
+        druidVersion = '1.2.20'
+        mysqlVersion = '8.2.0'
+        postgresqlVersion = '42.7.1'
+
+        // ==================== 中间件 ====================
+        redisVersion = '3.2.1'
+        redissonVersion = '3.25.2'
+        rocketmqVersion = '2.3.0'
+        xxlJobVersion = '2.4.0'
+        seataVersion = '2.0.0'
+
+        // ==================== 工具包 ====================
+        lombokVersion = '1.18.30'
+        hutoolVersion = '5.8.24'
+        guavaVersion = '33.0.0-jre'
+        commonsLang3Version = '3.14.0'
+        commonsCollections4Version = '4.4'
+        commonsIoVersion = '2.15.1'
+        commonsCodecVersion = '1.16.0'
+        commonsPool2Version = '2.12.0'
+
+        // ==================== JSON处理 ====================
+        fastjson2Version = '2.0.45'
+        jacksonVersion = '2.16.1'
+        gsonVersion = '2.10.1'
+
+        // ==================== 文档处理 ====================
+        poiVersion = '5.2.5'
+        easyexcelVersion = '3.3.3'
+        itextpdfVersion = '5.5.13.3'
+
+        // ==================== 验证和安全 ====================
+        // 注意：Spring Boot 3.x 使用 jakarta.* 而不是 javax.*
+        validationApiVersion = '3.0.2'
+        hibernateValidatorVersion = '8.0.1.Final'
+        jwtVersion = '0.12.5'
+        bcryptVersion = '0.10.2'
+
+        // ==================== API文档 ====================
+        knife4jVersion = '4.4.0'
+        springdocVersion = '2.3.0'
+
+        // ==================== 其他 ====================
+        mapstructVersion = '1.5.5.Final'
+        caffeineVersion = '3.1.8'
+        okhttpVersion = '4.12.0'
+        jsoupVersion = '1.17.2'
+        zxingVersion = '3.5.3'
+        pinyin4jVersion = '2.5.1'
+        ip2regionVersion = '2.7.0'
+        userAgentVersion = '1.21'
+
+        // ==================== 测试 ====================
+        junitVersion = '5.10.1'
+    }
+
+    // 依赖管理
+    dependencyManagement {
+        imports {
+            mavenBom "org.springframework.boot:spring-boot-dependencies:${springBootVersion}"
+            mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+            mavenBom "com.alibaba.cloud:spring-cloud-alibaba-dependencies:${springCloudAlibabaVersion}"
+        }
+
+        dependencies {
+            // ==================== 数据库 ====================
+            dependency "com.baomidou:mybatis-plus-boot-starter:${mybatisPlusVersion}"
+            dependency "com.baomidou:mybatis-plus-extension:${mybatisPlusVersion}"
+            dependency "com.baomidou:dynamic-datasource-spring-boot-starter:${dynamicDatasourceVersion}"
+            dependency "com.alibaba:druid-spring-boot-3-starter:${druidVersion}"
+            dependency "com.mysql:mysql-connector-j:${mysqlVersion}"
+            dependency "org.postgresql:postgresql:${postgresqlVersion}"
+
+            // ==================== Redis ====================
+            dependency "org.redisson:redisson-spring-boot-starter:${redissonVersion}"
+
+            // ==================== 消息队列 ====================
+            dependency "org.apache.rocketmq:rocketmq-spring-boot-starter:${rocketmqVersion}"
+
+            // ==================== 分布式事务 ====================
+            dependency "io.seata:seata-spring-boot-starter:${seataVersion}"
+
+            // ==================== 定时任务 ====================
+            dependency "com.xuxueli:xxl-job-core:${xxlJobVersion}"
+
+            // ==================== 工具包 ====================
+            dependency "org.projectlombok:lombok:${lombokVersion}"
+            dependency "cn.hutool:hutool-all:${hutoolVersion}"
+            dependency "com.google.guava:guava:${guavaVersion}"
+            dependency "org.apache.commons:commons-lang3:${commonsLang3Version}"
+            dependency "org.apache.commons:commons-collections4:${commonsCollections4Version}"
+            dependency "commons-io:commons-io:${commonsIoVersion}"
+            dependency "commons-codec:commons-codec:${commonsCodecVersion}"
+            dependency "org.apache.commons:commons-pool2:${commonsPool2Version}"
+
+            // ==================== JSON ====================
+            dependency "com.alibaba.fastjson2:fastjson2:${fastjson2Version}"
+            dependency "com.google.code.gson:gson:${gsonVersion}"
+
+            // ==================== 文档处理 ====================
+            dependency "org.apache.poi:poi-ooxml:${poiVersion}"
+            dependency "com.alibaba:easyexcel:${easyexcelVersion}"
+            dependency "com.itextpdf:itextpdf:${itextpdfVersion}"
+
+            // ==================== 验证和安全 ====================
+            // Jakarta EE (Spring Boot 3.x)
+            dependency "jakarta.validation:jakarta.validation-api:${validationApiVersion}"
+            dependency "org.hibernate.validator:hibernate-validator:${hibernateValidatorVersion}"
+            dependency "io.jsonwebtoken:jjwt-api:${jwtVersion}"
+            dependency "io.jsonwebtoken:jjwt-impl:${jwtVersion}"
+            dependency "io.jsonwebtoken:jjwt-jackson:${jwtVersion}"
+            dependency "at.favre.lib:bcrypt:${bcryptVersion}"
+
+            // ==================== API文档 ====================
+            dependency "com.github.xiaoymin:knife4j-openapi3-jakarta-spring-boot-starter:${knife4jVersion}"
+            dependency "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+
+            // ==================== 对象映射 ====================
+            dependency "org.mapstruct:mapstruct:${mapstructVersion}"
+            dependency "org.mapstruct:mapstruct-processor:${mapstructVersion}"
+
+            // ==================== 缓存 ====================
+            dependency "com.github.ben-manes.caffeine:caffeine:${caffeineVersion}"
+
+            // ==================== HTTP客户端 ====================
+            dependency "com.squareup.okhttp3:okhttp:${okhttpVersion}"
+
+            // ==================== 其他工具 ====================
+            dependency "org.jsoup:jsoup:${jsoupVersion}"
+            dependency "com.google.zxing:core:${zxingVersion}"
+            dependency "com.google.zxing:javase:${zxingVersion}"
+            dependency "com.belerweb:pinyin4j:${pinyin4jVersion}"
+            dependency "org.lionsoul:ip2region:${ip2regionVersion}"
+            dependency "eu.bitwalker:UserAgentUtils:${userAgentVersion}"
+        }
+    }
+
+    // 公共依赖
+    dependencies {
+        // Lombok
+        compileOnly "org.projectlombok:lombok"
+        annotationProcessor "org.projectlombok:lombok"
+        testCompileOnly "org.projectlombok:lombok"
+        testAnnotationProcessor "org.projectlombok:lombok"
+
+        // 测试
+        testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        testImplementation "org.junit.jupiter:junit-jupiter:${junitVersion}"
+    }
+
+    // 测试配置
+    test {
+        useJUnitPlatform()
+        // 如果使用了预览特性
+        // jvmArgs '--enable-preview'
+        testLogging {
+            events "passed", "skipped", "failed"
+            exceptionFormat "full"
+        }
+    }
 }
 
-dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter'
-	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-
-tasks.named('test') {
-	useJUnitPlatform()
+// 根项目不打包
+tasks.named('jar') {
+    enabled = false
 }
