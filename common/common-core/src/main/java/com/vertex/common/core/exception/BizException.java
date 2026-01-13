@@ -2,16 +2,20 @@ package com.vertex.common.core.exception;
 
 import com.vertex.common.core.ErrorCode;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
 /**
  * BizException
- *
+ *  业务异常
  * @author eth
  * @version 1.0
  * @description
  * @date 2026/1/13 02:38
  */
+
+@Data
+@EqualsAndHashCode(callSuper = true)
 public class BizException extends RuntimeException {
     @Getter
     private Integer code;

@@ -1,0 +1,9 @@
+description = 'api - 服务接口定义'
+
+dependencies {
+    // 依赖model
+    api project(':model')
+
+    // Feign（微服务时需要）
+    compileOnly libs.spring.boot.starter.openfeign
+}

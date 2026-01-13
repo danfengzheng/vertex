@@ -1,0 +1,24 @@
+description = 'user-service - 用户服务'
+
+dependencies {
+    // 内部依赖
+    implementation project(':api')
+    implementation project(':model')
+    implementation project(':common:common-core')
+
+    // Spring Boot
+    implementation libs.spring.boot.starter
+
+    // MyBatis Plus
+    implementation libs.mybatis.plus.boot.starter
+
+    // 数据库
+    runtimeOnly libs.mysql.connector
+    implementation libs.druid
+
+    // Redis
+    implementation libs.spring.boot.starter.data.redis
+
+    // 测试
+    testImplementation libs.spring.boot.starter.test
+}

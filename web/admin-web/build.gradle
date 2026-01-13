@@ -2,8 +2,12 @@ plugins {
     id 'org.springframework.boot'
 }
 
+description = 'admin-web - 管理后台'
+
 dependencies {
     // 内部依赖
+    implementation project(':api')
+    implementation project(':model')
     implementation project(':common:common-web')
     implementation project(':service:user-service')
     implementation project(':service:order-service')
@@ -12,18 +16,21 @@ dependencies {
     // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
 
+    // MyBatis Plus
+    implementation libs.mybatis.plus.boot.starter
+    // 显式指定 mybatis-spring 3.0.x 版本以兼容 Spring Boot 3.x
+    implementation libs.mybatis.spring
+
     // 配置处理
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 }
 
-// Spring Boot打包配置
 bootJar {
     archiveBaseName = 'admin-web'
     archiveVersion = version
-    mainClass = 'com.vertex.admin.web.VertexApplication'
+    mainClass = 'com.vertex.admin.web.AdminApplication'
 }
 
-// 禁用普通jar
 jar {
     enabled = false
 }

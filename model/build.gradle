@@ -1,0 +1,13 @@
+description = 'model - 数据模型模块'
+
+dependencies {
+    // 依赖common-core
+    api project(':common:common-core')
+
+    // MyBatis Plus注解
+    compileOnly libs.mybatis.plus.boot.starter
+
+    // 参数校验
+    api libs.jakarta.validation.api
+    api libs.hibernate.validator
+}

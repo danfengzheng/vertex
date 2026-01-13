@@ -13,4 +13,12 @@ dependencies {
 
     // 参数校验
     api libs.jakarta.validation.api
+
+    api libs.commons.codec
+
+    // 日志
+//    api 'org.slf4j:slf4j-api'
+
+    // MyBatis Plus注解（只用注解）
+    compileOnly libs.mybatis.plus.boot.starter
 }
