@@ -1,6 +1,6 @@
 package com.vertex.web.exception;
 
-import com.vertex.common.core.ErrorCode;
+import com.vertex.common.core.GlobalError;
 import com.vertex.common.core.exception.BizException;
 import com.vertex.web.response.Result;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining(", "));
         log.error("参数校验失败: {}", message);
-        return Result.fail(ErrorCode.PARAM_ERROR.getCode(), message);
+        return Result.fail(GlobalError.PARAM_ERROR.getCode(), message);
     }
 
     /**
@@ -50,7 +50,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DuplicateKeyException.class)
     public Result<?> handleDuplicateKeyException(DuplicateKeyException e) {
         log.error("数据库唯一键冲突", e);
-        return Result.fail(ErrorCode.SYSTEM_ERROR.getCode(), "数据已存在");
+        return Result.fail(GlobalError.SYSTEM_ERROR.getCode(), "数据已存在");
     }
 
     /**
@@ -59,6 +59,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public Result<?> handleException(Exception e) {
         log.error("系统异常", e);
-        return Result.fail(ErrorCode.SYSTEM_ERROR);
+        return Result.fail(GlobalError.SYSTEM_ERROR);
     }
 }

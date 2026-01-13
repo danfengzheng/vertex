@@ -11,22 +11,7 @@ import lombok.Getter;
  * @description
  * @date 2026/1/13 02:38
  */
-@Getter
-@AllArgsConstructor
-public enum ErrorCode {
-    SUCCESS(200, "操作成功"),
-    SYSTEM_ERROR(500, "系统异常"),
-    PARAM_ERROR(400, "参数错误"),
-    NOT_FOUND(404, "资源不存在"),
-    UNAUTHORIZED(401, "未授权"),
-    FORBIDDEN(403, "无权限"),
-
-    // 业务异常
-    USER_NOT_EXIST(1001, "用户不存在"),
-    USER_ALREADY_EXIST(1002, "用户已存在"),
-    ORDER_NOT_EXIST(2001, "订单不存在"),
-    INSUFFICIENT_STOCK(2002, "库存不足");
-
-    private final Integer code;
-    private final String message;
+public interface ErrorCode {
+    public Integer getCode();
+    public String getMessage();
 }
