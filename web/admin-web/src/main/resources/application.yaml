@@ -8,9 +8,9 @@ spring:
   # 数据源
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/vertex?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:33306/vertex?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
     username: root
-    password: 123456
+    password: root
     druid:
       initial-size: 5
       min-idle: 5
@@ -43,3 +43,16 @@ knife4j:
         api-rule: package
         api-rule-resources:
           - com.vertex.admin.controller
+
+# 系统配置
+vertex:
+  i18n:
+    # 是否开启多语言key自动拼接
+    enable: false
+    # 多语言key连接符
+    separator: "."
+  token:
+    # Token前缀，默认为 "Bearer "
+    prefix: "Bearer "
+    # Token请求头，默认为 "Authorization"
+    header: "Authorization"

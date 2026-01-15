@@ -10,10 +10,10 @@ package com.vertex.api.user;
  */
 
 import com.vertex.common.core.page.PageResult;
-import com.vertex.model.dto.user.UserCreateDTO;
-import com.vertex.model.dto.user.UserQueryDTO;
-import com.vertex.model.dto.user.UserUpdateDTO;
-import com.vertex.model.vo.user.UserVO;
+import com.vertex.model.dto.system.UserCreateDTO;
+import com.vertex.model.dto.system.UserQueryDTO;
+import com.vertex.model.dto.system.UserUpdateDTO;
+import com.vertex.model.vo.system.UserVO;
 
 /**
  * 用户服务接口

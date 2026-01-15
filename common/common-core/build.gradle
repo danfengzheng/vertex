@@ -21,4 +21,7 @@ dependencies {
 
     // MyBatis Plus注解（只用注解）
     compileOnly libs.mybatis.plus.boot.starter
+
+    // Spring Boot配置支持（只用注解）
+    compileOnly libs.spring.boot.starter
 }

@@ -2,10 +2,10 @@ package com.vertex.admin.web.controller;
 
 import com.vertex.api.user.IUserService;
 import com.vertex.common.core.page.PageResult;
-import com.vertex.model.dto.user.UserCreateDTO;
-import com.vertex.model.dto.user.UserQueryDTO;
-import com.vertex.model.dto.user.UserUpdateDTO;
-import com.vertex.model.vo.user.UserVO;
+import com.vertex.model.dto.system.UserCreateDTO;
+import com.vertex.model.dto.system.UserQueryDTO;
+import com.vertex.model.dto.system.UserUpdateDTO;
+import com.vertex.model.vo.system.UserVO;
 import com.vertex.web.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @Tag(name = "用户管理")
 @RestController
-@RequestMapping("/admin/user")
+@RequestMapping("/admin/system/user")
 @RequiredArgsConstructor
 public class UserController {
 
