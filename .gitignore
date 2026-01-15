@@ -46,3 +46,12 @@ replay_pid*
 # OS
 .DS_Store
 Thumbs.db
+
+# Frontend (vertex-ui)
+vertex-ui/node_modules/
+vertex-ui/dist/
+vertex-ui/dist-ssr/
+vertex-ui/*.local
+vertex-ui/.vite/
+vertex-ui/.env.local
+vertex-ui/.env.*.local

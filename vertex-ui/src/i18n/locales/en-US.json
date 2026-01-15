@@ -1,0 +1,121 @@
+{
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "save": "Save",
+    "search": "Search",
+    "reset": "Reset",
+    "submit": "Submit",
+    "back": "Back",
+    "operation": "Operation",
+    "status": "Status",
+    "createTime": "Create Time",
+    "updateTime": "Update Time",
+    "normal": "Normal",
+    "disabled": "Disabled",
+    "enabled": "Enabled",
+    "total": "Total {{total}}"
+  },
+  "text": {
+    "system": {
+      "title": "System",
+      "user": "Users",
+      "menu": "Menus",
+      "role": "Roles",
+      "settings": "Settings"
+    },
+    "user": {
+      "title": "User Management",
+      "username": "Username",
+      "nickname": "Nickname",
+      "phone": "Phone",
+      "email": "Email",
+      "avatar": "Avatar",
+      "gender": "Gender",
+      "accountType": "Account Type",
+      "password": "Password",
+      "profile": "Profile",
+      "logout": "Logout",
+      "admin": "Admin",
+      "gender.unknown": "Unknown",
+      "gender.male": "Male",
+      "gender.female": "Female",
+      "accountType.system": "System",
+      "accountType.agent": "Agent"
+    },
+    "menu": {
+      "title": "Menu Management",
+      "name": "Menu Name",
+      "i18nKey": "I18n Key",
+      "path": "Route Path",
+      "component": "Component Path",
+      "icon": "Icon",
+      "type": "Menu Type",
+      "permission": "Permission",
+      "sort": "Sort",
+      "parentId": "Parent Menu",
+      "type.directory": "Directory",
+      "type.menu": "Menu",
+      "type.button": "Button"
+    },
+    "role": {
+      "title": "Role Management",
+      "name": "Role Name",
+      "code": "Role Code",
+      "description": "Description"
+    }
+  },
+  "placeholder": {
+    "user": {
+      "username": "Enter username",
+      "nickname": "Enter nickname",
+      "phone": "Enter phone",
+      "email": "Enter email",
+      "password": "Enter password"
+    },
+    "menu": {
+      "parentId": "Select parent menu",
+      "name": "Enter menu name",
+      "i18nKey": "e.g: user or system.user",
+      "path": "Enter route path",
+      "component": "Enter component path",
+      "icon": "Enter icon name",
+      "permission": "Enter permission"
+    },
+    "role": {
+      "name": "Enter role name",
+      "code": "Enter role code",
+      "description": "Enter description"
+    },
+    "common": {
+      "search": "Enter keyword",
+      "select": "Select"
+    }
+  },
+  "message": {
+    "user": {
+      "loadFailed": "Load failed",
+      "deleteConfirm": "Delete this user?"
+    },
+    "menu": {
+      "loadFailed": "Load failed",
+      "deleteConfirm": "Delete this menu?"
+    },
+    "role": {
+      "loadFailed": "Load failed",
+      "deleteConfirm": "Delete this role?"
+    },
+    "common": {
+      "networkError": "Network error",
+      "requestFailed": "Request failed",
+      "unauthorized": "Unauthorized, please login",
+      "deleteSuccess": "Deleted",
+      "deleteFailed": "Delete failed",
+      "createSuccess": "Created",
+      "updateSuccess": "Updated"
+    }
+  }
+}
