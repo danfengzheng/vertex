@@ -8,7 +8,9 @@ include 'api'
 include 'service:user-service'
 include 'service:order-service'
 include 'service:product-service'
+include 'service:quote-service'
 include 'web:admin-web'
+include 'framework:socket-framework-starter'
 
 // 如果使用Java 9+模块化，可以启用
 // enableFeaturePreview('VERSION_CATALOGS')

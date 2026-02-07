@@ -1,0 +1,23 @@
+description = 'socket-framework-starter - WebSocket通信框架'
+
+dependencies {
+    api project(':common:common-core')
+
+    // Netty
+    api libs.netty.all
+
+    // Spring Boot
+    implementation libs.spring.boot.starter
+
+    // JSON
+    implementation libs.fastjson2
+
+    // 连接池
+    implementation libs.commons.pool2
+
+    // 配置处理器
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // 测试
+    testImplementation libs.spring.boot.starter.test
+}

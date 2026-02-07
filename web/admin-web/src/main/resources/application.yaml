@@ -43,6 +43,8 @@ knife4j:
         api-rule: package
         api-rule-resources:
           - com.vertex.admin.controller
+          - com.vertex.admin.web.controller
+          - com.vertex.service.quote.controller
 
 # 系统配置
 vertex:

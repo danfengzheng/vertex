@@ -1,0 +1,34 @@
+description = 'quote-service - 行情服务'
+
+dependencies {
+    // 内部依赖
+    implementation project(':api')
+    implementation project(':model')
+    implementation project(':common:common-core')
+    implementation project(':common:common-web')
+    implementation project(':framework:socket-framework-starter')
+
+    // Spring Boot
+    implementation libs.spring.boot.starter
+
+    // RocksDB
+    implementation libs.rocksdb
+
+    // RocketMQ
+    implementation libs.rocketmq
+
+    // Kafka（预留，compileOnly 不参与运行时）
+    compileOnly libs.spring.kafka
+
+    // JSON
+    implementation libs.fastjson2
+
+    // HTTP 客户端（REST 数据源）
+    implementation libs.okhttp
+
+    // 配置处理
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // 测试
+    testImplementation libs.spring.boot.starter.test
+}

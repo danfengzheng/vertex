@@ -11,6 +11,12 @@ druid = "1.2.20"
 mysql = "8.2.0"
 postgresql = "42.7.1"
 
+# ==================== 网络通信 ====================
+netty = "4.1.104.Final"
+
+# ==================== 存储 ====================
+rocksdb = "9.0.0"
+
 # ==================== 中间件 ====================
 redisson = "3.25.2"
 rocketmq = "2.3.0"
@@ -74,6 +80,12 @@ dynamic-datasource = { module = "com.baomidou:dynamic-datasource-spring-boot-sta
 druid = { module = "com.alibaba:druid-spring-boot-3-starter", version.ref = "druid" }
 mysql-connector = { module = "com.mysql:mysql-connector-j", version.ref = "mysql" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
+
+# ==================== 网络通信 ====================
+netty-all = { module = "io.netty:netty-all", version.ref = "netty" }
+
+# ==================== 存储 ====================
+rocksdb = { module = "org.rocksdb:rocksdbjni", version.ref = "rocksdb" }
 
 # ==================== 中间件 ====================
 redisson = { module = "org.redisson:redisson-spring-boot-starter", version.ref = "redisson" }
@@ -141,6 +153,7 @@ spring-boot-starter-data-redis = { module = "org.springframework.boot:spring-boo
 spring-boot-starter-aop = { module = "org.springframework.boot:spring-boot-starter-aop" }
 spring-boot-starter-openfeign = { module = "org.springframework.cloud:spring-cloud-starter-openfeign" }
 spring-boot-starter = { module = "org.springframework.boot:spring-boot-starter" }
+spring-kafka = { module = "org.springframework.kafka:spring-kafka" }
 
 [bundles]
 # 常用工具包

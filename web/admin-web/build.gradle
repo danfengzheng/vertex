@@ -12,6 +12,7 @@ dependencies {
     implementation project(':service:user-service')
     implementation project(':service:order-service')
     implementation project(':service:product-service')
+    implementation project(':service:quote-service')
 
     // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
