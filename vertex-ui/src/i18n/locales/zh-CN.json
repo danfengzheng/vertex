@@ -101,6 +101,34 @@
       "preset1y": "最近1年",
       "backfillTasks": "补全任务",
       "backfillRecords": "已补全 {{count}} 条"
+    },
+    "strategy": {
+      "title": "策略管理",
+      "configTitle": "策略配置",
+      "signalTitle": "信号监控",
+      "name": "策略名称",
+      "description": "策略描述",
+      "exchange": "交易所",
+      "symbol": "交易对",
+      "interval": "K线周期",
+      "enabled": "启用状态",
+      "indicators": "指标配置",
+      "indicatorType": "指标类型",
+      "params": "参数",
+      "weight": "权重",
+      "addIndicator": "添加指标",
+      "signalType": "信号类型",
+      "signalStrength": "信号强度",
+      "price": "触发价格",
+      "signalTime": "信号时间",
+      "indicatorValues": "指标计算值",
+      "manualAnalysis": "手动分析",
+      "detail": "详情",
+      "signalDetail": "信号详情",
+      "period": "周期",
+      "fast": "快线周期",
+      "slow": "慢线周期",
+      "signalLine": "信号线周期"
     }
   },
   "placeholder": {
@@ -136,6 +164,13 @@
       "limit": "最大条数，默认500",
       "startTime": "开始时间",
       "endTime": "结束时间"
+    },
+    "strategy": {
+      "name": "请输入策略名称",
+      "description": "请输入策略描述",
+      "exchange": "请选择交易所",
+      "symbol": "请输入交易对",
+      "interval": "请选择K线周期"
     }
   },
   "message": {
@@ -172,6 +207,16 @@
       "backfillDone": "{{symbol}} 补全完成，共 {{count}} 条",
       "backfillError": "{{symbol}} 补全失败: {{error}}",
       "noData": "暂无数据"
+    },
+    "strategy": {
+      "createSuccess": "策略创建成功",
+      "updateSuccess": "策略更新成功",
+      "deleteConfirm": "确定要删除该策略吗？",
+      "deleteSuccess": "策略删除成功",
+      "enableSuccess": "策略已启用",
+      "disableSuccess": "策略已禁用",
+      "analyzeSubmitted": "分析任务已提交",
+      "loadFailed": "加载失败"
     }
   }
 }

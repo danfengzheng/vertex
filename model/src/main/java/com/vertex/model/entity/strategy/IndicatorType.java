@@ -1,0 +1,29 @@
+package com.vertex.model.entity.strategy;
+
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+
+/**
+ * 技术指标类型
+ */
+@Getter
+@AllArgsConstructor
+public enum IndicatorType {
+
+    MA("MA", "简单移动平均线"),
+    EMA("EMA", "指数移动平均线"),
+    RSI("RSI", "相对强弱指标"),
+    MACD("MACD", "MACD指标");
+
+    private final String code;
+    private final String description;
+
+    public static IndicatorType fromCode(String code) {
+        for (IndicatorType type : values()) {
+            if (type.code.equalsIgnoreCase(code)) {
+                return type;
+            }
+        }
+        throw new IllegalArgumentException("Unknown IndicatorType code: " + code);
+    }
+}

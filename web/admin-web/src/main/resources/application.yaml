@@ -45,6 +45,7 @@ knife4j:
           - com.vertex.admin.controller
           - com.vertex.admin.web.controller
           - com.vertex.service.quote.controller
+          - com.vertex.service.strategy.controller
 
 # 系统配置
 vertex:
@@ -58,3 +59,10 @@ vertex:
     prefix: "Bearer "
     # Token请求头，默认为 "Authorization"
     header: "Authorization"
+  strategy:
+    enabled: true
+    rocksdb:
+      data-dir: ./data/rocksdb/strategy
+    engine:
+      max-kline-history: 500
+      only-closed-klines: true

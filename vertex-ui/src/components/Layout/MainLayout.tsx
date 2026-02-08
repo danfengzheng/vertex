@@ -13,6 +13,8 @@ import {
   StockOutlined,
   ApiOutlined,
   LineChartOutlined,
+  FundOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -42,6 +44,9 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
     }
     if (location.pathname.startsWith('/quote')) {
       return ['quote'];
+    }
+    if (location.pathname.startsWith('/strategy')) {
+      return ['strategy'];
     }
     return [];
   };
@@ -91,6 +96,23 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
           key: '/quote/kline',
           icon: <LineChartOutlined />,
           label: t('text.quote.klineTitle'),
+        },
+      ],
+    },
+    {
+      key: 'strategy',
+      icon: <FundOutlined />,
+      label: t('text.strategy.title'),
+      children: [
+        {
+          key: '/strategy/config',
+          icon: <SettingOutlined />,
+          label: t('text.strategy.configTitle'),
+        },
+        {
+          key: '/strategy/signals',
+          icon: <ThunderboltOutlined />,
+          label: t('text.strategy.signalTitle'),
         },
       ],
     },

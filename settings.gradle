@@ -9,6 +9,7 @@ include 'service:user-service'
 include 'service:order-service'
 include 'service:product-service'
 include 'service:quote-service'
+include 'service:strategy-service'
 include 'web:admin-web'
 include 'framework:socket-framework-starter'
 

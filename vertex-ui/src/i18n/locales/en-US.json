@@ -101,6 +101,34 @@
       "preset1y": "Last 1Y",
       "backfillTasks": "Backfill Tasks",
       "backfillRecords": "{{count}} records"
+    },
+    "strategy": {
+      "title": "Strategy",
+      "configTitle": "Strategy Config",
+      "signalTitle": "Signal Monitor",
+      "name": "Strategy Name",
+      "description": "Description",
+      "exchange": "Exchange",
+      "symbol": "Symbol",
+      "interval": "Interval",
+      "enabled": "Enabled",
+      "indicators": "Indicators",
+      "indicatorType": "Indicator Type",
+      "params": "Parameters",
+      "weight": "Weight",
+      "addIndicator": "Add Indicator",
+      "signalType": "Signal Type",
+      "signalStrength": "Strength",
+      "price": "Price",
+      "signalTime": "Signal Time",
+      "indicatorValues": "Indicator Values",
+      "manualAnalysis": "Manual Analysis",
+      "detail": "Detail",
+      "signalDetail": "Signal Detail",
+      "period": "Period",
+      "fast": "Fast Period",
+      "slow": "Slow Period",
+      "signalLine": "Signal Period"
     }
   },
   "placeholder": {
@@ -136,6 +164,13 @@
       "limit": "Max records, default 500",
       "startTime": "Start time",
       "endTime": "End time"
+    },
+    "strategy": {
+      "name": "Enter strategy name",
+      "description": "Enter description",
+      "exchange": "Select exchange",
+      "symbol": "Enter symbol",
+      "interval": "Select interval"
     }
   },
   "message": {
@@ -172,6 +207,16 @@
       "backfillDone": "{{symbol}} backfill done, {{count}} records",
       "backfillError": "{{symbol}} backfill failed: {{error}}",
       "noData": "No data"
+    },
+    "strategy": {
+      "createSuccess": "Strategy created",
+      "updateSuccess": "Strategy updated",
+      "deleteConfirm": "Delete this strategy?",
+      "deleteSuccess": "Strategy deleted",
+      "enableSuccess": "Strategy enabled",
+      "disableSuccess": "Strategy disabled",
+      "analyzeSubmitted": "Analysis submitted",
+      "loadFailed": "Load failed"
     }
   }
 }

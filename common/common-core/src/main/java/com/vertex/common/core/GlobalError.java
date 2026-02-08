@@ -31,7 +31,16 @@ public enum GlobalError implements ErrorCode {
     KLINE_NOT_FOUND(3001, "K线数据不存在"),
     KLINE_STORE_ERROR(3002, "K线存储异常"),
     EXCHANGE_CONNECT_ERROR(3003, "交易所连接异常"),
-    QUOTE_DATA_CONVERT_ERROR(3004, "行情数据转换异常");
+    QUOTE_DATA_CONVERT_ERROR(3004, "行情数据转换异常"),
+
+    // 策略异常
+    STRATEGY_NOT_FOUND(4001, "策略不存在"),
+    STRATEGY_ALREADY_EXISTS(4002, "策略名称已存在"),
+    STRATEGY_CONFIG_ERROR(4003, "策略配置错误"),
+    SIGNAL_NOT_FOUND(4005, "信号不存在"),
+    SIGNAL_STORE_ERROR(4006, "信号存储异常"),
+    INDICATOR_CALC_ERROR(4007, "指标计算异常"),
+    STRATEGY_KLINE_INSUFFICIENT(4008, "K线数据不足");
     @Getter
     private final Integer code;
     @Getter
