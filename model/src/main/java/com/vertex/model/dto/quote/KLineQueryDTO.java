@@ -20,8 +20,7 @@ public class KLineQueryDTO {
     @NotBlank(message = "交易所不能为空")
     private String exchange;
 
-    /** K线周期 */
-    @NotNull(message = "K线周期不能为空")
+    /** K线周期，null 表示全部周期 */
     private KLineInterval interval;
 
     /** 查询起始时间（毫秒时间戳） */

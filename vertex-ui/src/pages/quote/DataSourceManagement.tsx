@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Table, Button, Space, message, Tag, Modal, Form, Select, Input, Card, Row, Col, DatePicker } from 'antd';
 import type { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -128,7 +129,7 @@ export const DataSourceManagement = () => {
       const data: KLineQueryDTO = {
         exchange: backfillExchange,
         symbol: values.symbol,
-        interval: values.interval,
+        interval: values.interval === 'ALL' ? null : values.interval,
         startTime: timeRange ? timeRange[0].valueOf() : undefined,
         endTime: timeRange ? timeRange[1].valueOf() : undefined,
       };
@@ -143,6 +144,22 @@ export const DataSourceManagement = () => {
     } finally {
       setBackfillLoading(false);
     }
+  };
+
+  /** 快捷时间范围 preset */
+  const timePresets = [
+    { label: t('text.quote.preset1w'), value: 7 },
+    { label: t('text.quote.preset1m'), value: 30 },
+    { label: t('text.quote.preset3m'), value: 90 },
+    { label: t('text.quote.preset1y'), value: 365 },
+  ];
+
+  const handleTimePreset = (days: number) => {
+    const end = dayjs();
+    const start = end.subtract(days, 'day');
+    backfillForm.setFieldsValue({
+      timeRange: [start, end],
+    });
   };
 
   const columns = [
@@ -301,14 +318,33 @@ export const DataSourceManagement = () => {
             label={t('text.quote.interval')}
             rules={[{ required: true, message: t('placeholder.quote.interval') }]}
           >
-            <Select placeholder={t('placeholder.quote.interval')} options={INTERVAL_OPTIONS} />
-          </Form.Item>
-          <Form.Item name="timeRange" label={t('text.quote.timeRange')}>
-            <DatePicker.RangePicker
-              showTime
-              style={{ width: '100%' }}
-              placeholder={[t('placeholder.quote.startTime'), t('placeholder.quote.endTime')]}
+            <Select
+              placeholder={t('placeholder.quote.interval')}
+              options={[
+                { value: 'ALL', label: t('text.quote.intervalAll') },
+                ...INTERVAL_OPTIONS,
+              ]}
             />
+          </Form.Item>
+          <Form.Item label={t('text.quote.timeRange')}>
+            <Space style={{ marginBottom: 8 }} wrap>
+              {timePresets.map((preset) => (
+                <Button
+                  key={preset.value}
+                  size="small"
+                  onClick={() => handleTimePreset(preset.value)}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </Space>
+            <Form.Item name="timeRange" noStyle>
+              <DatePicker.RangePicker
+                showTime
+                style={{ width: '100%' }}
+                placeholder={[t('placeholder.quote.startTime'), t('placeholder.quote.endTime')]}
+              />
+            </Form.Item>
           </Form.Item>
         </Form>
       </Modal>

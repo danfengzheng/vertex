@@ -41,11 +41,11 @@ export interface KLineVO {
   closed: boolean;
 }
 
-/** K线查询参数 */
+/** K线查询参数（补全接口 interval 可为 null 表示全部周期） */
 export interface KLineQueryDTO {
   symbol: string;
   exchange: string;
-  interval: KLineInterval;
+  interval?: KLineInterval | null;
   startTime?: number;
   endTime?: number;
   limit?: number;

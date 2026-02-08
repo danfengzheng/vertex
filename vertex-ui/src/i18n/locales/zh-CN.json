@@ -93,7 +93,12 @@
       "closed": "已收盘",
       "closedYes": "是",
       "closedNo": "未收",
-      "timeRange": "时间范围"
+      "timeRange": "时间范围",
+      "intervalAll": "全部周期",
+      "preset1w": "最近1周",
+      "preset1m": "最近1月",
+      "preset3m": "最近3月",
+      "preset1y": "最近1年"
     }
   },
   "placeholder": {

@@ -93,7 +93,12 @@
       "closed": "Closed",
       "closedYes": "Yes",
       "closedNo": "No",
-      "timeRange": "Time Range"
+      "timeRange": "Time Range",
+      "intervalAll": "All Intervals",
+      "preset1w": "Last 1W",
+      "preset1m": "Last 1M",
+      "preset3m": "Last 3M",
+      "preset1y": "Last 1Y"
     }
   },
   "placeholder": {
