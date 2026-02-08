@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -83,24 +84,53 @@ public class QuoteSourceController {
         return Result.success();
     }
 
-    @Operation(summary = "历史K线补全（REST）")
+    @Operation(summary = "历史K线补全（REST），支持按时间段自动分批拉取")
     @PostMapping("/backfill")
     public Result<Integer> backfill(@RequestBody @Validated KLineQueryDTO query) {
         KLineRestClient client = findRestClient(query.getExchange());
-        int limit = query.getLimit() != null ? query.getLimit() : 500;
 
-        List<KLine> klines = client.fetchKLines(
-                query.getSymbol(),
-                query.getInterval(),
-                query.getStartTime(),
-                query.getEndTime(),
-                limit
-        );
+        // 单批最大条数：OKX 最多 300，Binance 最多 1000
+        int batchLimit = "okx".equalsIgnoreCase(query.getExchange()) ? 300 : 1000;
 
-        if (!klines.isEmpty()) {
-            klineService.saveBatch(klines);
+        // 无时间段时走单次查询
+        if (query.getStartTime() == null || query.getEndTime() == null) {
+            int limit = query.getLimit() != null ? query.getLimit() : 500;
+            List<KLine> klines = client.fetchKLines(
+                    query.getSymbol(), query.getInterval(),
+                    query.getStartTime(), query.getEndTime(),
+                    Math.min(limit, batchLimit));
+            if (!klines.isEmpty()) {
+                klineService.saveBatch(klines);
+            }
+            return Result.success(klines.size());
         }
-        return Result.success(klines.size());
+
+        // 有时间段时自动分批拉取
+        long intervalMillis = query.getInterval().getMillis();
+        long windowMillis = intervalMillis * batchLimit;
+        long cursor = query.getStartTime();
+        long endTime = query.getEndTime();
+        int totalCount = 0;
+
+        while (cursor < endTime) {
+            long windowEnd = Math.min(cursor + windowMillis, endTime);
+            List<KLine> batch = client.fetchKLines(
+                    query.getSymbol(), query.getInterval(),
+                    cursor, windowEnd, batchLimit);
+
+            if (!batch.isEmpty()) {
+                klineService.saveBatch(batch);
+                totalCount += batch.size();
+                // 以最后一条 K线的 closeTime 作为下一批起点，避免重复
+                long lastCloseTime = batch.get(batch.size() - 1).getCloseTime();
+                cursor = lastCloseTime + 1;
+            } else {
+                // 当前窗口无数据，滑动到下一个窗口
+                cursor = windowEnd + 1;
+            }
+        }
+
+        return Result.success(totalCount);
     }
 
     // ==================== 辅助方法 ====================

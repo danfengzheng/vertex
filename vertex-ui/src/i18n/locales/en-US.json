@@ -92,7 +92,8 @@
       "trades": "Trades",
       "closed": "Closed",
       "closedYes": "Yes",
-      "closedNo": "No"
+      "closedNo": "No",
+      "timeRange": "Time Range"
     }
   },
   "placeholder": {
@@ -125,7 +126,9 @@
       "exchange": "Select exchange",
       "symbol": "e.g. BTC-USDT",
       "interval": "Select interval",
-      "limit": "Max records, default 500"
+      "limit": "Max records, default 500",
+      "startTime": "Start time",
+      "endTime": "End time"
     }
   },
   "message": {

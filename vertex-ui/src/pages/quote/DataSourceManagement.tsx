@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Space, message, Tag, Modal, Form, Select, Input, Card, Row, Col } from 'antd';
+import { Table, Button, Space, message, Tag, Modal, Form, Select, Input, Card, Row, Col, DatePicker } from 'antd';
+import type { Dayjs } from 'dayjs';
 import {
   PlayCircleOutlined,
   PauseCircleOutlined,
@@ -39,6 +40,7 @@ export const DataSourceManagement = () => {
   // 补全弹窗
   const [backfillVisible, setBackfillVisible] = useState(false);
   const [backfillExchange, setBackfillExchange] = useState('');
+  const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillForm] = Form.useForm();
 
   const loadStatus = async () => {
@@ -122,12 +124,15 @@ export const DataSourceManagement = () => {
   const handleBackfillSubmit = async () => {
     try {
       const values = await backfillForm.validateFields();
+      const timeRange: [Dayjs, Dayjs] | undefined = values.timeRange;
       const data: KLineQueryDTO = {
         exchange: backfillExchange,
         symbol: values.symbol,
         interval: values.interval,
-        limit: values.limit || 500,
+        startTime: timeRange ? timeRange[0].valueOf() : undefined,
+        endTime: timeRange ? timeRange[1].valueOf() : undefined,
       };
+      setBackfillLoading(true);
       const response = await quoteSourceApi.backfill(data);
       if (response.code === 200) {
         message.success(t('message.quote.backfillSuccess', { count: response.data }));
@@ -135,6 +140,8 @@ export const DataSourceManagement = () => {
       setBackfillVisible(false);
     } catch {
       // form validation error
+    } finally {
+      setBackfillLoading(false);
     }
   };
 
@@ -278,6 +285,7 @@ export const DataSourceManagement = () => {
         title={t('text.quote.backfill') + ' - ' + backfillExchange.toUpperCase()}
         open={backfillVisible}
         onOk={handleBackfillSubmit}
+        confirmLoading={backfillLoading}
         onCancel={() => setBackfillVisible(false)}
       >
         <Form form={backfillForm} layout="vertical">
@@ -295,8 +303,12 @@ export const DataSourceManagement = () => {
           >
             <Select placeholder={t('placeholder.quote.interval')} options={INTERVAL_OPTIONS} />
           </Form.Item>
-          <Form.Item name="limit" label={t('text.quote.limit')}>
-            <Input type="number" placeholder="500" />
+          <Form.Item name="timeRange" label={t('text.quote.timeRange')}>
+            <DatePicker.RangePicker
+              showTime
+              style={{ width: '100%' }}
+              placeholder={[t('placeholder.quote.startTime'), t('placeholder.quote.endTime')]}
+            />
           </Form.Item>
         </Form>
       </Modal>

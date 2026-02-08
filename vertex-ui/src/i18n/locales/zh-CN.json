@@ -92,7 +92,8 @@
       "trades": "成交笔数",
       "closed": "已收盘",
       "closedYes": "是",
-      "closedNo": "未收"
+      "closedNo": "未收",
+      "timeRange": "时间范围"
     }
   },
   "placeholder": {
@@ -125,7 +126,9 @@
       "exchange": "请选择交易所",
       "symbol": "请输入交易对，如 BTC-USDT",
       "interval": "请选择K线周期",
-      "limit": "最大条数，默认500"
+      "limit": "最大条数，默认500",
+      "startTime": "开始时间",
+      "endTime": "结束时间"
     }
   },
   "message": {
