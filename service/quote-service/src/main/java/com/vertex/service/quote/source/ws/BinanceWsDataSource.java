@@ -5,9 +5,10 @@ import com.alibaba.fastjson2.JSONObject;
 import com.vertex.framework.socket.exchange.ExchangeConfig;
 import com.vertex.framework.socket.exchange.ExchangeType;
 import com.vertex.framework.socket.exchange.ExchangeWebSocketClient;
-import com.vertex.framework.socket.heartbeat.DefaultHeartbeatStrategy;
 import com.vertex.framework.socket.heartbeat.HeartbeatStrategy;
 import com.vertex.model.entity.quote.KLine;
+import io.netty.channel.Channel;
+import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.service.quote.converter.KLineConverter;
 import com.vertex.service.quote.notify.CompositeNotifier;
@@ -150,7 +151,34 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
 
     @Override
     protected HeartbeatStrategy createHeartbeatStrategy() {
-        return new DefaultHeartbeatStrategy();
+        return new BinanceHeartbeatStrategy();
+    }
+
+    /**
+     * 币安心跳策略
+     * <p>
+     * 币安 WebSocket 由服务端主动发送 Ping Frame，客户端需要回复 Pong Frame。
+     * 客户端侧的心跳只需发送 Pong Frame 保持连接活跃，不应主动发 Ping Frame。
+     */
+    private static class BinanceHeartbeatStrategy implements HeartbeatStrategy {
+
+        @Override
+        public void sendHeartbeat(Channel channel) {
+            if (channel.isActive()) {
+                channel.writeAndFlush(new PongWebSocketFrame());
+                log.debug("[Binance] Sent unsolicited pong to keep alive: {}", channel.remoteAddress());
+            }
+        }
+
+        @Override
+        public boolean isHeartbeatResponse(String message) {
+            return false;
+        }
+
+        @Override
+        public void handleHeartbeatResponse(Channel channel, String message) {
+            // no-op
+        }
     }
 
     @Override

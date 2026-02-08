@@ -73,9 +73,9 @@ public class WebSocketClientHandler extends SimpleChannelInboundHandler<Object> 
             log.info("Received close frame, status: {}, reason: {}",
                     closeFrame.statusCode(), closeFrame.reasonText());
             ch.close();
-        } else if (msg instanceof PingWebSocketFrame) {
-            log.debug("Received ping, sending pong");
-            ctx.writeAndFlush(new PongWebSocketFrame());
+        } else if (msg instanceof PingWebSocketFrame pingFrame) {
+            log.debug("Received ping from: {}, sending pong", ch.remoteAddress());
+            ctx.writeAndFlush(new PongWebSocketFrame(pingFrame.content().retain()));
         }
     }
 
