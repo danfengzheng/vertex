@@ -1,6 +1,7 @@
 package com.vertex.model.entity.strategy;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.vertex.common.core.base.BaseEntity;
@@ -34,6 +35,7 @@ public class Signal extends BaseEntity {
     private String exchange;
 
     /** K线周期 */
+    @TableField("`interval`")
     private KLineInterval interval;
 
     /** 信号类型 */

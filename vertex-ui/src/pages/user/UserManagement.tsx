@@ -51,7 +51,7 @@ export const UserManagement = () => {
     setModalVisible(true);
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     Modal.confirm({
       title: t('common.confirm'),
       content: t('message.user.deleteConfirm'),

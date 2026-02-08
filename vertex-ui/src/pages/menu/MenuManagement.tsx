@@ -43,7 +43,7 @@ export const MenuManagement = () => {
     setModalVisible(true);
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     Modal.confirm({
       title: t('common.confirm'),
       content: t('message.menu.deleteConfirm'),

@@ -112,7 +112,7 @@ export const StrategyConfig = () => {
   // 弹窗
   const [modalVisible, setModalVisible] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form] = Form.useForm();
 
   // 指标配置联动
@@ -158,7 +158,7 @@ export const StrategyConfig = () => {
     setModalVisible(true);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     try {
       await strategyApi.delete(id);
       message.success(t('message.strategy.deleteSuccess'));

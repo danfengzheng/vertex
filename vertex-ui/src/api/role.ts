@@ -6,7 +6,7 @@ import type { ApiResponse, PageResult, PageQuery } from '../types/api';
  */
 
 export interface RoleVO {
-  id: number;
+  id: string;
   name: string;
   code: string;
   description: string;
@@ -22,7 +22,7 @@ export interface RoleCreateDTO {
 }
 
 export interface RoleUpdateDTO {
-  id: number;
+  id: string;
   name?: string;
   code?: string;
   description?: string;
@@ -37,7 +37,7 @@ export interface RoleQueryDTO extends PageQuery {
 
 export const roleApi = {
   /** 根据ID查询角色 */
-  getById: (id: number): Promise<ApiResponse<RoleVO>> => {
+  getById: (id: string): Promise<ApiResponse<RoleVO>> => {
     return request.get(`/system/role/${id}`);
   },
 
@@ -52,7 +52,7 @@ export const roleApi = {
   },
 
   /** 创建角色 */
-  create: (data: RoleCreateDTO): Promise<ApiResponse<number>> => {
+  create: (data: RoleCreateDTO): Promise<ApiResponse<string>> => {
     return request.post('/system/role', data);
   },
 
@@ -62,7 +62,7 @@ export const roleApi = {
   },
 
   /** 删除角色 */
-  delete: (id: number): Promise<ApiResponse<void>> => {
+  delete: (id: string): Promise<ApiResponse<void>> => {
     return request.delete(`/system/role/${id}`);
   },
 };

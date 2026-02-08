@@ -1,6 +1,7 @@
 package com.vertex.model.entity.strategy;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.vertex.common.core.base.BaseEntity;
@@ -32,6 +33,7 @@ public class Strategy extends BaseEntity {
     private String symbol;
 
     /** K线周期 */
+    @TableField("`interval`")
     private KLineInterval interval;
 
     /** 指标配置 JSON (List<StrategyIndicatorConfig>) */

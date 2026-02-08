@@ -57,7 +57,7 @@ export const SignalMonitor = () => {
   const [interval, setInterval] = useState<KLineInterval | undefined>();
   const [signalType, setSignalType] = useState<SignalType | undefined>();
   const [timeRange, setTimeRange] = useState<[Dayjs, Dayjs] | null>(null);
-  const [strategyId, setStrategyId] = useState<number | undefined>();
+  const [strategyId, setStrategyId] = useState<string | undefined>();
 
   // 策略列表（用于手动分析按钮）
   const [strategies, setStrategies] = useState<StrategyVO[]>([]);
@@ -115,7 +115,7 @@ export const SignalMonitor = () => {
     loadData();
   };
 
-  const handleAnalyze = async (strategyIdToAnalyze: number) => {
+  const handleAnalyze = async (strategyIdToAnalyze: string) => {
     try {
       await signalApi.analyze(strategyIdToAnalyze);
       message.success(t('message.strategy.analyzeSubmitted'));
@@ -136,7 +136,7 @@ export const SignalMonitor = () => {
       dataIndex: 'signalTime',
       key: 'signalTime',
       width: 180,
-      render: (val: number) => dayjs(val).format('YYYY-MM-DD HH:mm:ss'),
+      render: (val: number | string) => dayjs(typeof val === 'string' ? Number(val) : val).format('YYYY-MM-DD HH:mm:ss'),
     },
     {
       title: t('text.strategy.name'),
@@ -342,7 +342,7 @@ export const SignalMonitor = () => {
               {detailSignal.price}
             </Descriptions.Item>
             <Descriptions.Item label={t('text.strategy.signalTime')}>
-              {dayjs(detailSignal.signalTime).format('YYYY-MM-DD HH:mm:ss')}
+              {dayjs(typeof detailSignal.signalTime === 'string' ? Number(detailSignal.signalTime) : detailSignal.signalTime).format('YYYY-MM-DD HH:mm:ss')}
             </Descriptions.Item>
             <Descriptions.Item label={t('text.strategy.indicatorValues')} span={2}>
               {detailSignal.indicators && (

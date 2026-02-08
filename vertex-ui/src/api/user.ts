@@ -6,7 +6,7 @@ import type { ApiResponse, PageResult, PageQuery } from '../types/api';
  */
 
 export interface UserVO {
-  id: number;
+  id: string;
   username: string;
   nickname: string;
   phone: string;
@@ -29,7 +29,7 @@ export interface UserCreateDTO {
 }
 
 export interface UserUpdateDTO {
-  id: number;
+  id: string;
   username?: string;
   password?: string;
   phone?: string;
@@ -52,7 +52,7 @@ export interface UserQueryDTO extends PageQuery {
 
 export const userApi = {
   /** 根据ID查询用户 */
-  getById: (id: number): Promise<ApiResponse<UserVO>> => {
+  getById: (id: string): Promise<ApiResponse<UserVO>> => {
     return request.get(`/system/user/${id}`);
   },
 
@@ -62,7 +62,7 @@ export const userApi = {
   },
 
   /** 创建用户 */
-  create: (data: UserCreateDTO): Promise<ApiResponse<number>> => {
+  create: (data: UserCreateDTO): Promise<ApiResponse<string>> => {
     return request.post('/system/user', data);
   },
 
@@ -72,7 +72,7 @@ export const userApi = {
   },
 
   /** 删除用户 */
-  delete: (id: number): Promise<ApiResponse<void>> => {
+  delete: (id: string): Promise<ApiResponse<void>> => {
     return request.delete(`/user/${id}`);
   },
 };

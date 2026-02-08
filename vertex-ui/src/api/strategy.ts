@@ -36,7 +36,7 @@ export interface StrategyIndicatorConfig {
 
 /** 策略 VO */
 export interface StrategyVO {
-  id: number;
+  id: string;
   name: string;
   description: string;
   exchange: string;
@@ -50,8 +50,8 @@ export interface StrategyVO {
 
 /** 信号 VO */
 export interface SignalVO {
-  id: number;
-  strategyId: number;
+  id: string;
+  strategyId: string;
   strategyName: string;
   symbol: string;
   exchange: string;
@@ -59,7 +59,7 @@ export interface SignalVO {
   signalType: SignalType;
   signalStrength: number;
   price: string;
-  signalTime: number;
+  signalTime: string | number;
   indicators: Record<string, number>;
   description: string;
   createTime: string;
@@ -77,7 +77,7 @@ export interface StrategyCreateDTO {
 
 /** 策略更新参数 */
 export interface StrategyUpdateDTO {
-  id: number;
+  id: string;
   name?: string;
   description?: string;
   exchange?: string;
@@ -96,7 +96,7 @@ export interface StrategyQueryDTO extends PageQuery {
 
 /** 信号查询参数 */
 export interface SignalQueryDTO extends PageQuery {
-  strategyId?: number;
+  strategyId?: string;
   exchange?: string;
   symbol?: string;
   interval?: KLineInterval;
@@ -107,25 +107,25 @@ export interface SignalQueryDTO extends PageQuery {
 
 /** 策略管理 API */
 export const strategyApi = {
-  create: (data: StrategyCreateDTO): Promise<ApiResponse<number>> =>
+  create: (data: StrategyCreateDTO): Promise<ApiResponse<string>> =>
     request.post('/strategy', data),
 
   update: (data: StrategyUpdateDTO): Promise<ApiResponse<void>> =>
     request.put('/strategy', data),
 
-  delete: (id: number): Promise<ApiResponse<void>> =>
+  delete: (id: string): Promise<ApiResponse<void>> =>
     request.delete(`/strategy/${id}`),
 
-  getById: (id: number): Promise<ApiResponse<StrategyVO>> =>
+  getById: (id: string): Promise<ApiResponse<StrategyVO>> =>
     request.get(`/strategy/${id}`),
 
   page: (params: StrategyQueryDTO): Promise<ApiResponse<PageResult<StrategyVO>>> =>
     request.get('/strategy/page', { params }),
 
-  enable: (id: number): Promise<ApiResponse<void>> =>
+  enable: (id: string): Promise<ApiResponse<void>> =>
     request.post(`/strategy/${id}/enable`),
 
-  disable: (id: number): Promise<ApiResponse<void>> =>
+  disable: (id: string): Promise<ApiResponse<void>> =>
     request.post(`/strategy/${id}/disable`),
 };
 
@@ -134,9 +134,9 @@ export const signalApi = {
   page: (params: SignalQueryDTO): Promise<ApiResponse<PageResult<SignalVO>>> =>
     request.get('/signal/page', { params }),
 
-  getById: (id: number): Promise<ApiResponse<SignalVO>> =>
+  getById: (id: string): Promise<ApiResponse<SignalVO>> =>
     request.get(`/signal/${id}`),
 
-  analyze: (strategyId: number): Promise<ApiResponse<void>> =>
+  analyze: (strategyId: string): Promise<ApiResponse<void>> =>
     request.post('/signal/analyze', null, { params: { strategyId } }),
 };

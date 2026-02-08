@@ -6,8 +6,8 @@ import type { ApiResponse, PageResult, PageQuery } from '../types/api';
  */
 
 export interface MenuVO {
-  id: number;
-  parentId: number;
+  id: string;
+  parentId: string | null;
   name: string;
   i18nKey: string;
   path: string;
@@ -22,7 +22,7 @@ export interface MenuVO {
 }
 
 export interface MenuCreateDTO {
-  parentId?: number;
+  parentId?: string;
   name: string;
   i18nKey?: string;
   path?: string;
@@ -35,8 +35,8 @@ export interface MenuCreateDTO {
 }
 
 export interface MenuUpdateDTO {
-  id: number;
-  parentId?: number;
+  id: string;
+  parentId?: string;
   name?: string;
   i18nKey?: string;
   path?: string;
@@ -50,14 +50,14 @@ export interface MenuUpdateDTO {
 
 export interface MenuQueryDTO extends PageQuery {
   name?: string;
-  parentId?: number;
+  parentId?: string;
   type?: number;
   status?: number;
 }
 
 export const menuApi = {
   /** 根据ID查询菜单 */
-  getById: (id: number): Promise<ApiResponse<MenuVO>> => {
+  getById: (id: string): Promise<ApiResponse<MenuVO>> => {
     return request.get(`/system/menu/${id}`);
   },
 
@@ -72,12 +72,12 @@ export const menuApi = {
   },
 
   /** 根据父ID查询子菜单 */
-  listByParentId: (parentId: number): Promise<ApiResponse<MenuVO[]>> => {
+  listByParentId: (parentId: string): Promise<ApiResponse<MenuVO[]>> => {
     return request.get(`/system/menu/parent/${parentId}`);
   },
 
   /** 创建菜单 */
-  create: (data: MenuCreateDTO): Promise<ApiResponse<number>> => {
+  create: (data: MenuCreateDTO): Promise<ApiResponse<string>> => {
     return request.post('/system/menu', data);
   },
 
@@ -87,7 +87,7 @@ export const menuApi = {
   },
 
   /** 删除菜单 */
-  delete: (id: number): Promise<ApiResponse<void>> => {
+  delete: (id: string): Promise<ApiResponse<void>> => {
     return request.delete(`/system/menu/${id}`);
   },
 };
