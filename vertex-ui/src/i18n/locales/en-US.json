@@ -98,7 +98,9 @@
       "preset1w": "Last 1W",
       "preset1m": "Last 1M",
       "preset3m": "Last 3M",
-      "preset1y": "Last 1Y"
+      "preset1y": "Last 1Y",
+      "backfillTasks": "Backfill Tasks",
+      "backfillRecords": "{{count}} records"
     }
   },
   "placeholder": {
@@ -166,7 +168,9 @@
       "stopFailed": "Failed to stop data source",
       "subscribeSuccess": "Subscribed",
       "unsubscribeSuccess": "Unsubscribed",
-      "backfillSuccess": "Backfill done, {{count}} records",
+      "backfillSubmitted": "Backfill task submitted for {{symbol}}",
+      "backfillDone": "{{symbol}} backfill done, {{count}} records",
+      "backfillError": "{{symbol}} backfill failed: {{error}}",
       "noData": "No data"
     }
   }

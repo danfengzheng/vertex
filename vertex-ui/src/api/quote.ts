@@ -58,6 +58,16 @@ export interface SubscribeRequestDTO {
   interval: KLineInterval;
 }
 
+/** 补全任务进度 */
+export interface BackfillProgressVO {
+  status: 'running' | 'done' | 'error' | 'not_found';
+  totalIntervals?: number;
+  completedIntervals?: number;
+  completedRecords?: number;
+  currentInterval?: string;
+  errorMessage?: string;
+}
+
 /** 数据源管理 API */
 export const quoteSourceApi = {
   /** 查看所有数据源状态 */
@@ -85,9 +95,14 @@ export const quoteSourceApi = {
     return request.post('/quote/source/unsubscribe', data);
   },
 
-  /** 历史K线补全 */
-  backfill: (data: KLineQueryDTO): Promise<ApiResponse<number>> => {
+  /** 历史K线补全（异步，返回 taskId） */
+  backfill: (data: KLineQueryDTO): Promise<ApiResponse<string>> => {
     return request.post('/quote/source/backfill', data);
+  },
+
+  /** 查询补全任务进度 */
+  backfillProgress: (taskId: string): Promise<ApiResponse<BackfillProgressVO>> => {
+    return request.get('/quote/source/backfill/progress', { params: { taskId } });
   },
 };
 

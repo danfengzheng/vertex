@@ -98,7 +98,9 @@
       "preset1w": "最近1周",
       "preset1m": "最近1月",
       "preset3m": "最近3月",
-      "preset1y": "最近1年"
+      "preset1y": "最近1年",
+      "backfillTasks": "补全任务",
+      "backfillRecords": "已补全 {{count}} 条"
     }
   },
   "placeholder": {
@@ -166,7 +168,9 @@
       "stopFailed": "数据源停止失败",
       "subscribeSuccess": "订阅成功",
       "unsubscribeSuccess": "取消订阅成功",
-      "backfillSuccess": "历史补全完成，共 {{count}} 条",
+      "backfillSubmitted": "{{symbol}} 补全任务已提交",
+      "backfillDone": "{{symbol}} 补全完成，共 {{count}} 条",
+      "backfillError": "{{symbol}} 补全失败: {{error}}",
       "noData": "暂无数据"
     }
   }

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Table, Button, Space, message, Tag, Modal, Form, Select, Input, Card, Row, Col, DatePicker } from 'antd';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Table, Button, Space, message, Tag, Modal, Form, Select, Input, Card, Row, Col, DatePicker, Progress, Alert } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import {
@@ -10,6 +10,9 @@ import {
   HistoryOutlined,
   ReloadOutlined,
   SyncOutlined,
+  LoadingOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,12 +22,21 @@ import {
   KLineQueryDTO,
   KLineInterval,
   KLINE_INTERVAL_LABELS,
+  BackfillProgressVO,
 } from '../../api/quote';
 
 const INTERVAL_OPTIONS = Object.entries(KLINE_INTERVAL_LABELS).map(([value, label]) => ({
   value,
   label,
 }));
+
+/** 补全任务信息 */
+interface BackfillTask {
+  taskId: string;
+  exchange: string;
+  symbol: string;
+  progress: BackfillProgressVO;
+}
 
 export const DataSourceManagement = () => {
   const { t } = useTranslation();
@@ -44,6 +56,10 @@ export const DataSourceManagement = () => {
   const [backfillLoading, setBackfillLoading] = useState(false);
   const [backfillForm] = Form.useForm();
 
+  // 补全任务进度追踪
+  const [backfillTasks, setBackfillTasks] = useState<BackfillTask[]>([]);
+  const pollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const loadStatus = async () => {
     setLoading(true);
     try {
@@ -58,9 +74,83 @@ export const DataSourceManagement = () => {
     }
   };
 
+  // 轮询进度
+  const pollProgress = useCallback(async () => {
+    setBackfillTasks((prevTasks) => {
+      const runningTasks = prevTasks.filter(
+        (task) => task.progress.status === 'running'
+      );
+
+      if (runningTasks.length === 0) return prevTasks;
+
+      // 异步更新每个运行中的任务
+      runningTasks.forEach(async (task) => {
+        try {
+          const response = await quoteSourceApi.backfillProgress(task.taskId);
+          if (response.code === 200) {
+            setBackfillTasks((current) =>
+              current.map((t) =>
+                t.taskId === task.taskId
+                  ? { ...t, progress: response.data }
+                  : t
+              )
+            );
+
+            // 任务完成/失败时提示
+            if (response.data.status === 'done') {
+              message.success(
+                t('message.quote.backfillDone', {
+                  symbol: task.symbol,
+                  count: response.data.completedRecords ?? 0,
+                })
+              );
+            } else if (response.data.status === 'error') {
+              message.error(
+                t('message.quote.backfillError', {
+                  symbol: task.symbol,
+                  error: response.data.errorMessage ?? '',
+                })
+              );
+            }
+          }
+        } catch {
+          // 网络错误静默处理，下次轮询重试
+        }
+      });
+
+      return prevTasks;
+    });
+  }, [t]);
+
+  // 启动/停止轮询
+  useEffect(() => {
+    const hasRunning = backfillTasks.some(
+      (task) => task.progress.status === 'running'
+    );
+
+    if (hasRunning && !pollingTimerRef.current) {
+      pollingTimerRef.current = setInterval(pollProgress, 2000);
+    } else if (!hasRunning && pollingTimerRef.current) {
+      clearInterval(pollingTimerRef.current);
+      pollingTimerRef.current = null;
+    }
+
+    return () => {
+      if (pollingTimerRef.current) {
+        clearInterval(pollingTimerRef.current);
+        pollingTimerRef.current = null;
+      }
+    };
+  }, [backfillTasks, pollProgress]);
+
   useEffect(() => {
     loadStatus();
   }, []);
+
+  // 清除已完成的任务
+  const dismissTask = (taskId: string) => {
+    setBackfillTasks((prev) => prev.filter((t) => t.taskId !== taskId));
+  };
 
   const handleStart = async (exchange: string) => {
     setActionLoading(exchange);
@@ -136,7 +226,24 @@ export const DataSourceManagement = () => {
       setBackfillLoading(true);
       const response = await quoteSourceApi.backfill(data);
       if (response.code === 200) {
-        message.success(t('message.quote.backfillSuccess', { count: response.data }));
+        const taskId = response.data;
+        // 添加任务到追踪列表
+        setBackfillTasks((prev) => [
+          ...prev,
+          {
+            taskId,
+            exchange: backfillExchange.toUpperCase(),
+            symbol: values.symbol,
+            progress: {
+              status: 'running',
+              totalIntervals: 0,
+              completedIntervals: 0,
+              completedRecords: 0,
+              currentInterval: '',
+            },
+          },
+        ]);
+        message.info(t('message.quote.backfillSubmitted', { symbol: values.symbol }));
       }
       setBackfillVisible(false);
     } catch {
@@ -160,6 +267,20 @@ export const DataSourceManagement = () => {
     backfillForm.setFieldsValue({
       timeRange: [start, end],
     });
+  };
+
+  /** 渲染任务状态图标 */
+  const renderTaskStatusIcon = (status: string) => {
+    switch (status) {
+      case 'running':
+        return <LoadingOutlined spin style={{ color: '#1677ff' }} />;
+      case 'done':
+        return <CheckCircleOutlined style={{ color: '#52c41a' }} />;
+      case 'error':
+        return <CloseCircleOutlined style={{ color: '#ff4d4f' }} />;
+      default:
+        return null;
+    }
   };
 
   const columns = [
@@ -259,6 +380,90 @@ export const DataSourceManagement = () => {
           </Col>
         ))}
       </Row>
+
+      {/* 补全任务进度面板 */}
+      {backfillTasks.length > 0 && (
+        <Card
+          size="small"
+          title={t('text.quote.backfillTasks')}
+          style={{ marginBottom: 16 }}
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            {backfillTasks.map((task) => {
+              const { progress } = task;
+              const percent =
+                progress.totalIntervals && progress.totalIntervals > 0
+                  ? Math.round(
+                      ((progress.completedIntervals ?? 0) / progress.totalIntervals) * 100
+                    )
+                  : 0;
+              const isFinished = progress.status === 'done' || progress.status === 'error';
+
+              return (
+                <div key={task.taskId}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 4,
+                    }}
+                  >
+                    <Space>
+                      {renderTaskStatusIcon(progress.status)}
+                      <span style={{ fontWeight: 600 }}>
+                        {task.exchange} - {task.symbol}
+                      </span>
+                      {progress.status === 'running' && progress.currentInterval && (
+                        <Tag color="processing">{progress.currentInterval}</Tag>
+                      )}
+                    </Space>
+                    <Space>
+                      <span style={{ fontSize: 12, color: '#999' }}>
+                        {t('text.quote.backfillRecords', {
+                          count: progress.completedRecords ?? 0,
+                        })}
+                      </span>
+                      {isFinished && (
+                        <Button
+                          type="link"
+                          size="small"
+                          onClick={() => dismissTask(task.taskId)}
+                        >
+                          {t('common.confirm')}
+                        </Button>
+                      )}
+                    </Space>
+                  </div>
+                  <Progress
+                    percent={percent}
+                    status={
+                      progress.status === 'error'
+                        ? 'exception'
+                        : progress.status === 'done'
+                        ? 'success'
+                        : 'active'
+                    }
+                    format={() =>
+                      `${progress.completedIntervals ?? 0}/${progress.totalIntervals ?? 0}`
+                    }
+                    size="small"
+                  />
+                  {progress.status === 'error' && progress.errorMessage && (
+                    <Alert
+                      message={progress.errorMessage}
+                      type="error"
+                      showIcon
+                      style={{ marginTop: 4 }}
+                      closable={false}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </Space>
+        </Card>
+      )}
 
       <Table
         columns={columns}

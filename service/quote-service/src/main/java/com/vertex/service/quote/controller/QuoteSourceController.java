@@ -20,15 +20,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 行情数据源管理控制器
  * <p>
  * 提供 WebSocket 数据源的生命周期管理、K线订阅/取消订阅，
- * 以及通过 REST API 进行历史数据补全。
+ * 以及通过 REST API 进行历史数据补全（异步执行）。
  */
 @Slf4j
 @Tag(name = "行情数据源管理")
@@ -42,6 +46,12 @@ public class QuoteSourceController {
     private final List<KLineRestClient> restClients;
     private final IKLineService klineService;
     private final KLineStore klineStore;
+
+    /** 异步补全任务线程池 */
+    private final ExecutorService backfillExecutor = Executors.newFixedThreadPool(2);
+
+    /** 补全任务进度追踪 */
+    private final Map<String, BackfillProgress> progressMap = new ConcurrentHashMap<>();
 
     @Operation(summary = "查看所有数据源状态")
     @GetMapping("/status")
@@ -90,31 +100,73 @@ public class QuoteSourceController {
         return Result.success();
     }
 
-    @Operation(summary = "历史K线智能补全（REST），支持时间段选择、全部周期、增量补全")
+    @Operation(summary = "提交历史K线补全任务（异步）")
     @PostMapping("/backfill")
-    public Result<Integer> backfill(@RequestBody @Validated KLineQueryDTO query) {
-        KLineRestClient client = findRestClient(query.getExchange());
+    public Result<String> backfill(@RequestBody @Validated KLineQueryDTO query) {
+        // 校验交易所 REST 客户端存在
+        findRestClient(query.getExchange());
 
-        // interval 为 null 表示全部周期
+        String taskId = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+
         List<KLineInterval> intervals = query.getInterval() != null
                 ? List.of(query.getInterval())
                 : Arrays.asList(KLineInterval.values());
 
-        int totalCount = 0;
-        for (KLineInterval interval : intervals) {
-            int count = backfillSingleInterval(client, query, interval);
-            totalCount += count;
-            log.info("[Backfill] {}:{} {} -> {} records",
-                    query.getExchange(), query.getSymbol(), interval.getCode(), count);
-        }
-        return Result.success(totalCount);
+        BackfillProgress progress = new BackfillProgress(intervals.size());
+        progressMap.put(taskId, progress);
+
+        backfillExecutor.submit(() -> {
+            try {
+                KLineRestClient client = findRestClient(query.getExchange());
+                for (KLineInterval interval : intervals) {
+                    progress.currentInterval = interval.getCode();
+                    int count = backfillSingleInterval(client, query, interval);
+                    progress.completedRecords += count;
+                    progress.completedIntervals++;
+                    log.info("[Backfill] task={} {}:{} {} -> {} records",
+                            taskId, query.getExchange(), query.getSymbol(), interval.getCode(), count);
+                }
+                progress.status = "done";
+            } catch (Exception e) {
+                log.error("[Backfill] task={} failed", taskId, e);
+                progress.status = "error";
+                progress.errorMessage = e.getMessage();
+            }
+        });
+
+        return Result.success(taskId);
     }
+
+    @Operation(summary = "查询补全任务进度")
+    @GetMapping("/backfill/progress")
+    public Result<Map<String, Object>> backfillProgress(@RequestParam String taskId) {
+        BackfillProgress progress = progressMap.get(taskId);
+        if (progress == null) {
+            return Result.success(Map.of("status", "not_found"));
+        }
+
+        Map<String, Object> result = new ConcurrentHashMap<>();
+        result.put("status", progress.status);
+        result.put("totalIntervals", progress.totalIntervals);
+        result.put("completedIntervals", progress.completedIntervals);
+        result.put("completedRecords", progress.completedRecords);
+        result.put("currentInterval", progress.currentInterval != null ? progress.currentInterval : "");
+        if (progress.errorMessage != null) {
+            result.put("errorMessage", progress.errorMessage);
+        }
+
+        // 任务完成后清理
+        if ("done".equals(progress.status) || "error".equals(progress.status)) {
+            progressMap.remove(taskId);
+        }
+
+        return Result.success(result);
+    }
+
+    // ==================== 补全逻辑 ====================
 
     /**
      * 单个周期的智能补全
-     * <p>
-     * 策略：查询数据库已有数据，如果连续数据 >= 100 条则只补缺口（头部+尾部），
-     * 否则全量覆盖拉取。
      */
     private int backfillSingleInterval(KLineRestClient client, KLineQueryDTO query, KLineInterval interval) {
         int batchLimit = "okx".equalsIgnoreCase(query.getExchange()) ? 300 : 1000;
@@ -140,22 +192,18 @@ public class QuoteSourceController {
                 query.getExchange(), query.getSymbol(), interval,
                 startTime, endTime, Integer.MAX_VALUE);
 
-        // 检查连续性：相邻两条的 openTime 之差应等于 interval 的毫秒数
         int continuousCount = countContinuous(existingData, interval);
 
         if (continuousCount >= 100 && !existingData.isEmpty()) {
-            // 增量补全：只补头部缺口和尾部缺口
             log.info("[Backfill] Smart mode: found {} continuous records, filling gaps only", continuousCount);
             int count = 0;
 
-            // 补头部：startTime ~ 已有数据最早 openTime
             long existingStart = existingData.get(0).getOpenTime();
             if (existingStart > startTime) {
                 count += fetchAndSave(client, query.getSymbol(), query.getExchange(), interval,
                         startTime, existingStart - 1, batchLimit);
             }
 
-            // 补尾部：已有数据最晚 closeTime ~ endTime
             long existingEnd = existingData.get(existingData.size() - 1).getCloseTime();
             if (existingEnd < endTime) {
                 count += fetchAndSave(client, query.getSymbol(), query.getExchange(), interval,
@@ -165,15 +213,11 @@ public class QuoteSourceController {
             return count;
         }
 
-        // 全量拉取
         log.info("[Backfill] Full mode: continuous={}, fetching entire range", continuousCount);
         return fetchAndSave(client, query.getSymbol(), query.getExchange(), interval,
                 startTime, endTime, batchLimit);
     }
 
-    /**
-     * 分批拉取并保存
-     */
     private int fetchAndSave(KLineRestClient client, String symbol, String exchange,
                              KLineInterval interval, long startTime, long endTime, int batchLimit) {
         long intervalMillis = interval.getMillis();
@@ -197,9 +241,6 @@ public class QuoteSourceController {
         return totalCount;
     }
 
-    /**
-     * 计算最长连续K线数量
-     */
     private int countContinuous(List<KLine> data, KLineInterval interval) {
         if (data == null || data.size() < 2) {
             return data == null ? 0 : data.size();
@@ -233,5 +274,21 @@ public class QuoteSourceController {
                 .filter(c -> exchange.equalsIgnoreCase(c.exchangeCode()))
                 .findFirst()
                 .orElseThrow(() -> new BizException(GlobalError.EXCHANGE_CONNECT_ERROR));
+    }
+
+    /**
+     * 补全任务进度
+     */
+    private static class BackfillProgress {
+        volatile String status = "running";
+        volatile int totalIntervals;
+        volatile int completedIntervals = 0;
+        volatile int completedRecords = 0;
+        volatile String currentInterval;
+        volatile String errorMessage;
+
+        BackfillProgress(int totalIntervals) {
+            this.totalIntervals = totalIntervals;
+        }
     }
 }
