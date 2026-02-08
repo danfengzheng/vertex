@@ -66,6 +66,33 @@
       "name": "角色名称",
       "code": "角色编码",
       "description": "描述"
+    },
+    "quote": {
+      "title": "行情管理",
+      "sourceTitle": "数据源管理",
+      "klineTitle": "K线查询",
+      "exchange": "交易所",
+      "symbol": "交易对",
+      "interval": "K线周期",
+      "connected": "已连接",
+      "disconnected": "未连接",
+      "start": "启动",
+      "stop": "停止",
+      "subscribe": "订阅",
+      "unsubscribe": "取消订阅",
+      "backfill": "历史补全",
+      "refresh": "刷新",
+      "limit": "条数限制",
+      "openTime": "开盘时间",
+      "open": "开盘价",
+      "high": "最高价",
+      "low": "最低价",
+      "close": "收盘价",
+      "volume": "成交量",
+      "trades": "成交笔数",
+      "closed": "已收盘",
+      "closedYes": "是",
+      "closedNo": "未收"
     }
   },
   "placeholder": {
@@ -93,6 +120,12 @@
     "common": {
       "search": "请输入搜索关键词",
       "select": "请选择"
+    },
+    "quote": {
+      "exchange": "请选择交易所",
+      "symbol": "请输入交易对，如 BTC-USDT",
+      "interval": "请选择K线周期",
+      "limit": "最大条数，默认500"
     }
   },
   "message": {
@@ -116,6 +149,17 @@
       "deleteFailed": "删除失败",
       "createSuccess": "创建成功",
       "updateSuccess": "更新成功"
+    },
+    "quote": {
+      "loadFailed": "加载数据源状态失败",
+      "startSuccess": "数据源启动成功",
+      "startFailed": "数据源启动失败",
+      "stopSuccess": "数据源已停止",
+      "stopFailed": "数据源停止失败",
+      "subscribeSuccess": "订阅成功",
+      "unsubscribeSuccess": "取消订阅成功",
+      "backfillSuccess": "历史补全完成，共 {{count}} 条",
+      "noData": "暂无数据"
     }
   }
 }

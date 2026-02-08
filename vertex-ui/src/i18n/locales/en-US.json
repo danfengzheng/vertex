@@ -66,6 +66,33 @@
       "name": "Role Name",
       "code": "Role Code",
       "description": "Description"
+    },
+    "quote": {
+      "title": "Quote",
+      "sourceTitle": "Data Source",
+      "klineTitle": "K-Line Query",
+      "exchange": "Exchange",
+      "symbol": "Symbol",
+      "interval": "Interval",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "start": "Start",
+      "stop": "Stop",
+      "subscribe": "Subscribe",
+      "unsubscribe": "Unsubscribe",
+      "backfill": "Backfill",
+      "refresh": "Refresh",
+      "limit": "Limit",
+      "openTime": "Open Time",
+      "open": "Open",
+      "high": "High",
+      "low": "Low",
+      "close": "Close",
+      "volume": "Volume",
+      "trades": "Trades",
+      "closed": "Closed",
+      "closedYes": "Yes",
+      "closedNo": "No"
     }
   },
   "placeholder": {
@@ -93,6 +120,12 @@
     "common": {
       "search": "Enter keyword",
       "select": "Select"
+    },
+    "quote": {
+      "exchange": "Select exchange",
+      "symbol": "e.g. BTC-USDT",
+      "interval": "Select interval",
+      "limit": "Max records, default 500"
     }
   },
   "message": {
@@ -116,6 +149,17 @@
       "deleteFailed": "Delete failed",
       "createSuccess": "Created",
       "updateSuccess": "Updated"
+    },
+    "quote": {
+      "loadFailed": "Failed to load data source status",
+      "startSuccess": "Data source started",
+      "startFailed": "Failed to start data source",
+      "stopSuccess": "Data source stopped",
+      "stopFailed": "Failed to stop data source",
+      "subscribeSuccess": "Subscribed",
+      "unsubscribeSuccess": "Unsubscribed",
+      "backfillSuccess": "Backfill done, {{count}} records",
+      "noData": "No data"
     }
   }
 }

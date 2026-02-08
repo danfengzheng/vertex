@@ -10,6 +10,9 @@ import {
   MenuOutlined,
   SafetyOutlined,
   AppstoreOutlined,
+  StockOutlined,
+  ApiOutlined,
+  LineChartOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -32,10 +35,13 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
 
   // 获取当前打开的菜单（根据路径判断）
   const getOpenKeys = () => {
-    if (location.pathname.startsWith('/user') || 
-        location.pathname.startsWith('/menu') || 
+    if (location.pathname.startsWith('/user') ||
+        location.pathname.startsWith('/menu') ||
         location.pathname.startsWith('/role')) {
       return ['system'];
+    }
+    if (location.pathname.startsWith('/quote')) {
+      return ['quote'];
     }
     return [];
   };
@@ -68,6 +74,23 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
           key: '/role',
           icon: <SafetyOutlined />,
           label: t('text.system.role'),
+        },
+      ],
+    },
+    {
+      key: 'quote',
+      icon: <StockOutlined />,
+      label: t('text.quote.title'),
+      children: [
+        {
+          key: '/quote/source',
+          icon: <ApiOutlined />,
+          label: t('text.quote.sourceTitle'),
+        },
+        {
+          key: '/quote/kline',
+          icon: <LineChartOutlined />,
+          label: t('text.quote.klineTitle'),
         },
       ],
     },
