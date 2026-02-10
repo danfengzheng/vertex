@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Table, Button, Space, message, Tag, Select, Input, DatePicker, Modal, Descriptions,
-  Progress,
+  Progress, notification, Badge, Tooltip,
 } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
@@ -9,6 +9,8 @@ import {
   ReloadOutlined,
   ThunderboltOutlined,
   EyeOutlined,
+  LinkOutlined,
+  DisconnectOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,6 +21,7 @@ import {
   StrategyVO,
 } from '../../api/strategy';
 import { KLINE_INTERVAL_LABELS, KLineInterval } from '../../api/quote';
+import { useSignalWebSocket } from '../../hooks/useSignalWebSocket';
 
 const INTERVAL_OPTIONS = Object.entries(KLINE_INTERVAL_LABELS).map(([value, label]) => ({
   value,
@@ -65,6 +68,35 @@ export const SignalMonitor = () => {
   // 信号详情弹窗
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailSignal, setDetailSignal] = useState<SignalVO | null>(null);
+
+  // WebSocket 实时信号处理
+  const handleNewSignal = useCallback((signal: SignalVO) => {
+    // 对 BUY/SELL 信号弹出通知
+    if (signal.signalType !== 'NEUTRAL') {
+      notification.open({
+        message: signal.signalType === 'BUY' ? '📈 买入信号' : '📉 卖出信号',
+        description: `${signal.strategyName}: ${signal.symbol} @ ${signal.price}`,
+        type: signal.signalType === 'BUY' ? 'success' : 'warning',
+        duration: 6,
+        placement: 'topRight',
+      });
+    }
+
+    // 当在第一页时，将新信号插入列表顶部
+    if (pageNum === 1) {
+      setSignals((prev) => {
+        const newList = [signal, ...prev];
+        // 保持不超过 pageSize
+        return newList.slice(0, pageSize);
+      });
+      setTotal((prev) => prev + 1);
+    }
+  }, [pageNum, pageSize]);
+
+  const { connected } = useSignalWebSocket({
+    onSignal: handleNewSignal,
+    enabled: true,
+  });
 
   const loadStrategies = async () => {
     try {
@@ -203,7 +235,21 @@ export const SignalMonitor = () => {
   return (
     <div>
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>{t('text.strategy.signalTitle')}</h2>
+        <Space>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 600 }}>{t('text.strategy.signalTitle')}</h2>
+          <Tooltip title={connected ? t('text.strategy.connected') : t('text.strategy.disconnected')}>
+            <Badge
+              status={connected ? 'success' : 'error'}
+              text={
+                <span style={{ fontSize: 12, color: connected ? '#52c41a' : '#ff4d4f' }}>
+                  {connected ? <LinkOutlined /> : <DisconnectOutlined />}
+                  {' '}
+                  {connected ? 'Live' : 'Offline'}
+                </span>
+              }
+            />
+          </Tooltip>
+        </Space>
         <Button icon={<ReloadOutlined />} onClick={loadData}>
           {t('text.quote.refresh')}
         </Button>

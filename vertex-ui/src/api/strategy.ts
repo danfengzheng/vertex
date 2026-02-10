@@ -7,7 +7,7 @@ import type { KLineInterval } from './quote';
  */
 
 /** 指标类型 */
-export type IndicatorType = 'MA' | 'EMA' | 'RSI' | 'MACD';
+export type IndicatorType = 'MA' | 'EMA' | 'RSI' | 'MACD' | 'BOLL' | 'KDJ' | 'ATR';
 
 /** 信号类型 */
 export type SignalType = 'BUY' | 'SELL' | 'NEUTRAL';
@@ -18,6 +18,9 @@ export const INDICATOR_TYPE_LABELS: Record<IndicatorType, string> = {
   EMA: 'EMA (指数移动平均线)',
   RSI: 'RSI (相对强弱指标)',
   MACD: 'MACD',
+  BOLL: 'BOLL (布林带)',
+  KDJ: 'KDJ (随机指标)',
+  ATR: 'ATR (平均真实波幅)',
 };
 
 /** 信号类型显示映射 */
@@ -105,6 +108,56 @@ export interface SignalQueryDTO extends PageQuery {
   endTime?: number;
 }
 
+/** 回测配置 */
+export interface BacktestConfigDTO {
+  strategyId: string;
+  startTime: number;
+  endTime: number;
+  initialCapital?: number;
+  positionRatio?: number;
+  feeRate?: number;
+}
+
+/** 交易记录 */
+export interface TradeRecord {
+  entryTime: number;
+  exitTime: number;
+  type: string;
+  entryPrice: string;
+  exitPrice: string;
+  quantity: string;
+  profit: string;
+  profitPercent: string;
+}
+
+/** 资金曲线数据点 */
+export interface EquityPoint {
+  time: number;
+  equity: number;
+}
+
+/** 回测结果 */
+export interface BacktestResultVO {
+  strategyId: string;
+  strategyName: string;
+  startTime: number;
+  endTime: number;
+  initialCapital: string;
+  finalCapital: string;
+  totalProfit: string;
+  returnRate: string;
+  totalTrades: number;
+  winningTrades: number;
+  losingTrades: number;
+  winRate: string;
+  profitLossRatio: string;
+  maxDrawdown: string;
+  maxDrawdownDuration: number;
+  sharpeRatio: string;
+  trades: TradeRecord[];
+  equityCurve: EquityPoint[];
+}
+
 /** 策略管理 API */
 export const strategyApi = {
   create: (data: StrategyCreateDTO): Promise<ApiResponse<string>> =>
@@ -139,4 +192,10 @@ export const signalApi = {
 
   analyze: (strategyId: string): Promise<ApiResponse<void>> =>
     request.post('/signal/analyze', null, { params: { strategyId } }),
+};
+
+/** 回测 API */
+export const backtestApi = {
+  run: (config: BacktestConfigDTO): Promise<ApiResponse<BacktestResultVO>> =>
+    request.post('/backtest/run', config),
 };

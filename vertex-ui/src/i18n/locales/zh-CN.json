@@ -128,7 +128,39 @@
       "period": "周期",
       "fast": "快线周期",
       "slow": "慢线周期",
-      "signalLine": "信号线周期"
+      "signalLine": "信号线周期",
+      "multiplier": "倍数",
+      "rsvPeriod": "RSV周期",
+      "kLine": "K线周期",
+      "dLine": "D线周期",
+      "backtest": "回测",
+      "backtestTitle": "策略回测",
+      "timeRange": "时间范围",
+      "initialCapital": "初始资金",
+      "positionRatio": "仓位比例",
+      "feeRate": "手续费率",
+      "runBacktest": "执行回测",
+      "returnRate": "收益率",
+      "winRate": "胜率",
+      "profitLossRatio": "盈亏比",
+      "maxDrawdown": "最大回撤",
+      "sharpeRatio": "夏普比率",
+      "totalTrades": "总交易次数",
+      "winningTrades": "盈利次数",
+      "losingTrades": "亏损次数",
+      "totalProfit": "总收益",
+      "finalCapital": "最终资金",
+      "equityCurve": "资金曲线",
+      "tradeRecords": "交易记录",
+      "entryTime": "入场时间",
+      "exitTime": "出场时间",
+      "entryPrice": "入场价格",
+      "exitPrice": "出场价格",
+      "quantity": "数量",
+      "profit": "盈亏",
+      "profitPercent": "收益率",
+      "connected": "已连接",
+      "disconnected": "未连接"
     }
   },
   "placeholder": {
@@ -216,7 +248,9 @@
       "enableSuccess": "策略已启用",
       "disableSuccess": "策略已禁用",
       "analyzeSubmitted": "分析任务已提交",
-      "loadFailed": "加载失败"
+      "loadFailed": "加载失败",
+      "backtestSuccess": "回测完成",
+      "backtestFailed": "回测执行失败"
     }
   }
 }

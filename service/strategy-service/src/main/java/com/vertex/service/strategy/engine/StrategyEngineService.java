@@ -17,8 +17,10 @@ import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import com.vertex.service.strategy.mapper.SignalMapper;
 import com.vertex.service.strategy.mapper.StrategyMapper;
 import com.vertex.service.strategy.store.SignalStore;
+import com.vertex.service.strategy.websocket.SignalPushService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -26,7 +28,7 @@ import java.util.List;
 /**
  * 策略引擎服务（编排器）
  * <p>
- * 负责：加载策略 → 获取K线 → 计算指标 → 生成信号 → 双写存储
+ * 负责：加载策略 → 获取K线 → 计算指标 → 生成信号 → 双写存储 → WebSocket推送
  * </p>
  */
 @Slf4j
@@ -41,6 +43,10 @@ public class StrategyEngineService {
     private final SignalGenerator signalGenerator;
     private final IndicatorRegistry indicatorRegistry;
     private final StrategyProperties properties;
+
+    /** 信号推送服务（可选依赖，WebSocket 未配置时为 null） */
+    @Autowired(required = false)
+    private SignalPushService signalPushService;
 
     /**
      * 处理K线更新事件
@@ -133,6 +139,15 @@ public class StrategyEngineService {
             signalStore.save(signal);
         } catch (Exception e) {
             log.warn("Failed to save signal to RocksDB, MySQL insert succeeded: {}", e.getMessage());
+        }
+
+        // WebSocket 推送（可选）
+        if (signalPushService != null) {
+            try {
+                signalPushService.pushSignal(signal);
+            } catch (Exception e) {
+                log.warn("Failed to push signal via WebSocket: {}", e.getMessage());
+            }
         }
 
         log.info("Strategy [{}] generated signal: {} (strength: {}) for {} {} {}",

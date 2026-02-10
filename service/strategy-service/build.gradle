@@ -11,6 +11,9 @@ dependencies {
     // Spring Boot
     implementation libs.spring.boot.starter
 
+    // WebSocket（可选，用于信号实时推送）
+    compileOnly 'org.springframework:spring-messaging'
+
     // MyBatis Plus
     implementation libs.mybatis.plus.boot.starter
 

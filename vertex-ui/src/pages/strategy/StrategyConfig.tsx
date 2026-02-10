@@ -15,11 +15,11 @@ import {
   strategyApi,
   StrategyVO,
   StrategyCreateDTO,
-  StrategyIndicatorConfig,
   IndicatorType,
   INDICATOR_TYPE_LABELS,
 } from '../../api/strategy';
 import { KLINE_INTERVAL_LABELS, KLineInterval } from '../../api/quote';
+import { BacktestPanel } from './BacktestPanel';
 
 const INTERVAL_OPTIONS = Object.entries(KLINE_INTERVAL_LABELS).map(([value, label]) => ({
   value,
@@ -96,6 +96,67 @@ const IndicatorParamsFields = ({
           </Form.Item>
         </Space>
       );
+    case 'BOLL':
+      return (
+        <Space>
+          <Form.Item
+            name={[...prefix, 'params', 'period']}
+            label={t('text.strategy.period')}
+            initialValue={20}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={5} max={100} style={{ width: 80 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'multiplier']}
+            label={t('text.strategy.multiplier')}
+            initialValue={2.0}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={0.5} max={5} step={0.1} style={{ width: 80 }} />
+          </Form.Item>
+        </Space>
+      );
+    case 'KDJ':
+      return (
+        <Space>
+          <Form.Item
+            name={[...prefix, 'params', 'rsvPeriod']}
+            label={t('text.strategy.rsvPeriod')}
+            initialValue={9}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={2} max={50} style={{ width: 80 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'kPeriod']}
+            label={t('text.strategy.kLine')}
+            initialValue={3}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={1} max={20} style={{ width: 80 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'dPeriod']}
+            label={t('text.strategy.dLine')}
+            initialValue={3}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={1} max={20} style={{ width: 80 }} />
+          </Form.Item>
+        </Space>
+      );
+    case 'ATR':
+      return (
+        <Form.Item
+          name={[...prefix, 'params', 'period']}
+          label={t('text.strategy.period')}
+          initialValue={14}
+          rules={[{ required: true }]}
+        >
+          <InputNumber min={2} max={100} style={{ width: 120 }} />
+        </Form.Item>
+      );
     default:
       return null;
   }
@@ -117,6 +178,10 @@ export const StrategyConfig = () => {
 
   // 指标配置联动
   const [indicatorTypes, setIndicatorTypes] = useState<(IndicatorType | undefined)[]>([]);
+
+  // 回测
+  const [backtestVisible, setBacktestVisible] = useState(false);
+  const [backtestStrategy, setBacktestStrategy] = useState<StrategyVO | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -260,11 +325,18 @@ export const StrategyConfig = () => {
     {
       title: t('common.operation'),
       key: 'action',
-      width: 160,
+      width: 220,
       render: (_: unknown, record: StrategyVO) => (
         <Space>
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             {t('common.edit')}
+          </Button>
+          <Button
+            type="link"
+            icon={<ExperimentOutlined />}
+            onClick={() => { setBacktestStrategy(record); setBacktestVisible(true); }}
+          >
+            {t('text.strategy.backtest')}
           </Button>
           <Popconfirm
             title={t('message.strategy.deleteConfirm')}
@@ -435,6 +507,16 @@ export const StrategyConfig = () => {
           </Form.List>
         </Form>
       </Modal>
+
+      {/* 回测面板 */}
+      {backtestStrategy && (
+        <BacktestPanel
+          strategyId={backtestStrategy.id}
+          strategyName={backtestStrategy.name}
+          visible={backtestVisible}
+          onClose={() => setBacktestVisible(false)}
+        />
+      )}
     </div>
   );
 };

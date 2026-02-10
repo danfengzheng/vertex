@@ -13,7 +13,10 @@ public enum IndicatorType {
     MA("MA", "简单移动平均线"),
     EMA("EMA", "指数移动平均线"),
     RSI("RSI", "相对强弱指标"),
-    MACD("MACD", "MACD指标");
+    MACD("MACD", "MACD指标"),
+    BOLL("BOLL", "布林带"),
+    KDJ("KDJ", "随机指标"),
+    ATR("ATR", "平均真实波幅");
 
     private final String code;
     private final String description;

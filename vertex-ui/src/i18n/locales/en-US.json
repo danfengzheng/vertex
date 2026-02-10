@@ -128,7 +128,39 @@
       "period": "Period",
       "fast": "Fast Period",
       "slow": "Slow Period",
-      "signalLine": "Signal Period"
+      "signalLine": "Signal Period",
+      "multiplier": "Multiplier",
+      "rsvPeriod": "RSV Period",
+      "kLine": "K Period",
+      "dLine": "D Period",
+      "backtest": "Backtest",
+      "backtestTitle": "Strategy Backtest",
+      "timeRange": "Time Range",
+      "initialCapital": "Initial Capital",
+      "positionRatio": "Position Ratio",
+      "feeRate": "Fee Rate",
+      "runBacktest": "Run Backtest",
+      "returnRate": "Return Rate",
+      "winRate": "Win Rate",
+      "profitLossRatio": "Profit/Loss Ratio",
+      "maxDrawdown": "Max Drawdown",
+      "sharpeRatio": "Sharpe Ratio",
+      "totalTrades": "Total Trades",
+      "winningTrades": "Winning Trades",
+      "losingTrades": "Losing Trades",
+      "totalProfit": "Total Profit",
+      "finalCapital": "Final Capital",
+      "equityCurve": "Equity Curve",
+      "tradeRecords": "Trade Records",
+      "entryTime": "Entry Time",
+      "exitTime": "Exit Time",
+      "entryPrice": "Entry Price",
+      "exitPrice": "Exit Price",
+      "quantity": "Quantity",
+      "profit": "Profit",
+      "profitPercent": "Return %",
+      "connected": "Connected",
+      "disconnected": "Disconnected"
     }
   },
   "placeholder": {
@@ -216,7 +248,9 @@
       "enableSuccess": "Strategy enabled",
       "disableSuccess": "Strategy disabled",
       "analyzeSubmitted": "Analysis submitted",
-      "loadFailed": "Load failed"
+      "loadFailed": "Load failed",
+      "backtestSuccess": "Backtest completed",
+      "backtestFailed": "Backtest failed"
     }
   }
 }

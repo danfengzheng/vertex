@@ -18,6 +18,9 @@ dependencies {
     // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
 
+    // WebSocket (STOMP)
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
     // MyBatis Plus
     implementation libs.mybatis.plus.boot.starter
     // 显式指定 mybatis-spring 3.0.x 版本以兼容 Spring Boot 3.x
