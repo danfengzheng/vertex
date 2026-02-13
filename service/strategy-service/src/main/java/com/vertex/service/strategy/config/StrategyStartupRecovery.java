@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.strategy.mapper.StrategyMapper;
+import com.vertex.service.strategy.service.StrategyDataWarmupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -14,9 +15,12 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 系统启动时自动恢复已启用策略的行情订阅。
+ * 系统启动时自动恢复已启用策略的行情订阅和数据预热。
  * <p>
- * 当系统重启后，之前启用的策略需要重新建立 WebSocket 连接并订阅对应交易对，
+ * 当系统重启后，之前启用的策略需要：
+ * 1. 重新建立 WebSocket 连接并订阅对应交易对
+ * 2. 检查 RocksDB 中的 K 线历史数据是否满足指标计算需求，不足则通过 REST API 自动补全
+ * <p>
  * 本组件在 ApplicationReadyEvent 阶段（所有 Bean 初始化完成后）执行恢复逻辑。
  */
 @Slf4j
@@ -26,6 +30,7 @@ public class StrategyStartupRecovery {
 
     private final StrategyMapper strategyMapper;
     private final List<QuoteDataSource> dataSources;
+    private final StrategyDataWarmupService dataWarmupService;
 
     @EventListener(ApplicationReadyEvent.class)
     public void recoverSubscriptions() {
@@ -42,7 +47,7 @@ public class StrategyStartupRecovery {
             return;
         }
 
-        log.info("[StartupRecovery] Found {} enabled strategies, recovering subscriptions...",
+        log.info("[StartupRecovery] Found {} enabled strategies, recovering...",
                 enabledStrategies.size());
 
         // 2. 按交易所分组，同一交易所只建立一次连接
@@ -61,7 +66,28 @@ public class StrategyStartupRecovery {
             }
         }
 
-        log.info("[StartupRecovery] Subscription recovery completed.");
+        log.info("[StartupRecovery] Subscription recovery completed, starting data warmup...");
+
+        // 3. 数据预热：检查每个策略的 K 线数据是否充足，不足则自动补全
+        int totalBackfilled = 0;
+        for (Strategy strategy : enabledStrategies) {
+            try {
+                int count = dataWarmupService.warmup(strategy);
+                totalBackfilled += count;
+            } catch (Exception e) {
+                log.error("[StartupRecovery] Data warmup failed for strategy '{}': {}",
+                        strategy.getName(), e.getMessage(), e);
+            }
+        }
+
+        if (totalBackfilled > 0) {
+            log.info("[StartupRecovery] Data warmup completed, {} K-lines backfilled in total.",
+                    totalBackfilled);
+        } else {
+            log.info("[StartupRecovery] Data warmup completed, all strategies have sufficient data.");
+        }
+
+        log.info("[StartupRecovery] Full recovery completed.");
     }
 
     /**

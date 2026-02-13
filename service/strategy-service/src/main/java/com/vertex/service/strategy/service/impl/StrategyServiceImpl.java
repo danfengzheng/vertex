@@ -16,6 +16,7 @@ import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.vo.strategy.StrategyVO;
 import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.strategy.mapper.StrategyMapper;
+import com.vertex.service.strategy.service.StrategyDataWarmupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ public class StrategyServiceImpl implements IStrategyService {
 
     private final StrategyMapper strategyMapper;
     private final List<QuoteDataSource> dataSources;
+    private final StrategyDataWarmupService dataWarmupService;
 
     @Override
     public Long create(StrategyCreateDTO dto) {
@@ -135,6 +137,18 @@ public class StrategyServiceImpl implements IStrategyService {
 
         // 自动连接数据源并订阅行情
         autoSubscribe(strategy);
+
+        // 检查历史K线数据是否充足，不足则自动补全
+        try {
+            int backfilled = dataWarmupService.warmup(strategy);
+            if (backfilled > 0) {
+                log.info("[Enable] Strategy '{}' data warmup: {} K-lines backfilled.",
+                        strategy.getName(), backfilled);
+            }
+        } catch (Exception e) {
+            log.error("[Enable] Data warmup failed for strategy '{}': {}",
+                    strategy.getName(), e.getMessage(), e);
+        }
     }
 
     /**
