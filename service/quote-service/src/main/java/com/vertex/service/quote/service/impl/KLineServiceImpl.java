@@ -34,13 +34,15 @@ public class KLineServiceImpl implements IKLineService {
     public List<KLineVO> query(KLineQueryDTO query) {
         int limit = query.getLimit() != null ? query.getLimit() : 500;
 
+        // 降序查询：直接从存储层取最新数据
         List<KLine> klines = klineStore.query(
                 query.getExchange(),
                 query.getSymbol(),
                 query.getInterval(),
                 query.getStartTime(),
                 query.getEndTime(),
-                limit
+                limit,
+                false  // ascending=false，新→旧
         );
 
         return klines.stream()

@@ -55,12 +55,14 @@ public class RocksDBKLineStore implements KLineStore {
 
     @Override
     public List<KLine> query(String exchange, String symbol, KLineInterval interval,
-                             Long startTime, Long endTime, int limit) {
+                             Long startTime, Long endTime, int limit, boolean ascending) {
         String prefix = buildPrefix(exchange, symbol, interval);
         String startKey = startTime != null ? prefix + padTimestamp(startTime) : null;
         String endKey = endTime != null ? prefix + padTimestamp(endTime) : null;
 
-        List<Map.Entry<String, byte[]>> entries = rocksDBManager.rangeQuery(prefix, startKey, endKey, limit);
+        List<Map.Entry<String, byte[]>> entries = ascending
+                ? rocksDBManager.rangeQuery(prefix, startKey, endKey, limit)
+                : rocksDBManager.rangeQueryReverse(prefix, startKey, endKey, limit);
 
         return entries.stream()
                 .map(entry -> JSON.parseObject(entry.getValue(), KLine.class))

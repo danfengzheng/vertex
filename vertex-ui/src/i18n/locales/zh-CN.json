@@ -160,7 +160,18 @@
       "profit": "盈亏",
       "profitPercent": "收益率",
       "connected": "已连接",
-      "disconnected": "未连接"
+      "disconnected": "未连接",
+      "runStrategy": "运行策略",
+      "singleAnalysis": "单次分析（仅当前K线）",
+      "quickBacktestDays": "快速回测（最近 {{days}} 天）",
+      "quickBacktestResult": "快速回测结果",
+      "recentDays": "最近 {{days}} 天",
+      "noTradesInPeriod": "该时间段内未产生交易信号",
+      "vwapNoParams": "VWAP 无需额外参数，自动使用窗口内K线数据计算",
+      "rsiPeriod": "RSI周期",
+      "stochPeriod": "随机周期",
+      "kSmooth": "K平滑",
+      "dSmooth": "D平滑"
     }
   },
   "placeholder": {

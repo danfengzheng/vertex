@@ -8,10 +8,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
 
 /**
  * 策略回测控制器
@@ -28,6 +27,26 @@ public class BacktestController {
     @PostMapping("/run")
     @Operation(summary = "执行策略回测")
     public Result<BacktestResultVO> runBacktest(@RequestBody @Validated BacktestConfigDTO config) {
+        return Result.success(backtestService.runBacktest(config));
+    }
+
+    @PostMapping("/quick")
+    @Operation(summary = "快速回测 - 使用最近N天的数据对策略进行完整回测")
+    public Result<BacktestResultVO> quickBacktest(
+            @RequestParam Long strategyId,
+            @RequestParam(defaultValue = "30") Integer days,
+            @RequestParam(defaultValue = "10000") BigDecimal initialCapital) {
+        long endTime = System.currentTimeMillis();
+        long startTime = endTime - (long) days * 24 * 60 * 60 * 1000;
+
+        BacktestConfigDTO config = new BacktestConfigDTO();
+        config.setStrategyId(strategyId);
+        config.setStartTime(startTime);
+        config.setEndTime(endTime);
+        config.setInitialCapital(initialCapital);
+        config.setPositionRatio(BigDecimal.ONE);
+        config.setFeeRate(new BigDecimal("0.001"));
+
         return Result.success(backtestService.runBacktest(config));
     }
 }

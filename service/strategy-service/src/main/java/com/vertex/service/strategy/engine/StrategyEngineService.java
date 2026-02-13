@@ -115,14 +115,16 @@ public class StrategyEngineService {
 
         int fetchSize = Math.min(requiredDataPoints + 10, properties.getEngine().getMaxKlineHistory());
 
-        // 从 KLineStore 获取历史K线
+        // 从 KLineStore 获取最新历史K线（降序查最新，再反转为升序供指标计算）
         List<KLine> klines = klineStore.query(
                 strategy.getExchange(),
                 strategy.getSymbol(),
                 strategy.getInterval(),
                 null, null,
-                fetchSize
+                fetchSize,
+                false  // 先取最新N条
         );
+        java.util.Collections.reverse(klines);  // 转为升序供 SignalGenerator
 
         if (klines.size() < requiredDataPoints) {
             log.debug("Strategy [{}] skipped: insufficient K-line data ({}/{})",

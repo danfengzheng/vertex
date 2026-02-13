@@ -45,7 +45,7 @@ const EquityChart = ({ data }: { data: { time: number; equity: number }[] }) => 
     // 清空
     ctx.clearRect(0, 0, width, height);
 
-    const equities = data.map((d) => d.equity);
+    const equities = data.map((d) => Number(d.equity));
     const minE = Math.min(...equities) * 0.995;
     const maxE = Math.max(...equities) * 1.005;
     const rangeE = maxE - minE || 1;
@@ -69,14 +69,14 @@ const EquityChart = ({ data }: { data: { time: number; equity: number }[] }) => 
     }
 
     // 绘制曲线
-    const firstEquity = data[0].equity;
+    const firstEquity = Number(data[0].equity);
     ctx.beginPath();
     ctx.strokeStyle = '#1890ff';
     ctx.lineWidth = 2;
 
     for (let i = 0; i < data.length; i++) {
       const x = padding.left + (i / (data.length - 1)) * chartW;
-      const y = padding.top + ((maxE - data[i].equity) / rangeE) * chartH;
+      const y = padding.top + ((maxE - equities[i]) / rangeE) * chartH;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
@@ -98,7 +98,7 @@ const EquityChart = ({ data }: { data: { time: number; equity: number }[] }) => 
     const step = Math.max(1, Math.floor(data.length / 5));
     for (let i = 0; i < data.length; i += step) {
       const x = padding.left + (i / (data.length - 1)) * chartW;
-      const label = dayjs(data[i].time).format('MM-DD');
+      const label = dayjs(Number(data[i].time)).format('MM-DD');
       ctx.fillText(label, x, height - 8);
     }
 
@@ -172,14 +172,14 @@ export const BacktestPanel = ({ strategyId, strategyName, visible, onClose }: Ba
       dataIndex: 'entryTime',
       key: 'entryTime',
       width: 160,
-      render: (v: number) => dayjs(v).format('YYYY-MM-DD HH:mm'),
+      render: (v: number | string) => dayjs(Number(v)).format('YYYY-MM-DD HH:mm'),
     },
     {
       title: t('text.strategy.exitTime'),
       dataIndex: 'exitTime',
       key: 'exitTime',
       width: 160,
-      render: (v: number) => dayjs(v).format('YYYY-MM-DD HH:mm'),
+      render: (v: number | string) => dayjs(Number(v)).format('YYYY-MM-DD HH:mm'),
     },
     {
       title: t('text.strategy.entryPrice'),

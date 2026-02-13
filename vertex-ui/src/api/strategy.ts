@@ -7,7 +7,7 @@ import type { KLineInterval } from './quote';
  */
 
 /** 指标类型 */
-export type IndicatorType = 'MA' | 'EMA' | 'RSI' | 'MACD' | 'BOLL' | 'KDJ' | 'ATR';
+export type IndicatorType = 'MA' | 'EMA' | 'RSI' | 'MACD' | 'BOLL' | 'KDJ' | 'ATR' | 'VWAP' | 'STOCH_RSI' | 'WR';
 
 /** 信号类型 */
 export type SignalType = 'BUY' | 'SELL' | 'NEUTRAL';
@@ -21,6 +21,9 @@ export const INDICATOR_TYPE_LABELS: Record<IndicatorType, string> = {
   BOLL: 'BOLL (布林带)',
   KDJ: 'KDJ (随机指标)',
   ATR: 'ATR (平均真实波幅)',
+  VWAP: 'VWAP (成交量加权均价)',
+  STOCH_RSI: 'StochRSI (随机RSI)',
+  WR: 'WR (威廉指标)',
 };
 
 /** 信号类型显示映射 */
@@ -198,4 +201,10 @@ export const signalApi = {
 export const backtestApi = {
   run: (config: BacktestConfigDTO): Promise<ApiResponse<BacktestResultVO>> =>
     request.post('/backtest/run', config),
+
+  /** 快速回测 — 使用最近 N 天数据对策略做完整回测 */
+  quick: (strategyId: string, days?: number, initialCapital?: number): Promise<ApiResponse<BacktestResultVO>> =>
+    request.post('/backtest/quick', null, {
+      params: { strategyId, days: days ?? 30, initialCapital: initialCapital ?? 10000 },
+    }),
 };

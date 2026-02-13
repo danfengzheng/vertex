@@ -160,7 +160,18 @@
       "profit": "Profit",
       "profitPercent": "Return %",
       "connected": "Connected",
-      "disconnected": "Disconnected"
+      "disconnected": "Disconnected",
+      "runStrategy": "Run Strategy",
+      "singleAnalysis": "Single Analysis (current K-line only)",
+      "quickBacktestDays": "Quick Backtest (last {{days}} days)",
+      "quickBacktestResult": "Quick Backtest Result",
+      "recentDays": "Last {{days}} days",
+      "noTradesInPeriod": "No trades generated in this period",
+      "vwapNoParams": "VWAP requires no extra parameters, calculated from K-line window automatically",
+      "rsiPeriod": "RSI Period",
+      "stochPeriod": "Stoch Period",
+      "kSmooth": "K Smooth",
+      "dSmooth": "D Smooth"
     }
   },
   "placeholder": {

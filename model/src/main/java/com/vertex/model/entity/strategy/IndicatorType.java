@@ -16,7 +16,10 @@ public enum IndicatorType {
     MACD("MACD", "MACD指标"),
     BOLL("BOLL", "布林带"),
     KDJ("KDJ", "随机指标"),
-    ATR("ATR", "平均真实波幅");
+    ATR("ATR", "平均真实波幅"),
+    VWAP("VWAP", "成交量加权平均价"),
+    STOCH_RSI("STOCH_RSI", "随机RSI"),
+    WR("WR", "威廉指标");
 
     private final String code;
     private final String description;

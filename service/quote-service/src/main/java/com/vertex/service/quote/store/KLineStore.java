@@ -29,10 +29,11 @@ public interface KLineStore {
      * @param startTime 起始时间（毫秒），null 不限
      * @param endTime   结束时间（毫秒），null 不限
      * @param limit     最大条数
-     * @return K线列表，按时间升序
+     * @param ascending true 升序（旧→新），false 降序（新→旧）
+     * @return K线列表
      */
     List<KLine> query(String exchange, String symbol, KLineInterval interval,
-                      Long startTime, Long endTime, int limit);
+                      Long startTime, Long endTime, int limit, boolean ascending);
 
     /**
      * 获取最新一条K线

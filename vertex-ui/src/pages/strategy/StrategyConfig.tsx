@@ -157,6 +157,61 @@ const IndicatorParamsFields = ({
           <InputNumber min={2} max={100} style={{ width: 120 }} />
         </Form.Item>
       );
+    case 'VWAP':
+      // VWAP 无需用户配置参数，使用全部窗口K线计算
+      return (
+        <span style={{ color: '#888', fontSize: 12 }}>
+          {t('text.strategy.vwapNoParams')}
+        </span>
+      );
+    case 'STOCH_RSI':
+      return (
+        <Space wrap>
+          <Form.Item
+            name={[...prefix, 'params', 'rsiPeriod']}
+            label={t('text.strategy.rsiPeriod')}
+            initialValue={14}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={2} max={50} style={{ width: 80 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'stochPeriod']}
+            label={t('text.strategy.stochPeriod')}
+            initialValue={14}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={2} max={50} style={{ width: 80 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'kSmooth']}
+            label={t('text.strategy.kSmooth')}
+            initialValue={3}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={1} max={20} style={{ width: 80 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'dSmooth']}
+            label={t('text.strategy.dSmooth')}
+            initialValue={3}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={1} max={20} style={{ width: 80 }} />
+          </Form.Item>
+        </Space>
+      );
+    case 'WR':
+      return (
+        <Form.Item
+          name={[...prefix, 'params', 'period']}
+          label={t('text.strategy.period')}
+          initialValue={14}
+          rules={[{ required: true }]}
+        >
+          <InputNumber min={2} max={100} style={{ width: 120 }} />
+        </Form.Item>
+      );
     default:
       return null;
   }
@@ -174,6 +229,7 @@ export const StrategyConfig = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<StrategyVO | null>(null);
   const [form] = Form.useForm();
 
   // 指标配置联动
@@ -204,13 +260,17 @@ export const StrategyConfig = () => {
 
   const handleCreate = () => {
     setEditingId(null);
+    setEditingRecord(null);
     form.resetFields();
-    setIndicatorTypes([]);
+    form.setFieldsValue({ indicatorConfigs: [{}] });
+    setIndicatorTypes([undefined]);
     setModalVisible(true);
   };
 
   const handleEdit = (record: StrategyVO) => {
     setEditingId(record.id);
+    setEditingRecord(record);
+    form.resetFields();
     form.setFieldsValue({
       name: record.name,
       description: record.description,
@@ -385,11 +445,10 @@ export const StrategyConfig = () => {
         open={modalVisible}
         onOk={handleSubmit}
         confirmLoading={modalLoading}
-        onCancel={() => setModalVisible(false)}
+        onCancel={() => { setModalVisible(false); setEditingRecord(null); }}
         width={720}
-        destroyOnClose
       >
-        <Form form={form} layout="vertical" preserve={false}>
+        <Form form={form} layout="vertical">
           <Form.Item
             name="name"
             label={t('text.strategy.name')}
@@ -433,7 +492,7 @@ export const StrategyConfig = () => {
 
           <Divider>{t('text.strategy.indicators')}</Divider>
 
-          <Form.List name="indicatorConfigs" initialValue={[{}]}>
+          <Form.List name="indicatorConfigs">
             {(fields, { add, remove }) => (
               <>
                 {fields.map((field, index) => (

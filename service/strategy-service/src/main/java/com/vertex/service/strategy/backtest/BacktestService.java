@@ -77,10 +77,19 @@ public class BacktestService {
                 strategy.getInterval(),
                 prefetchStart,
                 config.getEndTime(),
-                Integer.MAX_VALUE
+                Integer.MAX_VALUE,
+                true   // 回测需要升序（旧→新）
         );
 
+        log.info("Backtest [{}] loaded {} K-lines from RocksDB ({} {} {} from {} to {}), required: {}",
+                strategy.getName(), allKlines.size(),
+                strategy.getExchange(), strategy.getSymbol(), strategy.getInterval().getCode(),
+                prefetchStart, config.getEndTime(), requiredDataPoints + 1);
+
         if (allKlines.size() < requiredDataPoints + 1) {
+            log.warn("Backtest [{}] insufficient data: got {} K-lines, need at least {}. "
+                    + "Please use the backfill feature to fetch historical K-line data first.",
+                    strategy.getName(), allKlines.size(), requiredDataPoints + 1);
             throw new BizException(GlobalError.BACKTEST_INSUFFICIENT_DATA);
         }
 

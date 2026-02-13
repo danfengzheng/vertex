@@ -144,6 +144,67 @@ public class RocksDBManager implements InitializingBean, DisposableBean {
     }
 
     /**
+     * 前缀范围反向查询（从新到旧）
+     *
+     * @param prefix    前缀
+     * @param startKey  起始 key（含），为 null 则查到 prefix 开始
+     * @param endKey    结束 key（含），为 null 则从 prefix 范围末端开始
+     * @param limit     最大条数
+     * @return key-value 列表，按时间降序
+     */
+    public List<Map.Entry<String, byte[]>> rangeQueryReverse(String prefix, String startKey, String endKey, int limit) {
+        List<Map.Entry<String, byte[]>> results = new ArrayList<>();
+        byte[] prefixBytes = prefix.getBytes(StandardCharsets.UTF_8);
+
+        try (ReadOptions readOptions = new ReadOptions()) {
+            readOptions.setPrefixSameAsStart(true);
+            readOptions.setTotalOrderSeek(false);
+
+            try (RocksIterator iterator = db.newIterator(readOptions)) {
+                // 从 endKey 或 prefix 末端开始，反向迭代
+                byte[] seekKey;
+                if (endKey != null) {
+                    seekKey = endKey.getBytes(StandardCharsets.UTF_8);
+                } else {
+                    seekKey = incrementPrefix(prefixBytes);
+                }
+                iterator.seek(seekKey);
+
+                // seek 可能指向范围内或范围外，需 prev 回到 [startKey, endKey]
+                if (iterator.isValid()) {
+                    byte[] keyBytes = iterator.key();
+                    String key = new String(keyBytes, StandardCharsets.UTF_8);
+                    byte[] endKeyBytes = endKey != null ? endKey.getBytes(StandardCharsets.UTF_8) : null;
+                    boolean pastEnd = endKeyBytes != null && compareBytes(keyBytes, endKeyBytes) > 0;
+                    if (!key.startsWith(prefix) || pastEnd) {
+                        iterator.prev();
+                    }
+                } else {
+                    iterator.seekToLast();
+                }
+
+                byte[] startKeyBytes = startKey != null ? startKey.getBytes(StandardCharsets.UTF_8) : null;
+
+                while (iterator.isValid() && results.size() < limit) {
+                    byte[] keyBytes = iterator.key();
+                    String key = new String(keyBytes, StandardCharsets.UTF_8);
+
+                    if (!key.startsWith(prefix)) {
+                        break;
+                    }
+                    if (startKeyBytes != null && compareBytes(keyBytes, startKeyBytes) < 0) {
+                        break;
+                    }
+
+                    results.add(Map.entry(key, iterator.value()));
+                    iterator.prev();
+                }
+            }
+        }
+        return results;
+    }
+
+    /**
      * 反向查询（获取最新数据）
      */
     public Map.Entry<String, byte[]> getLatest(String prefix) {

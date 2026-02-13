@@ -41,7 +41,7 @@ public enum GlobalError implements ErrorCode {
     SIGNAL_STORE_ERROR(4006, "信号存储异常"),
     INDICATOR_CALC_ERROR(4007, "指标计算异常"),
     STRATEGY_KLINE_INSUFFICIENT(4008, "K线数据不足"),
-    BACKTEST_INSUFFICIENT_DATA(4009, "回测数据不足");
+    BACKTEST_INSUFFICIENT_DATA(4009, "回测数据不足，请先通过历史补全功能获取K线数据");
     @Getter
     private final Integer code;
     @Getter

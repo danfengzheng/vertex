@@ -187,10 +187,10 @@ public class QuoteSourceController {
         long startTime = query.getStartTime();
         long endTime = query.getEndTime();
 
-        // 查询数据库已有数据
+        // 查询数据库已有数据（升序，用于计算连续区间）
         List<KLine> existingData = klineStore.query(
                 query.getExchange(), query.getSymbol(), interval,
-                startTime, endTime, Integer.MAX_VALUE);
+                startTime, endTime, Integer.MAX_VALUE, true);
 
         int continuousCount = countContinuous(existingData, interval);
 

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Table, Button, Space, message, Tag, Select, Input, DatePicker, Modal, Descriptions,
-  Progress, notification, Badge, Tooltip,
+  Progress, notification, Badge, Tooltip, Dropdown, Card, Row, Col, Statistic, Divider,
+  Spin, Empty,
 } from 'antd';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
@@ -11,14 +12,22 @@ import {
   EyeOutlined,
   LinkOutlined,
   DisconnectOutlined,
+  ExperimentOutlined,
+  CaretRightOutlined,
+  DownOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import {
   signalApi,
   strategyApi,
+  backtestApi,
   SignalVO,
   SignalType,
   StrategyVO,
+  BacktestResultVO,
 } from '../../api/strategy';
 import { KLINE_INTERVAL_LABELS, KLineInterval } from '../../api/quote';
 import { useSignalWebSocket } from '../../hooks/useSignalWebSocket';
@@ -46,6 +55,179 @@ const signalTypeLabel: Record<SignalType, string> = {
   NEUTRAL: '中性',
 };
 
+/** 快速回测结果面板（内嵌在信号监控页面中） */
+const QuickBacktestResult = ({
+  result,
+  strategyName,
+  days,
+  onClose,
+  t,
+}: {
+  result: BacktestResultVO;
+  strategyName: string;
+  days: number;
+  onClose: () => void;
+  t: (key: string) => string;
+}) => {
+  const tradeColumns = [
+    {
+      title: t('text.strategy.entryTime'),
+      dataIndex: 'entryTime',
+      key: 'entryTime',
+      width: 150,
+      render: (v: number | string) => dayjs(Number(v)).format('YYYY-MM-DD HH:mm'),
+    },
+    {
+      title: t('text.strategy.exitTime'),
+      dataIndex: 'exitTime',
+      key: 'exitTime',
+      width: 150,
+      render: (v: number | string) => dayjs(Number(v)).format('YYYY-MM-DD HH:mm'),
+    },
+    {
+      title: t('text.strategy.signalType'),
+      key: 'direction',
+      width: 70,
+      render: (_: unknown, record: { entryPrice: string; exitPrice: string }) => {
+        const entry = parseFloat(record.entryPrice);
+        const exit = parseFloat(record.exitPrice);
+        return <Tag color={exit >= entry ? 'success' : 'error'}>{exit >= entry ? 'LONG' : 'LONG'}</Tag>;
+      },
+    },
+    {
+      title: t('text.strategy.entryPrice'),
+      dataIndex: 'entryPrice',
+      key: 'entryPrice',
+      width: 130,
+      render: (v: string) => parseFloat(v).toFixed(2),
+    },
+    {
+      title: t('text.strategy.exitPrice'),
+      dataIndex: 'exitPrice',
+      key: 'exitPrice',
+      width: 130,
+      render: (v: string) => parseFloat(v).toFixed(2),
+    },
+    {
+      title: t('text.strategy.quantity'),
+      dataIndex: 'quantity',
+      key: 'quantity',
+      width: 120,
+      render: (v: string) => parseFloat(v).toFixed(6),
+    },
+    {
+      title: t('text.strategy.profit'),
+      dataIndex: 'profit',
+      key: 'profit',
+      width: 110,
+      render: (v: string) => {
+        const num = parseFloat(v);
+        return (
+          <span style={{ color: num >= 0 ? '#52c41a' : '#ff4d4f', fontWeight: 600 }}>
+            {num >= 0 ? '+' : ''}{parseFloat(v).toFixed(2)}
+          </span>
+        );
+      },
+    },
+    {
+      title: t('text.strategy.profitPercent'),
+      dataIndex: 'profitPercent',
+      key: 'profitPercent',
+      width: 100,
+      render: (v: string) => {
+        const num = parseFloat(v);
+        return (
+          <Tag color={num >= 0 ? 'success' : 'error'}>
+            {num >= 0 ? '+' : ''}{parseFloat(v).toFixed(2)}%
+          </Tag>
+        );
+      },
+    },
+  ];
+
+  const returnNum = parseFloat(result.returnRate);
+
+  return (
+    <Card
+      size="small"
+      style={{ marginBottom: 16, borderColor: '#1890ff', borderWidth: 1 }}
+      title={
+        <Space>
+          <ExperimentOutlined style={{ color: '#1890ff' }} />
+          <span>{t('text.strategy.quickBacktestResult')}</span>
+          <Tag color="blue">{strategyName}</Tag>
+          <Tag>{t('text.strategy.recentDays').replace('{{days}}', String(days))}</Tag>
+        </Space>
+      }
+      extra={
+        <Button type="text" icon={<CloseOutlined />} onClick={onClose} size="small" />
+      }
+    >
+      {/* 统计摘要 */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        <Col span={4}>
+          <Statistic
+            title={t('text.strategy.returnRate')}
+            value={result.returnRate}
+            suffix="%"
+            precision={2}
+            valueStyle={{ color: returnNum >= 0 ? '#52c41a' : '#ff4d4f', fontSize: 20 }}
+            prefix={returnNum >= 0 ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+          />
+        </Col>
+        <Col span={3}>
+          <Statistic
+            title={t('text.strategy.totalProfit')}
+            value={result.totalProfit}
+            precision={2}
+            valueStyle={{ color: parseFloat(result.totalProfit) >= 0 ? '#52c41a' : '#ff4d4f', fontSize: 20 }}
+            prefix={parseFloat(result.totalProfit) >= 0 ? '+' : ''}
+          />
+        </Col>
+        <Col span={3}>
+          <Statistic title={t('text.strategy.totalTrades')} value={result.totalTrades} valueStyle={{ fontSize: 20 }}
+            suffix={<span style={{ fontSize: 12, color: '#999' }}>({result.winningTrades}W/{result.losingTrades}L)</span>}
+          />
+        </Col>
+        <Col span={3}>
+          <Statistic title={t('text.strategy.winRate')} value={result.winRate} suffix="%" precision={2} valueStyle={{ fontSize: 20 }} />
+        </Col>
+        <Col span={3}>
+          <Statistic title={t('text.strategy.profitLossRatio')} value={result.profitLossRatio} precision={2} valueStyle={{ fontSize: 20 }} />
+        </Col>
+        <Col span={3}>
+          <Statistic title={t('text.strategy.maxDrawdown')} value={result.maxDrawdown} suffix="%" precision={2} valueStyle={{ color: '#ff4d4f', fontSize: 20 }} />
+        </Col>
+        <Col span={3}>
+          <Statistic title={t('text.strategy.sharpeRatio')} value={result.sharpeRatio} precision={2} valueStyle={{ fontSize: 20 }} />
+        </Col>
+        <Col span={2}>
+          <Statistic
+            title={t('text.strategy.finalCapital')}
+            value={result.finalCapital}
+            precision={2}
+            valueStyle={{ fontSize: 14, color: '#666' }}
+          />
+        </Col>
+      </Row>
+
+      {/* 完整交易记录 */}
+      {result.trades && result.trades.length > 0 ? (
+        <Table
+          dataSource={result.trades}
+          columns={tradeColumns}
+          rowKey={(_, i) => String(i)}
+          size="small"
+          pagination={result.trades.length > 10 ? { pageSize: 10, size: 'small', showTotal: (total: number) => `共 ${total} 笔交易` } : false}
+          scroll={{ x: 960 }}
+        />
+      ) : (
+        <Empty description={t('text.strategy.noTradesInPeriod')} />
+      )}
+    </Card>
+  );
+};
+
 export const SignalMonitor = () => {
   const { t } = useTranslation();
   const [signals, setSignals] = useState<SignalVO[]>([]);
@@ -68,6 +250,12 @@ export const SignalMonitor = () => {
   // 信号详情弹窗
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailSignal, setDetailSignal] = useState<SignalVO | null>(null);
+
+  // 快速回测状态
+  const [quickBacktestResult, setQuickBacktestResult] = useState<BacktestResultVO | null>(null);
+  const [quickBacktestStrategy, setQuickBacktestStrategy] = useState<string>('');
+  const [quickBacktestDays, setQuickBacktestDays] = useState<number>(30);
+  const [quickBacktestLoading, setQuickBacktestLoading] = useState<string | null>(null); // strategyId being tested
 
   // WebSocket 实时信号处理
   const handleNewSignal = useCallback((signal: SignalVO) => {
@@ -147,9 +335,10 @@ export const SignalMonitor = () => {
     loadData();
   };
 
-  const handleAnalyze = async (strategyIdToAnalyze: string) => {
+  /** 单次分析（原逻辑） */
+  const handleAnalyze = async (sid: string) => {
     try {
-      await signalApi.analyze(strategyIdToAnalyze);
+      await signalApi.analyze(sid);
       message.success(t('message.strategy.analyzeSubmitted'));
       setTimeout(loadData, 1000);
     } catch {
@@ -157,10 +346,59 @@ export const SignalMonitor = () => {
     }
   };
 
+  /** 快速回测 */
+  const handleQuickBacktest = async (sid: string, sName: string, days: number) => {
+    setQuickBacktestLoading(sid);
+    try {
+      const response = await backtestApi.quick(sid, days);
+      if (response.code === 200) {
+        setQuickBacktestResult(response.data);
+        setQuickBacktestStrategy(sName);
+        setQuickBacktestDays(days);
+        message.success(t('message.strategy.backtestSuccess'));
+      } else {
+        message.error(response.message || t('message.strategy.backtestFailed'));
+      }
+    } catch {
+      message.error(t('message.strategy.backtestFailed'));
+    } finally {
+      setQuickBacktestLoading(null);
+    }
+  };
+
   const showDetail = (record: SignalVO) => {
     setDetailSignal(record);
     setDetailVisible(true);
   };
+
+  /** 构建每个策略的下拉菜单 */
+  const buildStrategyMenuItems = (s: StrategyVO) => [
+    {
+      key: 'analyze',
+      icon: <CaretRightOutlined />,
+      label: t('text.strategy.singleAnalysis'),
+      onClick: () => handleAnalyze(s.id),
+    },
+    { type: 'divider' as const },
+    {
+      key: 'quick-7',
+      icon: <ExperimentOutlined />,
+      label: t('text.strategy.quickBacktestDays').replace('{{days}}', '7'),
+      onClick: () => handleQuickBacktest(s.id, s.name, 7),
+    },
+    {
+      key: 'quick-30',
+      icon: <ExperimentOutlined />,
+      label: t('text.strategy.quickBacktestDays').replace('{{days}}', '30'),
+      onClick: () => handleQuickBacktest(s.id, s.name, 30),
+    },
+    {
+      key: 'quick-90',
+      icon: <ExperimentOutlined />,
+      label: t('text.strategy.quickBacktestDays').replace('{{days}}', '90'),
+      onClick: () => handleQuickBacktest(s.id, s.name, 90),
+    },
+  ];
 
   const columns = [
     {
@@ -231,6 +469,8 @@ export const SignalMonitor = () => {
       ),
     },
   ];
+
+  const enabledStrategies = strategies.filter((s) => s.enabled === 1);
 
   return (
     <div>
@@ -317,23 +557,37 @@ export const SignalMonitor = () => {
         </Button>
       </Space>
 
-      {/* 手动分析按钮组 */}
-      {strategies.filter((s) => s.enabled === 1).length > 0 && (
+      {/* 策略运行按钮组 - 下拉菜单支持单次分析 + 快速回测 */}
+      {enabledStrategies.length > 0 && (
         <Space wrap style={{ marginBottom: 16 }}>
-          <span style={{ fontSize: 12, color: '#999' }}>{t('text.strategy.manualAnalysis')}:</span>
-          {strategies
-            .filter((s) => s.enabled === 1)
-            .map((s) => (
+          <span style={{ fontSize: 12, color: '#999' }}>{t('text.strategy.runStrategy')}:</span>
+          {enabledStrategies.map((s) => (
+            <Dropdown
+              key={s.id}
+              menu={{ items: buildStrategyMenuItems(s) }}
+              trigger={['click']}
+            >
               <Button
-                key={s.id}
                 size="small"
                 icon={<ThunderboltOutlined />}
-                onClick={() => handleAnalyze(s.id)}
+                loading={quickBacktestLoading === s.id}
               >
-                {s.name}
+                {s.name} <DownOutlined style={{ fontSize: 10, marginLeft: 4 }} />
               </Button>
-            ))}
+            </Dropdown>
+          ))}
         </Space>
+      )}
+
+      {/* 快速回测结果面板 */}
+      {quickBacktestResult && (
+        <QuickBacktestResult
+          result={quickBacktestResult}
+          strategyName={quickBacktestStrategy}
+          days={quickBacktestDays}
+          onClose={() => setQuickBacktestResult(null)}
+          t={t}
+        />
       )}
 
       <Table

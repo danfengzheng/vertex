@@ -62,7 +62,8 @@ export const KLineQuery = () => {
       dataIndex: 'openTime',
       key: 'openTime',
       width: 180,
-      render: (val: number) => dayjs(val).format('YYYY-MM-DD HH:mm:ss'),
+      render: (val: number | string) =>
+        val != null ? dayjs(Number(val)).format('YYYY-MM-DD HH:mm:ss') : '-',
     },
     {
       title: t('text.quote.open'),
