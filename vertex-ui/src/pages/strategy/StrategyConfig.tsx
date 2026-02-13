@@ -300,7 +300,7 @@ export const StrategyConfig = () => {
         message.success(t('message.strategy.disableSuccess'));
       } else {
         await strategyApi.enable(record.id);
-        message.success(t('message.strategy.enableSuccess'));
+        message.success(t('message.strategy.enableAndSubscribed'));
       }
       loadData();
     } catch {

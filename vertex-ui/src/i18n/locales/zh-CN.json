@@ -258,6 +258,7 @@
       "deleteConfirm": "确定要删除该策略吗？",
       "deleteSuccess": "策略删除成功",
       "enableSuccess": "策略已启用",
+      "enableAndSubscribed": "策略已启用，行情数据已自动订阅",
       "disableSuccess": "策略已禁用",
       "analyzeSubmitted": "分析任务已提交",
       "loadFailed": "加载失败",

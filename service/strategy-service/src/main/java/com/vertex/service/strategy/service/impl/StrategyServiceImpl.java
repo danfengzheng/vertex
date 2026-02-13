@@ -14,21 +14,26 @@ import com.vertex.model.dto.strategy.StrategyQueryDTO;
 import com.vertex.model.dto.strategy.StrategyUpdateDTO;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.vo.strategy.StrategyVO;
+import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.strategy.mapper.StrategyMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 策略服务实现
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StrategyServiceImpl implements IStrategyService {
 
     private final StrategyMapper strategyMapper;
+    private final List<QuoteDataSource> dataSources;
 
     @Override
     public Long create(StrategyCreateDTO dto) {
@@ -127,6 +132,50 @@ public class StrategyServiceImpl implements IStrategyService {
         }
         strategy.setEnabled(1);
         strategyMapper.updateById(strategy);
+
+        // 自动连接数据源并订阅行情
+        autoSubscribe(strategy);
+    }
+
+    /**
+     * 启用策略时自动确保数据源已连接，并订阅对应交易对和周期。
+     * 如果数据源未连接则自动建立连接，如果尚未订阅该 symbol:interval 则自动订阅。
+     */
+    private void autoSubscribe(Strategy strategy) {
+        try {
+            QuoteDataSource ds = dataSources.stream()
+                    .filter(d -> strategy.getExchange().equalsIgnoreCase(d.exchangeCode()))
+                    .findFirst()
+                    .orElse(null);
+            if (ds == null) {
+                log.warn("[AutoSubscribe] No data source found for exchange: {}", strategy.getExchange());
+                return;
+            }
+
+            // 1. 如果未连接，自动启动
+            if (!ds.isConnected()) {
+                log.info("[AutoSubscribe] Data source '{}' is not connected, starting...", ds.exchangeCode());
+                ds.start();
+            }
+
+            // 2. 检查是否已订阅该 symbol:interval，避免重复订阅
+            boolean alreadySubscribed = ds.getSubscriptions().stream()
+                    .anyMatch(sub -> strategy.getSymbol().equals(sub.get("symbol"))
+                            && strategy.getInterval().name().equals(sub.get("interval")));
+
+            if (!alreadySubscribed) {
+                log.info("[AutoSubscribe] Subscribing {}:{} on {}",
+                        strategy.getSymbol(), strategy.getInterval().getCode(), ds.exchangeCode());
+                ds.subscribe(strategy.getSymbol(), strategy.getInterval());
+            } else {
+                log.info("[AutoSubscribe] Already subscribed to {}:{} on {}",
+                        strategy.getSymbol(), strategy.getInterval().getCode(), ds.exchangeCode());
+            }
+        } catch (Exception e) {
+            // 自动订阅失败不阻塞策略启用
+            log.error("[AutoSubscribe] Failed to auto-subscribe for strategy '{}': {}",
+                    strategy.getName(), e.getMessage(), e);
+        }
     }
 
     @Override

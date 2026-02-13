@@ -258,6 +258,7 @@
       "deleteConfirm": "Delete this strategy?",
       "deleteSuccess": "Strategy deleted",
       "enableSuccess": "Strategy enabled",
+      "enableAndSubscribed": "Strategy enabled, quote data auto-subscribed",
       "disableSuccess": "Strategy disabled",
       "analyzeSubmitted": "Analysis submitted",
       "loadFailed": "Load failed",
