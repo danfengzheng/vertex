@@ -19,6 +19,7 @@ import {
   quoteSourceApi,
   DataSourceStatusVO,
   SubscribeRequestDTO,
+  SubscriptionItem,
   KLineQueryDTO,
   KLineInterval,
   KLINE_INTERVAL_LABELS,
@@ -46,9 +47,15 @@ export const DataSourceManagement = () => {
 
   // 订阅弹窗
   const [subscribeVisible, setSubscribeVisible] = useState(false);
-  const [subscribeType, setSubscribeType] = useState<'subscribe' | 'unsubscribe'>('subscribe');
   const [subscribeExchange, setSubscribeExchange] = useState('');
   const [subscribeForm] = Form.useForm();
+
+  // 取消订阅弹窗
+  const [unsubVisible, setUnsubVisible] = useState(false);
+  const [unsubExchange, setUnsubExchange] = useState('');
+  const [unsubLoading, setUnsubLoading] = useState(false);
+  const [subscriptionList, setSubscriptionList] = useState<SubscriptionItem[]>([]);
+  const [subscriptionListLoading, setSubscriptionListLoading] = useState(false);
 
   // 补全弹窗
   const [backfillVisible, setBackfillVisible] = useState(false);
@@ -178,9 +185,8 @@ export const DataSourceManagement = () => {
     }
   };
 
-  const openSubscribe = (exchange: string, type: 'subscribe' | 'unsubscribe') => {
+  const openSubscribe = (exchange: string) => {
     setSubscribeExchange(exchange);
-    setSubscribeType(type);
     subscribeForm.resetFields();
     setSubscribeVisible(true);
   };
@@ -193,16 +199,50 @@ export const DataSourceManagement = () => {
         symbol: values.symbol,
         interval: values.interval,
       };
-      if (subscribeType === 'subscribe') {
-        await quoteSourceApi.subscribe(data);
-        message.success(t('message.quote.subscribeSuccess'));
-      } else {
-        await quoteSourceApi.unsubscribe(data);
-        message.success(t('message.quote.unsubscribeSuccess'));
-      }
+      await quoteSourceApi.subscribe(data);
+      message.success(t('message.quote.subscribeSuccess'));
       setSubscribeVisible(false);
     } catch {
       // form validation error
+    }
+  };
+
+  /** 打开取消订阅弹窗，自动加载当前订阅列表 */
+  const openUnsubscribe = async (exchange: string) => {
+    setUnsubExchange(exchange);
+    setSubscriptionList([]);
+    setUnsubVisible(true);
+    setSubscriptionListLoading(true);
+    try {
+      const response = await quoteSourceApi.subscriptions(exchange);
+      if (response.code === 200) {
+        setSubscriptionList(response.data ?? []);
+      }
+    } catch {
+      message.error(t('message.quote.loadFailed'));
+    } finally {
+      setSubscriptionListLoading(false);
+    }
+  };
+
+  /** 取消订阅单条记录 */
+  const handleUnsubscribeItem = async (item: SubscriptionItem) => {
+    setUnsubLoading(true);
+    try {
+      await quoteSourceApi.unsubscribe({
+        exchange: unsubExchange,
+        symbol: item.symbol,
+        interval: item.interval as KLineInterval,
+      });
+      message.success(t('message.quote.unsubscribeSuccess'));
+      // 从列表中移除
+      setSubscriptionList((prev) =>
+        prev.filter((s) => !(s.symbol === item.symbol && s.interval === item.interval))
+      );
+    } catch {
+      message.error(t('message.quote.loadFailed'));
+    } finally {
+      setUnsubLoading(false);
     }
   };
 
@@ -330,7 +370,7 @@ export const DataSourceManagement = () => {
             type="link"
             icon={<PlusOutlined />}
             disabled={!record.connected}
-            onClick={() => openSubscribe(record.exchange, 'subscribe')}
+            onClick={() => openSubscribe(record.exchange)}
           >
             {t('text.quote.subscribe')}
           </Button>
@@ -338,7 +378,7 @@ export const DataSourceManagement = () => {
             type="link"
             icon={<MinusCircleOutlined />}
             disabled={!record.connected}
-            onClick={() => openSubscribe(record.exchange, 'unsubscribe')}
+            onClick={() => openUnsubscribe(record.exchange)}
           >
             {t('text.quote.unsubscribe')}
           </Button>
@@ -473,13 +513,9 @@ export const DataSourceManagement = () => {
         pagination={false}
       />
 
-      {/* 订阅/取消订阅弹窗 */}
+      {/* 订阅弹窗 */}
       <Modal
-        title={
-          subscribeType === 'subscribe'
-            ? t('text.quote.subscribe') + ' - ' + subscribeExchange.toUpperCase()
-            : t('text.quote.unsubscribe') + ' - ' + subscribeExchange.toUpperCase()
-        }
+        title={t('text.quote.subscribe') + ' - ' + subscribeExchange.toUpperCase()}
         open={subscribeVisible}
         onOk={handleSubscribeSubmit}
         onCancel={() => setSubscribeVisible(false)}
@@ -500,6 +536,69 @@ export const DataSourceManagement = () => {
             <Select placeholder={t('placeholder.quote.interval')} options={INTERVAL_OPTIONS} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 取消订阅弹窗 */}
+      <Modal
+        title={t('text.quote.unsubscribe') + ' - ' + unsubExchange.toUpperCase()}
+        open={unsubVisible}
+        footer={null}
+        onCancel={() => setUnsubVisible(false)}
+      >
+        {subscriptionListLoading ? (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <LoadingOutlined spin style={{ fontSize: 24 }} />
+          </div>
+        ) : subscriptionList.length === 0 ? (
+          <Alert
+            message={t('text.quote.noSubscriptions')}
+            type="info"
+            showIcon
+            style={{ margin: '12px 0' }}
+          />
+        ) : (
+          <Table
+            dataSource={subscriptionList}
+            rowKey={(r) => `${r.symbol}_${r.interval}`}
+            pagination={false}
+            size="small"
+            columns={[
+              {
+                title: t('text.quote.symbol'),
+                dataIndex: 'symbol',
+                key: 'symbol',
+                render: (text: string) => <span style={{ fontWeight: 600 }}>{text}</span>,
+              },
+              {
+                title: t('text.quote.interval'),
+                dataIndex: 'interval',
+                key: 'interval',
+                render: (val: string) => (
+                  <Tag color="blue">
+                    {KLINE_INTERVAL_LABELS[val as KLineInterval] || val}
+                  </Tag>
+                ),
+              },
+              {
+                title: t('common.operation'),
+                key: 'action',
+                width: 100,
+                render: (_: unknown, record: SubscriptionItem) => (
+                  <Button
+                    type="link"
+                    danger
+                    size="small"
+                    loading={unsubLoading}
+                    icon={<MinusCircleOutlined />}
+                    onClick={() => handleUnsubscribeItem(record)}
+                  >
+                    {t('text.quote.unsubscribe')}
+                  </Button>
+                ),
+              },
+            ]}
+          />
+        )}
       </Modal>
 
       {/* 历史补全弹窗 */}

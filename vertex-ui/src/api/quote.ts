@@ -58,6 +58,12 @@ export interface SubscribeRequestDTO {
   interval: KLineInterval;
 }
 
+/** 活跃订阅项 */
+export interface SubscriptionItem {
+  symbol: string;
+  interval: string;
+}
+
 /** 补全任务进度 */
 export interface BackfillProgressVO {
   status: 'running' | 'done' | 'error' | 'not_found';
@@ -83,6 +89,11 @@ export const quoteSourceApi = {
   /** 停止数据源 */
   stop: (exchange: string): Promise<ApiResponse<void>> => {
     return request.post(`/quote/source/stop?exchange=${exchange}`);
+  },
+
+  /** 查询活跃订阅列表 */
+  subscriptions: (exchange: string): Promise<ApiResponse<SubscriptionItem[]>> => {
+    return request.get('/quote/source/subscriptions', { params: { exchange } });
   },
 
   /** 订阅K线 */

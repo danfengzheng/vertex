@@ -16,6 +16,8 @@ import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.quote.store.KLineStore;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -106,6 +108,21 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
     @Override
     public boolean isConnected() {
         return connected;
+    }
+
+    @Override
+    public List<Map<String, String>> getSubscriptions() {
+        List<Map<String, String>> result = new ArrayList<>();
+        topicIntervalMap.forEach((topic, interval) -> {
+            String symbol = topicSymbolMap.get(topic);
+            if (symbol != null) {
+                result.add(Map.of(
+                        "symbol", symbol,
+                        "interval", interval.name()
+                ));
+            }
+        });
+        return result;
     }
 
     // ==================== ExchangeWebSocketClient 模板方法 ====================

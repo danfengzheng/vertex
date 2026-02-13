@@ -2,6 +2,9 @@ package com.vertex.service.quote.source;
 
 import com.vertex.model.entity.quote.KLineInterval;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * 行情数据源接口
  * <p>
@@ -44,4 +47,11 @@ public interface QuoteDataSource {
      * 是否已连接
      */
     boolean isConnected();
+
+    /**
+     * 获取当前所有活跃订阅
+     *
+     * @return 订阅列表，每个元素包含 symbol 和 interval
+     */
+    List<Map<String, String>> getSubscriptions();
 }

@@ -100,7 +100,8 @@
       "preset3m": "最近3月",
       "preset1y": "最近1年",
       "backfillTasks": "补全任务",
-      "backfillRecords": "已补全 {{count}} 条"
+      "backfillRecords": "已补全 {{count}} 条",
+      "noSubscriptions": "当前没有活跃的订阅"
     },
     "strategy": {
       "title": "策略管理",

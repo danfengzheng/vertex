@@ -81,6 +81,14 @@ public class QuoteSourceController {
         return Result.success();
     }
 
+    @Operation(summary = "查看指定交易所的活跃订阅列表")
+    @GetMapping("/subscriptions")
+    public Result<List<Map<String, String>>> subscriptions(
+            @RequestParam @NotBlank(message = "交易所不能为空") String exchange) {
+        QuoteDataSource ds = findDataSource(exchange);
+        return Result.success(ds.getSubscriptions());
+    }
+
     @Operation(summary = "订阅K线")
     @PostMapping("/subscribe")
     public Result<Void> subscribe(@RequestBody @Validated SubscribeRequestDTO dto) {

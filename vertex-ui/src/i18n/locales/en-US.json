@@ -100,7 +100,8 @@
       "preset3m": "Last 3M",
       "preset1y": "Last 1Y",
       "backfillTasks": "Backfill Tasks",
-      "backfillRecords": "{{count}} records"
+      "backfillRecords": "{{count}} records",
+      "noSubscriptions": "No active subscriptions"
     },
     "strategy": {
       "title": "Strategy",

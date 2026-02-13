@@ -17,6 +17,8 @@ import io.netty.channel.Channel;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -107,6 +109,21 @@ public class OkxWsDataSource extends ExchangeWebSocketClient implements QuoteDat
     @Override
     public boolean isConnected() {
         return connected;
+    }
+
+    @Override
+    public List<Map<String, String>> getSubscriptions() {
+        List<Map<String, String>> result = new ArrayList<>();
+        topicIntervalMap.forEach((topic, interval) -> {
+            String symbol = topicSymbolMap.get(topic);
+            if (symbol != null) {
+                result.add(Map.of(
+                        "symbol", symbol,
+                        "interval", interval.name()
+                ));
+            }
+        });
+        return result;
     }
 
     // ==================== ExchangeWebSocketClient 模板方法 ====================
