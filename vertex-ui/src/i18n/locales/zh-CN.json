@@ -1,4 +1,12 @@
 {
+  "notification": {
+    "title": "通知中心",
+    "empty": "暂无通知",
+    "markAllRead": "全部已读",
+    "clearAll": "清空",
+    "buySignal": "📈 买入信号",
+    "sellSignal": "📉 卖出信号"
+  },
   "common": {
     "confirm": "确认",
     "cancel": "取消",
@@ -172,7 +180,18 @@
       "rsiPeriod": "RSI周期",
       "stochPeriod": "随机周期",
       "kSmooth": "K平滑",
-      "dSmooth": "D平滑"
+      "dSmooth": "D平滑",
+      "volMultiplier": "放量倍数",
+      "signalPeriod": "信号线周期",
+      "volConfirmInfo": "检测成交量放量/缩量，确认趋势信号有效性",
+      "obvInfo": "累积量能方向，追踪资金流入流出",
+      "afStart": "加速因子初始值",
+      "afStep": "加速因子步长",
+      "afMax": "加速因子上限",
+      "trendThreshold": "趋势强度阈值",
+      "sarNoTrend": "SAR 通过追踪止损点反转来判断趋势方向",
+      "adxTrendStrength": "ADX 衡量趋势强度，+DI/-DI 判断方向",
+      "superTrendInfo": "SuperTrend 基于 ATR 的自适应趋势跟踪指标"
     }
   },
   "placeholder": {

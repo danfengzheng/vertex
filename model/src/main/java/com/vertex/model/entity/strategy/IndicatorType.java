@@ -19,7 +19,12 @@ public enum IndicatorType {
     ATR("ATR", "平均真实波幅"),
     VWAP("VWAP", "成交量加权平均价"),
     STOCH_RSI("STOCH_RSI", "随机RSI"),
-    WR("WR", "威廉指标");
+    WR("WR", "威廉指标"),
+    SAR("SAR", "抛物线转向指标"),
+    ADX("ADX", "平均趋向指数"),
+    SUPERTREND("SUPERTREND", "超级趋势指标"),
+    VOL_CONFIRM("VOL_CONFIRM", "成交量确认"),
+    OBV("OBV", "能量潮指标");
 
     private final String code;
     private final String description;

@@ -212,6 +212,117 @@ const IndicatorParamsFields = ({
           <InputNumber min={2} max={100} style={{ width: 120 }} />
         </Form.Item>
       );
+    case 'SAR':
+      return (
+        <Space wrap>
+          <Form.Item
+            name={[...prefix, 'params', 'afStart']}
+            label={t('text.strategy.afStart')}
+            initialValue={0.02}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={0.01} max={0.05} step={0.01} style={{ width: 100 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'afStep']}
+            label={t('text.strategy.afStep')}
+            initialValue={0.02}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={0.01} max={0.04} step={0.01} style={{ width: 100 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'afMax']}
+            label={t('text.strategy.afMax')}
+            initialValue={0.2}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={0.1} max={0.4} step={0.05} style={{ width: 100 }} />
+          </Form.Item>
+        </Space>
+      );
+    case 'ADX':
+      return (
+        <Space>
+          <Form.Item
+            name={[...prefix, 'params', 'period']}
+            label={t('text.strategy.period')}
+            initialValue={14}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={7} max={30} style={{ width: 80 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'trendThreshold']}
+            label={t('text.strategy.trendThreshold')}
+            initialValue={25}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={15} max={40} style={{ width: 80 }} />
+          </Form.Item>
+        </Space>
+      );
+    case 'SUPERTREND':
+      return (
+        <Space>
+          <Form.Item
+            name={[...prefix, 'params', 'period']}
+            label={t('text.strategy.period')}
+            initialValue={10}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={5} max={30} style={{ width: 80 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'multiplier']}
+            label={t('text.strategy.multiplier')}
+            initialValue={3.0}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={1.0} max={6.0} step={0.5} style={{ width: 80 }} />
+          </Form.Item>
+        </Space>
+      );
+    case 'VOL_CONFIRM':
+      return (
+        <Space wrap>
+          <Form.Item
+            name={[...prefix, 'params', 'period']}
+            label={t('text.strategy.period')}
+            initialValue={20}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={5} max={50} style={{ width: 80 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'volMultiplier']}
+            label={t('text.strategy.volMultiplier')}
+            initialValue={1.5}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={1.0} max={3.0} step={0.1} style={{ width: 80 }} />
+          </Form.Item>
+          <span style={{ color: '#888', fontSize: 12 }}>
+            {t('text.strategy.volConfirmInfo')}
+          </span>
+        </Space>
+      );
+    case 'OBV':
+      return (
+        <Space wrap>
+          <Form.Item
+            name={[...prefix, 'params', 'signalPeriod']}
+            label={t('text.strategy.signalPeriod')}
+            initialValue={10}
+            rules={[{ required: true }]}
+          >
+            <InputNumber min={3} max={30} style={{ width: 80 }} />
+          </Form.Item>
+          <span style={{ color: '#888', fontSize: 12 }}>
+            {t('text.strategy.obvInfo')}
+          </span>
+        </Space>
+      );
     default:
       return null;
   }

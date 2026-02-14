@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Table, Button, Space, message, Tag, Select, Input, DatePicker, Modal, Descriptions,
-  Progress, notification, Badge, Tooltip, Dropdown, Card, Row, Col, Statistic, Divider,
+  Progress, Badge, Tooltip, Dropdown, Card, Row, Col, Statistic, Divider,
   Spin, Empty,
 } from 'antd';
 import type { Dayjs } from 'dayjs';
@@ -30,7 +30,7 @@ import {
   BacktestResultVO,
 } from '../../api/strategy';
 import { KLINE_INTERVAL_LABELS, KLineInterval } from '../../api/quote';
-import { useSignalWebSocket } from '../../hooks/useSignalWebSocket';
+import { useNotification } from '../../hooks/useNotification';
 
 const INTERVAL_OPTIONS = Object.entries(KLINE_INTERVAL_LABELS).map(([value, label]) => ({
   value,
@@ -257,34 +257,27 @@ export const SignalMonitor = () => {
   const [quickBacktestDays, setQuickBacktestDays] = useState<number>(30);
   const [quickBacktestLoading, setQuickBacktestLoading] = useState<string | null>(null); // strategyId being tested
 
-  // WebSocket 实时信号处理
-  const handleNewSignal = useCallback((signal: SignalVO) => {
-    // 对 BUY/SELL 信号弹出通知
-    if (signal.signalType !== 'NEUTRAL') {
-      notification.open({
-        message: signal.signalType === 'BUY' ? '📈 买入信号' : '📉 卖出信号',
-        description: `${signal.strategyName}: ${signal.symbol} @ ${signal.price}`,
-        type: signal.signalType === 'BUY' ? 'success' : 'warning',
-        duration: 6,
-        placement: 'topRight',
-      });
-    }
+  // 从全局通知上下文获取 WebSocket 连接状态和实时信号
+  const { connected, notifications: globalNotifications } = useNotification();
 
-    // 当在第一页时，将新信号插入列表顶部
-    if (pageNum === 1) {
-      setSignals((prev) => {
-        const newList = [signal, ...prev];
-        // 保持不超过 pageSize
-        return newList.slice(0, pageSize);
-      });
-      setTotal((prev) => prev + 1);
-    }
-  }, [pageNum, pageSize]);
+  // 监听全局通知中的最新信号，自动插入表格（仅第 1 页）
+  const lastNotificationIdRef = useRef<string | null>(null);
 
-  const { connected } = useSignalWebSocket({
-    onSignal: handleNewSignal,
-    enabled: true,
-  });
+  useEffect(() => {
+    if (globalNotifications.length > 0) {
+      const latest = globalNotifications[0];
+      if (latest.id !== lastNotificationIdRef.current) {
+        lastNotificationIdRef.current = latest.id;
+        if (pageNum === 1) {
+          setSignals((prev) => {
+            const newList = [latest.signal, ...prev];
+            return newList.slice(0, pageSize);
+          });
+          setTotal((prev) => prev + 1);
+        }
+      }
+    }
+  }, [globalNotifications, pageNum, pageSize]);
 
   const loadStrategies = async () => {
     try {

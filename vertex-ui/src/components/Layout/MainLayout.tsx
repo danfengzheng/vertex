@@ -18,6 +18,7 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
+import { NotificationBell } from '../NotificationBell';
 import type { MenuProps } from 'antd';
 
 const { Header, Sider, Content } = Layout;
@@ -218,6 +219,7 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
           </div>
           <Space size="middle">
             <LanguageSwitcher />
+            <NotificationBell />
             <Dropdown
               menu={{
                 items: userMenuItems,

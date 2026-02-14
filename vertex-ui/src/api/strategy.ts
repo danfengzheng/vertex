@@ -7,7 +7,7 @@ import type { KLineInterval } from './quote';
  */
 
 /** 指标类型 */
-export type IndicatorType = 'MA' | 'EMA' | 'RSI' | 'MACD' | 'BOLL' | 'KDJ' | 'ATR' | 'VWAP' | 'STOCH_RSI' | 'WR';
+export type IndicatorType = 'MA' | 'EMA' | 'RSI' | 'MACD' | 'BOLL' | 'KDJ' | 'ATR' | 'VWAP' | 'STOCH_RSI' | 'WR' | 'SAR' | 'ADX' | 'SUPERTREND' | 'VOL_CONFIRM' | 'OBV';
 
 /** 信号类型 */
 export type SignalType = 'BUY' | 'SELL' | 'NEUTRAL';
@@ -24,6 +24,11 @@ export const INDICATOR_TYPE_LABELS: Record<IndicatorType, string> = {
   VWAP: 'VWAP (成交量加权均价)',
   STOCH_RSI: 'StochRSI (随机RSI)',
   WR: 'WR (威廉指标)',
+  SAR: 'SAR (抛物线转向)',
+  ADX: 'ADX (平均趋向指数)',
+  SUPERTREND: 'SuperTrend (超级趋势)',
+  VOL_CONFIRM: 'VOL (成交量确认)',
+  OBV: 'OBV (能量潮)',
 };
 
 /** 信号类型显示映射 */

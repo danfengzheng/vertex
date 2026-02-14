@@ -1,4 +1,12 @@
 {
+  "notification": {
+    "title": "Notifications",
+    "empty": "No notifications",
+    "markAllRead": "Mark all read",
+    "clearAll": "Clear all",
+    "buySignal": "📈 Buy Signal",
+    "sellSignal": "📉 Sell Signal"
+  },
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",
@@ -172,7 +180,18 @@
       "rsiPeriod": "RSI Period",
       "stochPeriod": "Stoch Period",
       "kSmooth": "K Smooth",
-      "dSmooth": "D Smooth"
+      "dSmooth": "D Smooth",
+      "afStart": "AF Start",
+      "afStep": "AF Step",
+      "afMax": "AF Max",
+      "trendThreshold": "Trend Threshold",
+      "sarNoTrend": "SAR detects trend direction via trailing stop-and-reverse",
+      "adxTrendStrength": "ADX measures trend strength, +DI/-DI for direction",
+      "superTrendInfo": "SuperTrend is an ATR-based adaptive trend following indicator",
+      "volMultiplier": "Volume Multiplier",
+      "signalPeriod": "Signal Period",
+      "volConfirmInfo": "Detects volume surges to confirm trend signals",
+      "obvInfo": "Tracks cumulative volume flow direction"
     }
   },
   "placeholder": {

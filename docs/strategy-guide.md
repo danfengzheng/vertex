@@ -29,6 +29,11 @@
   - [4.8 VWAP - 成交量加权均价](#48-vwap---成交量加权均价)
   - [4.9 STOCH_RSI - 随机RSI](#49-stoch_rsi---随机rsi)
   - [4.10 WR - 威廉指标](#410-wr---威廉指标)
+  - [4.11 SAR - 抛物线转向指标](#411-sar---抛物线转向指标)
+  - [4.12 ADX - 平均趋向指数](#412-adx---平均趋向指数)
+  - [4.13 SUPERTREND - 超级趋势指标](#413-supertrend---超级趋势指标)
+  - [4.14 VOL_CONFIRM - 成交量确认](#414-vol_confirm---成交量确认)
+  - [4.15 OBV - 能量潮指标](#415-obv---能量潮指标)
 - [5. 开发者指南](#5-开发者指南)
   - [5.1 项目结构](#51-项目结构)
   - [5.2 添加自定义指标](#52-添加自定义指标)
@@ -89,6 +94,8 @@ Vertex 策略模块是一套完整的量化交易信号生成系统，由以下�
 │  │              ▼            ▼            ▼               │   │
 │  │           MA/EMA      RSI/MACD    BOLL/KDJ/ATR        │   │
 │  │                    VWAP/StochRSI/WR                    │   │
+│  │                    SAR/ADX/SuperTrend                   │   │
+│  │                    VOL_CONFIRM/OBV                      │   │
 │  │         (指标计算层 - IndicatorRegistry)                │   │
 │  └───────────────────────────────────────────────────────┘   │
 │                           │                                   │
@@ -445,7 +452,7 @@ POST /admin/backtest/quick?strategyId=1&days=30&initialCapital=10000
 
 ## 4. 技术指标参考
 
-系统内置 10 种技术指标，均实现 `TechnicalIndicator` 接口，通过 Spring Component 扫描自动注册。其中 VWAP、STOCH_RSI、WR 为高频短线交易指标。
+系统内置 15 种技术指标，均实现 `TechnicalIndicator` 接口，通过 Spring Component 扫描自动注册。其中 VWAP、STOCH_RSI、WR 为高频短线交易指标，SAR、ADX、SUPERTREND 为趋势策略指标，VOL_CONFIRM、OBV 为成交量分析指标。
 
 ### 4.1 MA - 简单移动平均线
 
@@ -738,6 +745,216 @@ Step 4: D = SMA(K, dSmooth)
 
 ---
 
+### 4.11 SAR - 抛物线转向指标
+
+| 属性 | 值 |
+|------|------|
+| 类型代码 | `SAR` |
+| 默认参数 | `afStart = 0.02, afStep = 0.02, afMax = 0.2` |
+| 所需数据量 | 5 根K线 |
+
+**算法：**
+
+```
+Parabolic SAR 是一种追踪止损和反转系统：
+
+初始化:
+  趋势 = UP, SAR = 第一根K线最低价
+  EP (极值点) = 第一根K线最高价
+  AF (加速因子) = afStart
+
+迭代计算 (每根K线):
+  newSAR = prevSAR + AF × (EP - prevSAR)
+
+  上升趋势:
+    SAR = min(newSAR, 前两根K线最低价)
+    若 High > EP → EP = High, AF = min(AF + afStep, afMax)
+    若 Low < SAR → 趋势反转为 DOWN, SAR = EP
+
+  下降趋势:
+    SAR = max(newSAR, 前两根K线最高价)
+    若 Low < EP → EP = Low, AF = min(AF + afStep, afMax)
+    若 High > SAR → 趋势反转为 UP, SAR = EP
+```
+
+**信号逻辑：**
+- **BUY**: 趋势从 DOWN 翻转为 UP（价格上穿 SAR 点）
+- **SELL**: 趋势从 UP 翻转为 DOWN（价格下穿 SAR 点）
+- **NEUTRAL**: 趋势延续，无翻转
+
+**输出指标值：** `{"sar": 42150.00, "trend": 1.0}`
+
+> `trend` 值：`1.0` = 上升趋势，`-1.0` = 下降趋势
+
+**适用场景：** 经典的趋势追踪止损系统，适合单边趋势行情。SAR 点在价格下方时表示多头，上方时表示空头。加速因子越大，SAR 越紧贴价格，但也越容易被震荡触发反转。
+
+---
+
+### 4.12 ADX - 平均趋向指数
+
+| 属性 | 值 |
+|------|------|
+| 类型代码 | `ADX` |
+| 默认参数 | `period = 14, trendThreshold = 25` |
+| 所需数据量 | `period × 3` 根K线 |
+
+**算法：**
+
+```
+Step 1: 计算方向运动 (Directional Movement)
+  +DM = High - prevHigh (若 > 0 且 > -(Low - prevLow))，否则 0
+  -DM = prevLow - Low   (若 > 0 且 > (High - prevHigh))，否则 0
+
+Step 2: Wilder 平滑 (period 期)
+  Smoothed +DM = prevSmoothed × (period-1)/period + currentDM
+  Smoothed -DM = prevSmoothed × (period-1)/period + currentDM
+  Smoothed TR  = prevSmoothed × (period-1)/period + currentTR
+
+Step 3: 方向指标
+  +DI = (Smoothed +DM / Smoothed TR) × 100
+  -DI = (Smoothed -DM / Smoothed TR) × 100
+
+Step 4: 趋向指数
+  DX = |+DI - -DI| / (+DI + -DI) × 100
+  ADX = Wilder平滑(DX, period)
+```
+
+**信号逻辑：**
+- **BUY**: +DI > -DI 且 ADX > trendThreshold（强势上升趋势）
+- **SELL**: -DI > +DI 且 ADX > trendThreshold（强势下降趋势）
+- **NEUTRAL**: ADX ≤ trendThreshold（趋势不明显，处于震荡）
+
+**输出指标值：** `{"adx": 32.45, "plusDi": 28.67, "minusDi": 15.23}`
+
+**适用场景：** ADX 是唯一专门衡量趋势强度的指标。ADX > 25 表示存在明确趋势，ADX < 20 表示无趋势（横盘震荡）。+DI/-DI 交叉判断趋势方向，ADX 值确认趋势强度。建议与 SAR 或 SuperTrend 配合使用：ADX 确认趋势存在，SAR/SuperTrend 提供入场/出场点。
+
+> **提示：** ADX 值只反映趋势强度，不反映方向。ADX 上升表示趋势增强（可能是上涨也可能是下跌），下降表示趋势减弱。
+
+---
+
+### 4.13 SUPERTREND - 超级趋势指标
+
+| 属性 | 值 |
+|------|------|
+| 类型代码 | `SUPERTREND` |
+| 默认参数 | `period = 10, multiplier = 3.0` |
+| 所需数据量 | `period + 15` 根K线 |
+
+**算法：**
+
+```
+Step 1: 计算 ATR（使用 Wilder 平滑法，周期 = period）
+
+Step 2: 计算基础带
+  中间价 = (High + Low) / 2
+  upperBand = 中间价 + multiplier × ATR
+  lowerBand = 中间价 - multiplier × ATR
+
+Step 3: 棘轮机制（Ratchet）
+  若 prevLowerBand > 0 且 Close > prevLowerBand
+    → lowerBand = max(lowerBand, prevLowerBand)  // 上升趋势中下轨只升不降
+  若 prevUpperBand > 0 且 Close < prevUpperBand
+    → upperBand = min(upperBand, prevUpperBand)  // 下降趋势中上轨只降不升
+
+Step 4: 趋势判定
+  上升趋势: Close > upperBand → 翻转为 UP, SuperTrend = lowerBand
+  下降趋势: Close < lowerBand → 翻转为 DOWN, SuperTrend = upperBand
+  趋势延续: SuperTrend 保持当前趋势对应的带值
+```
+
+**信号逻辑：**
+- **BUY**: 趋势从 DOWN 翻转为 UP（价格突破上轨）
+- **SELL**: 趋势从 UP 翻转为 DOWN（价格跌破下轨）
+- **NEUTRAL**: 趋势延续，无翻转
+
+**输出指标值：** `{"superTrend": 41800.00, "trend": 1.0, "upperBand": 43200.00, "lowerBand": 41800.00}`
+
+> `trend` 值：`1.0` = 上升趋势，`-1.0` = 下降趋势
+
+**适用场景：** SuperTrend 是基于 ATR 的自适应趋势跟踪指标，带宽随波动率自动调整。相比固定阈值的移动平均线，SuperTrend 在高波动期自动放宽容忍度，低波动期自动收紧。棘轮机制确保趋势中的支撑/阻力位只朝有利方向移动。`multiplier` 越大，趋势转换越不灵敏，假信号越少但延迟越大。
+
+> **推荐组合：** SuperTrend + ADX 是经典的趋势策略组合。ADX 过滤无趋势市场（ADX < 25 时不交易），SuperTrend 提供精确的入场/出场信号。
+
+---
+
+### 4.14 VOL_CONFIRM - 成交量确认
+
+| 属性 | 值 |
+|------|------|
+| 类型代码 | `VOL_CONFIRM` |
+| 默认参数 | `period = 20, volMultiplier = 1.5` |
+| 所需数据量 | `period + 1` 根K线 |
+
+**算法：**
+
+```
+Step 1: 计算近 period 根K线的平均成交量 (不含当前K线)
+  avgVol = Σ(Volume[i]) / period (i = 倒数第2根 往前 period 根)
+
+Step 2: 成交量比率
+  volRatio = currentVolume / avgVol
+
+Step 3: 价格变动
+  priceChange = currentClose - prevClose
+
+Step 4: 放量判定
+  放量 = volRatio > volMultiplier (默认1.5倍)
+```
+
+**信号逻辑：**
+- **BUY**: 放量 + 价格上涨（volRatio > multiplier && priceChange > 0）
+- **SELL**: 放量 + 价格下跌（volRatio > multiplier && priceChange < 0）
+- **NEUTRAL**: 缩量（成交量未达到放量阈值，无论涨跌信号都不可靠）
+
+**输出指标值：** `{"volRatio": 2.35, "avgVolume": 1250.50, "currentVolume": 2938.70}`
+
+**适用场景：** 核心价值是**过滤假突破**。作为辅助指标与趋势指标组合使用：
+- SAR=BUY(w:60) + VOL_CONFIRM=BUY(w:40) → 放量确认，总信号强度 100%
+- SAR=BUY(w:60) + VOL_CONFIRM=NEUTRAL(w:40) → 缩量不确认，信号强度降为 60%
+
+> **参数调优：** `volMultiplier` 越大，放量阈值越高，信号越少但越可靠。加密货币市场波动大，建议 1.3-2.0；传统市场建议 1.5-2.5。
+
+---
+
+### 4.15 OBV - 能量潮指标
+
+| 属性 | 值 |
+|------|------|
+| 类型代码 | `OBV` |
+| 默认参数 | `signalPeriod = 10` |
+| 所需数据量 | `signalPeriod + 10` 根K线 |
+
+**算法：**
+
+```
+Step 1: OBV 累积计算 (逐根K线)
+  若 Close > prevClose → OBV += Volume  (上涨放量 → 资金流入)
+  若 Close < prevClose → OBV -= Volume  (下跌放量 → 资金流出)
+  若 Close == prevClose → OBV 不变
+
+Step 2: OBV 信号线
+  obvSignal = SMA(OBV, signalPeriod)
+
+Step 3: 偏离度
+  diff = (OBV - obvSignal) / |obvSignal| × 100
+```
+
+**信号逻辑：**
+- **BUY**: OBV > 信号线 超过 1%（资金净流入，量能支撑上涨）
+- **SELL**: OBV < 信号线 超过 1%（资金净流出，量能推动下跌）
+- **NEUTRAL**: OBV ≈ 信号线（偏离在 ±1% 以内，方向不明）
+
+**输出指标值：** `{"obv": 15832.50, "obvSignal": 14500.20}`
+
+**适用场景：** 量价背离检测是 OBV 最强大的功能：
+- **顶背离**：价格创新高，但 OBV 未创新高 → 上涨动能衰竭，预警下跌
+- **底背离**：价格创新低，但 OBV 未创新低 → 下跌动能衰竭，预警反弹
+- 与 MACD、RSI 组合使用效果最佳，OBV 从量能角度验证价格信号
+
+> **提示：** OBV 的绝对值没有意义，重要的是其**趋势和方向**。OBV 持续上升表示买方力量占优，持续下降表示卖方力量占优。
+
+---
+
 ## 5. 开发者指南
 
 ### 5.1 项目结构
@@ -781,7 +998,12 @@ vertex/
 │       │       ├── AtrIndicator.java         # ATR
 │       │       ├── VwapIndicator.java        # VWAP (高频)
 │       │       ├── StochRsiIndicator.java    # StochRSI (高频)
-│       │       └── WilliamsRIndicator.java   # WR (高频)
+│       │       ├── WilliamsRIndicator.java   # WR (高频)
+│       │       ├── SarIndicator.java         # SAR (趋势)
+│       │       ├── AdxIndicator.java         # ADX (趋势)
+│       │       ├── SuperTrendIndicator.java  # SuperTrend (趋势)
+│       │       ├── VolConfirmIndicator.java  # VOL_CONFIRM (成交量)
+│       │       └── ObvIndicator.java         # OBV (成交量)
 │       ├── engine/
 │       │   ├── SignalGenerator.java     # 信号生成器
 │       │   ├── StrategyEngineService.java  # 策略引擎
@@ -831,6 +1053,11 @@ public enum IndicatorType {
     VWAP("VWAP", "成交量加权平均价"),
     STOCH_RSI("STOCH_RSI", "随机RSI"),
     WR("WR", "威廉指标"),
+    SAR("SAR", "抛物线转向指标"),
+    ADX("ADX", "平均趋向指数"),
+    SUPERTREND("SUPERTREND", "超级趋势指标"),
+    VOL_CONFIRM("VOL_CONFIRM", "成交量确认"),
+    OBV("OBV", "能量潮指标"),
     // ↓ 在此添加新指标
     MY_INDICATOR("MY_INDICATOR", "我的自定义指标");
 
@@ -1070,6 +1297,41 @@ public class MyIndicator implements TechnicalIndicator {
 |------|--------|----------|------|
 | `period` | 14 | 5 - 21 | 回看周期，越短越灵敏 |
 
+#### SAR 参数
+
+| 参数 | 默认值 | 范围建议 | 说明 |
+|------|--------|----------|------|
+| `afStart` | 0.02 | 0.01 - 0.05 | 加速因子初始值，越大越灵敏 |
+| `afStep` | 0.02 | 0.01 - 0.04 | 加速因子每次递增步长 |
+| `afMax` | 0.2 | 0.1 - 0.4 | 加速因子上限，限制最大加速度 |
+
+#### ADX 参数
+
+| 参数 | 默认值 | 范围建议 | 说明 |
+|------|--------|----------|------|
+| `period` | 14 | 7 - 30 | 计算周期，越大越平滑 |
+| `trendThreshold` | 25 | 15 - 40 | 趋势强度阈值，ADX 超过该值才产生买卖信号 |
+
+#### SUPERTREND 参数
+
+| 参数 | 默认值 | 范围建议 | 说明 |
+|------|--------|----------|------|
+| `period` | 10 | 5 - 30 | ATR 计算周期 |
+| `multiplier` | 3.0 | 1.0 - 6.0 | ATR 倍数，越大趋势越不灵敏 |
+
+#### VOL_CONFIRM 参数
+
+| 参数 | 默认值 | 范围建议 | 说明 |
+|------|--------|----------|------|
+| `period` | 20 | 5 - 50 | 均量计算周期，越大参考区间越长 |
+| `volMultiplier` | 1.5 | 1.0 - 3.0 | 放量倍数阈值，超过该倍数视为放量 |
+
+#### OBV 参数
+
+| 参数 | 默认值 | 范围建议 | 说明 |
+|------|--------|----------|------|
+| `signalPeriod` | 10 | 3 - 30 | OBV 信号线 SMA 周期 |
+
 ### 6.3 权重系统
 
 每个指标需设定 **权重值**（1-100），决定该指标在最终信号判定中的话语权。
@@ -1086,6 +1348,12 @@ public class MyIndicator implements TechnicalIndicator {
 | 高频短线 | STOCH_RSI + WR + VWAP | 40 : 35 : 25 | 1m-15m 高频短线交易 |
 | VWAP 均值回归 | VWAP + RSI | 55 : 45 | 日内均值回归策略 |
 | 超短线震荡 | WR + KDJ | 50 : 50 | 超短线快速进出 |
+| 趋势追踪 | SAR + ADX | 55 : 45 | SAR 提供入场/出场点，ADX 过滤震荡 |
+| 趋势确认 | SuperTrend + ADX | 60 : 40 | SuperTrend 自适应趋势跟踪 + ADX 强度确认 |
+| 全维度趋势 | SuperTrend + SAR + ADX | 40 : 35 : 25 | 趋势跟踪 + 止损反转 + 强度过滤 |
+| 放量确认趋势 | SuperTrend + VOL_CONFIRM | 60 : 40 | 趋势信号 + 成交量放量确认，过滤假突破 |
+| 量价综合 | MACD + OBV + VOL_CONFIRM | 40 : 35 : 25 | 动量方向 + 资金流向 + 放量确认 |
+| 量能验证 | RSI + OBV | 55 : 45 | 超买超卖 + 量能背离检测 |
 
 > **提示：** ATR 始终输出 NEUTRAL，分配权重给 ATR 相当于增加"弃权票"，可降低误信号率。
 
@@ -1489,6 +1757,7 @@ A: WebSocket 支持按交易对订阅。修改前端 `useSignalWebSocket` 的订
 | 信号存储增长 | 定期清理过期的 NEUTRAL 信号，减少数据库压力 |
 | 高频指标组合 | STOCH_RSI + WR + VWAP 组合适合 M1-M15 周期，信号频繁，注意止损控制 |
 | 启动恢复耗时 | 首次启动时数据补全可能耗时较长（取决于策略数量和网络），后续重启会很快 |
+| 趋势指标组合 | SAR + ADX + SuperTrend 适合 H1-D1 周期，信号频率低但质量高，适合中长线持仓 |
 
 ### C. 版本变更记录
 
@@ -1499,3 +1768,5 @@ A: WebSocket 支持按交易对订阅。修改前端 `useSignalWebSocket` 的订
 | 1.2 | - | 新增数据源管理优化：取消订阅支持从列表选择 |
 | 1.3 | - | 策略启用时自动连接数据源、订阅行情、预热历史数据 |
 | 1.4 | - | 系统启动自动恢复：已启用策略的连接、订阅和数据补全 |
+| 1.5 | - | 新增 SAR、ADX、SuperTrend 趋势策略指标（共 13 种指标） |
+| 1.6 | - | 新增 VOL_CONFIRM、OBV 成交量分析指标（共 15 种指标） |

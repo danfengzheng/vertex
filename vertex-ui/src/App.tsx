@@ -4,17 +4,20 @@ import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
 import { useTranslation } from 'react-i18next';
 import { AppRouter } from './router';
+import { NotificationProvider } from './contexts/NotificationContext';
 
 function App() {
   const { i18n } = useTranslation();
-  
+
   // 根据当前语言设置 Ant Design 的语言包
   const antdLocale = i18n.language === 'zh-CN' ? zhCN : enUS;
 
   return (
     <ConfigProvider locale={antdLocale}>
       <BrowserRouter>
-        <AppRouter />
+        <NotificationProvider>
+          <AppRouter />
+        </NotificationProvider>
       </BrowserRouter>
     </ConfigProvider>
   );
