@@ -6,21 +6,32 @@ const { Title, Paragraph, Text } = Typography;
 
 /** 指标说明数据 */
 const INDICATOR_DESCRIPTIONS = [
-  { code: 'MA', name: 'MA', nameZh: '简单移动平均线', signal: '收盘价上穿/下穿均线 0.1%', usage: '中长期趋势判断' },
-  { code: 'EMA', name: 'EMA', nameZh: '指数移动平均线', signal: '同 MA，对近期价格更敏感', usage: '短中期趋势跟踪' },
-  { code: 'RSI', name: 'RSI', nameZh: '相对强弱指数', signal: 'RSI<30 超买买入, RSI>70 超卖卖出', usage: '震荡市超买超卖' },
-  { code: 'MACD', name: 'MACD', nameZh: '移动平均收敛散度', signal: '金叉/死叉（柱状图正负翻转）', usage: '中期趋势转折' },
-  { code: 'BOLL', name: 'BOLL', nameZh: '布林带', signal: '收盘价跌破下轨买/突破上轨卖', usage: '价格偏离均值判断' },
-  { code: 'KDJ', name: 'KDJ', nameZh: '随机指标', signal: 'K 上穿 D 金叉/K 下穿 D 死叉', usage: '短期超买超卖' },
-  { code: 'ATR', name: 'ATR', nameZh: '平均真实波幅', signal: '始终 NEUTRAL，波动率参考', usage: '止损位设定（如 2×ATR）' },
-  { code: 'VWAP', name: 'VWAP', nameZh: '成交量加权均价', signal: '价格偏离 VWAP 0.2%', usage: '日内均值回归' },
-  { code: 'STOCH_RSI', name: 'STOCH_RSI', nameZh: '随机RSI', signal: 'K 上穿 D 且 K<20 / K 下穿 D 且 K>80', usage: '短期超买超卖反转' },
-  { code: 'WR', name: 'WR', nameZh: '威廉指标', signal: '%R<-80 超卖 / %R>-20 超买', usage: '短线快速进出' },
-  { code: 'SAR', name: 'SAR', nameZh: '抛物线转向', signal: '价格上穿/下穿 SAR 点反转', usage: '趋势追踪止损' },
-  { code: 'ADX', name: 'ADX', nameZh: '平均趋向指数', signal: 'ADX>阈值 且 +DI>-DI 买 / -DI>+DI 卖', usage: '趋势强度过滤' },
-  { code: 'SUPERTREND', name: 'SUPERTREND', nameZh: '超级趋势', signal: '趋势 UP/DOWN 翻转', usage: '自适应趋势跟踪' },
-  { code: 'VOL_CONFIRM', name: 'VOL_CONFIRM', nameZh: '成交量确认', signal: '放量+涨买/放量+跌卖', usage: '过滤假突破' },
-  { code: 'OBV', name: 'OBV', nameZh: '能量潮', signal: 'OBV 高于/低于信号线 1%', usage: '量价背离检测' },
+  // 已实现
+  { code: 'MA', nameZh: '简单移动平均线', signal: '收盘价上穿/下穿均线 0.1%', usage: '中长期趋势判断', implemented: true },
+  { code: 'EMA', nameZh: '指数移动平均线', signal: '同 MA，对近期价格更敏感', usage: '短中期趋势跟踪', implemented: true },
+  { code: 'RSI', nameZh: '相对强弱指数', signal: 'RSI<30 超卖买入, RSI>70 超买卖出', usage: '震荡市超买超卖', implemented: true },
+  { code: 'MACD', nameZh: '移动平均收敛散度', signal: '金叉/死叉（柱状图正负翻转）', usage: '中期趋势转折', implemented: true },
+  { code: 'BOLL', nameZh: '布林带', signal: '收盘价跌破下轨买/突破上轨卖', usage: '价格偏离均值判断', implemented: true },
+  { code: 'KDJ', nameZh: '随机指标', signal: 'K 上穿 D 金叉/K 下穿 D 死叉', usage: '短期超买超卖', implemented: true },
+  { code: 'ATR', nameZh: '平均真实波幅', signal: '始终 NEUTRAL，波动率参考', usage: '止损位设定（如 2×ATR）', implemented: true },
+  { code: 'VWAP', nameZh: '成交量加权均价', signal: '价格偏离 VWAP 0.2%', usage: '日内均值回归', implemented: true },
+  { code: 'STOCH_RSI', nameZh: '随机RSI', signal: 'K 上穿 D 且 K<20 / K 下穿 D 且 K>80', usage: '短期超买超卖反转', implemented: true },
+  { code: 'WR', nameZh: '威廉指标', signal: '%R<-80 超卖 / %R>-20 超买', usage: '短线快速进出', implemented: true },
+  { code: 'SAR', nameZh: '抛物线转向', signal: '价格上穿/下穿 SAR 点反转', usage: '趋势追踪止损', implemented: true },
+  { code: 'ADX', nameZh: '平均趋向指数', signal: 'ADX>阈值 且 +DI>-DI 买 / -DI>+DI 卖', usage: '趋势强度过滤', implemented: true },
+  { code: 'SUPERTREND', nameZh: '超级趋势', signal: '趋势 UP/DOWN 翻转', usage: '自适应趋势跟踪', implemented: true },
+  { code: 'VOL_CONFIRM', nameZh: '成交量确认', signal: '放量+涨买/放量+跌卖', usage: '过滤假突破', implemented: true },
+  { code: 'OBV', nameZh: '能量潮', signal: 'OBV 高于/低于信号线 1%', usage: '量价背离检测', implemented: true },
+  // 未实现
+  { code: 'CCI', nameZh: '顺势指标', signal: 'CCI>100 超买 / CCI<-100 超卖', usage: '动量摆动、趋势强度', implemented: false },
+  { code: 'MFI', nameZh: '资金流量指标', signal: 'MFI>80 超买 / MFI<20 超卖', usage: '结合价格的量能指标', implemented: false },
+  { code: 'CMO', nameZh: '钱德动量摆动', signal: 'CMO>50 多头 / CMO<-50 空头', usage: '动量方向判断', implemented: false },
+  { code: 'TRIX', nameZh: '三重指数平滑', signal: 'TRIX 上穿/下穿信号线', usage: '过滤噪音的趋势指标', implemented: false },
+  { code: 'KELTNER', nameZh: '肯特纳通道', signal: '价格突破通道上下轨', usage: '基于 ATR 的波动通道', implemented: false },
+  { code: 'ICHIMOKU', nameZh: '一目均衡表', signal: '云图、转换线、基准线交叉', usage: '多维度趋势与支撑阻力', implemented: false },
+  { code: 'DONCHIAN', nameZh: '唐奇安通道', signal: '价格突破 N 日高/低', usage: '突破与跟踪止损', implemented: false },
+  { code: 'DEMARKER', nameZh: 'DeMarker 指标', signal: 'DeM>0.7 超买 / DeM<0.3 超卖', usage: '买卖压力比较', implemented: false },
+  { code: 'ROC', nameZh: '变动率指标', signal: 'ROC 上穿/下穿零轴', usage: '价格变动百分比动量', implemented: false },
 ];
 
 /** 指标参数数据 */
@@ -69,6 +80,29 @@ const INDICATOR_PARAMS: Record<string, { param: string; default: string; range: 
     { param: 'volMultiplier', default: '1.5', range: '1.0-3.0', desc: '放量倍数阈值' },
   ],
   OBV: [{ param: 'signalPeriod', default: '10', range: '3-30', desc: '信号线周期' }],
+  // 未实现指标参数（规划）
+  CCI: [{ param: 'period', default: '20', range: '10-50', desc: '计算周期' }],
+  MFI: [{ param: 'period', default: '14', range: '5-25', desc: '计算周期' }],
+  CMO: [{ param: 'period', default: '14', range: '5-25', desc: '计算周期' }],
+  TRIX: [
+    { param: 'period', default: '15', range: '5-30', desc: 'EMA 周期' },
+    { param: 'signalPeriod', default: '9', range: '3-15', desc: '信号线周期' },
+  ],
+  KELTNER: [
+    { param: 'period', default: '20', range: '10-50', desc: 'EMA 周期' },
+    { param: 'multiplier', default: '2.0', range: '1.0-4.0', desc: 'ATR 倍数' },
+  ],
+  ICHIMOKU: [
+    { param: 'tenkanPeriod', default: '9', range: '5-15', desc: '转换线周期' },
+    { param: 'kijunPeriod', default: '26', range: '20-40', desc: '基准线周期' },
+    { param: 'senkouPeriod', default: '52', range: '40-70', desc: '先行带周期' },
+  ],
+  DONCHIAN: [{ param: 'period', default: '20', range: '5-55', desc: '通道周期' }],
+  DEMARKER: [{ param: 'period', default: '14', range: '5-25', desc: '计算周期' }],
+  ROC: [
+    { param: 'period', default: '12', range: '5-25', desc: '计算周期' },
+    { param: 'signalPeriod', default: '9', range: '3-15', desc: '信号线周期（可选）' },
+  ],
 };
 
 /** 策略组合推荐 */
@@ -95,6 +129,7 @@ export const StrategyGuide = () => {
   const indicatorDescColumns = [
     { title: t('text.guide.indicatorCode'), dataIndex: 'code', key: 'code', width: 120, render: (v: string) => <Tag>{v}</Tag> },
     { title: t('text.guide.indicatorName'), dataIndex: 'nameZh', key: 'nameZh' },
+    { title: t('text.guide.status'), dataIndex: 'implemented', key: 'implemented', width: 100, render: (v: boolean) => (v ? <Tag color="success">{t('text.guide.implemented')}</Tag> : <Tag color="default">{t('text.guide.notImplemented')}</Tag>) },
     { title: t('text.guide.signalLogic'), dataIndex: 'signal', key: 'signal', ellipsis: true },
     { title: t('text.guide.usage'), dataIndex: 'usage', key: 'usage' },
   ];
@@ -166,7 +201,7 @@ export const StrategyGuide = () => {
             children: (
               <Card size="small">
                 <Paragraph type="secondary" style={{ marginBottom: 16 }}>
-                  {t('text.guide.tabParamsDesc')}
+                  {t('text.guide.tabParamsDesc')} {t('text.guide.tabParamsNote')}
                 </Paragraph>
                 <Table
                   columns={paramsColumns}
