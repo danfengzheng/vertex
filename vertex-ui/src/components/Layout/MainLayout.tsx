@@ -15,6 +15,7 @@ import {
   LineChartOutlined,
   FundOutlined,
   ThunderboltOutlined,
+  BookOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -116,6 +117,11 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
           label: t('text.strategy.signalTitle'),
         },
       ],
+    },
+    {
+      key: '/guide/strategy',
+      icon: <BookOutlined />,
+      label: t('text.guide.title'),
     },
   ];
 

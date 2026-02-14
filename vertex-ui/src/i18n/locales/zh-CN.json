@@ -75,6 +75,28 @@
       "code": "角色编码",
       "description": "描述"
     },
+    "guide": {
+      "title": "策略使用说明",
+      "subtitle": "策略指标说明、参数配置及常用组合参考",
+      "tabIndicators": "指标说明",
+      "tabParams": "指标参数",
+      "tabCombos": "策略组合",
+      "tabIndicatorsDesc": "系统支持的 15 种技术指标及其信号逻辑、适用场景。",
+      "tabParamsDesc": "各指标的参数名称、默认值、建议范围及含义。",
+      "tabCombosDesc": "推荐的指标组合方案，适用于不同市场环境与交易风格。",
+      "indicatorCode": "指标代码",
+      "indicatorName": "指标名称",
+      "signalLogic": "信号逻辑",
+      "usage": "适用场景",
+      "paramName": "参数名",
+      "defaultValue": "默认值",
+      "range": "建议范围",
+      "paramDesc": "说明",
+      "noParams": "无需配置参数",
+      "combo": "组合方案",
+      "weights": "权重分配",
+      "scene": "适用场景"
+    },
     "quote": {
       "title": "行情管理",
       "sourceTitle": "数据源管理",

@@ -75,6 +75,28 @@
       "code": "Role Code",
       "description": "Description"
     },
+    "guide": {
+      "title": "Strategy Usage Guide",
+      "subtitle": "Indicator descriptions, parameter configs, and common strategy combinations",
+      "tabIndicators": "Indicators",
+      "tabParams": "Parameters",
+      "tabCombos": "Combinations",
+      "tabIndicatorsDesc": "15 technical indicators with signal logic and use cases.",
+      "tabParamsDesc": "Parameter names, defaults, ranges, and descriptions for each indicator.",
+      "tabCombosDesc": "Recommended indicator combinations for different market conditions.",
+      "indicatorCode": "Code",
+      "indicatorName": "Name",
+      "signalLogic": "Signal Logic",
+      "usage": "Use Case",
+      "paramName": "Param",
+      "defaultValue": "Default",
+      "range": "Range",
+      "paramDesc": "Description",
+      "noParams": "No config needed",
+      "combo": "Combination",
+      "weights": "Weights",
+      "scene": "Scene"
+    },
     "quote": {
       "title": "Quote",
       "sourceTitle": "Data Source",
