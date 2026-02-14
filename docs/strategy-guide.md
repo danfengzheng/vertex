@@ -26,6 +26,9 @@
   - [4.5 BOLL - 布林带](#45-boll---布林带)
   - [4.6 KDJ - 随机指标](#46-kdj---随机指标)
   - [4.7 ATR - 平均真实波幅](#47-atr---平均真实波幅)
+  - [4.8 VWAP - 成交量加权均价](#48-vwap---成交量加权均价)
+  - [4.9 STOCH_RSI - 随机RSI](#49-stoch_rsi---随机rsi)
+  - [4.10 WR - 威廉指标](#410-wr---威廉指标)
 - [5. 开发者指南](#5-开发者指南)
   - [5.1 项目结构](#51-项目结构)
   - [5.2 添加自定义指标](#52-添加自定义指标)
@@ -35,6 +38,7 @@
   - [6.2 指标参数配置](#62-指标参数配置)
   - [6.3 权重系统](#63-权重系统)
   - [6.4 启用与禁用](#64-启用与禁用)
+  - [6.5 启动恢复与数据预热](#65-启动恢复与数据预热)
 - [7. 回测教程](#7-回测教程)
   - [7.1 执行回测](#71-执行回测)
   - [7.2 回测参数说明](#72-回测参数说明)
@@ -84,6 +88,7 @@ Vertex 策略模块是一套完整的量化交易信号生成系统，由以下�
 │  │              ┌────────────┼────────────┐               │   │
 │  │              ▼            ▼            ▼               │   │
 │  │           MA/EMA      RSI/MACD    BOLL/KDJ/ATR        │   │
+│  │                    VWAP/StochRSI/WR                    │   │
 │  │         (指标计算层 - IndicatorRegistry)                │   │
 │  └───────────────────────────────────────────────────────┘   │
 │                           │                                   │
@@ -110,6 +115,8 @@ Vertex 策略模块是一套完整的量化交易信号生成系统，由以下�
 | **SignalPushService** | 通过 WebSocket/STOMP 实时推送信号到前端 |
 | **BacktestService** | 基于历史K线模拟交易，计算回测绩效指标 |
 | **KLineStore** | K线数据存储与查询（RocksDB 高性能存储） |
+| **StrategyStartupRecovery** | 系统启动时自动恢复已启用策略的连接、订阅和数据预热 |
+| **StrategyDataWarmupService** | 检查 K 线数据是否充足，不足时通过 REST API 自动补全 |
 
 ### 1.2 数据流
 
@@ -438,7 +445,7 @@ POST /admin/backtest/quick?strategyId=1&days=30&initialCapital=10000
 
 ## 4. 技术指标参考
 
-系统内置 7 种技术指标，均实现 `TechnicalIndicator` 接口，通过 Spring Component 扫描自动注册。
+系统内置 10 种技术指标，均实现 `TechnicalIndicator` 接口，通过 Spring Component 扫描自动注册。其中 VWAP、STOCH_RSI、WR 为高频短线交易指标。
 
 ### 4.1 MA - 简单移动平均线
 
@@ -641,6 +648,96 @@ ATR% = (ATR / Close) × 100
 
 ---
 
+### 4.8 VWAP - 成交量加权均价
+
+| 属性 | 值 |
+|------|------|
+| 类型代码 | `VWAP` |
+| 默认参数 | 无参数 |
+| 所需数据量 | 20 根K线 |
+
+**算法：**
+
+```
+典型价格 TP = (High + Low + Close) / 3
+VWAP = Σ(TPᵢ × Volumeᵢ) / Σ(Volumeᵢ)
+偏离度 Deviation% = (Close - VWAP) / VWAP × 100
+```
+
+**信号逻辑：**
+- **BUY**: 收盘价 < VWAP × 0.998（价格低于 VWAP 0.2%，被低估）
+- **SELL**: 收盘价 > VWAP × 1.002（价格高于 VWAP 0.2%，被高估）
+- **NEUTRAL**: 其他情况
+
+**输出指标值：** `{"vwap": 42150.12345, "deviation": -0.35}`
+
+**适用场景：** 日内/短线交易核心参考指标。VWAP 反映市场平均成本，价格偏离 VWAP 越远，回归概率越高。常被机构交易者用作买卖基准线。
+
+> **提示：** VWAP 无需配置参数，会自动利用所有可用K线计算。
+
+---
+
+### 4.9 STOCH_RSI - 随机RSI
+
+| 属性 | 值 |
+|------|------|
+| 类型代码 | `STOCH_RSI` |
+| 默认参数 | `rsiPeriod = 14, stochPeriod = 14, kSmooth = 3, dSmooth = 3` |
+| 所需数据量 | `rsiPeriod + stochPeriod + kSmooth + dSmooth + 5` 根K线 |
+
+**算法：**
+
+```
+Step 1: 计算 RSI 序列（Wilder 平滑法）
+Step 2: 对 RSI 序列做 Stochastic 处理
+        StochRSI = (RSI - RSI_min(N)) / (RSI_max(N) - RSI_min(N)) × 100
+        其中 N = stochPeriod
+Step 3: K = SMA(StochRSI, kSmooth)
+Step 4: D = SMA(K, dSmooth)
+```
+
+**信号逻辑：**
+- **BUY**: K 上穿 D（前一根 K ≤ D，当前 K > D）且 K < 20（超卖区金叉）
+- **SELL**: K 下穿 D（前一根 K ≥ D，当前 K < D）且 K > 80（超买区死叉）
+- **NEUTRAL**: 其他情况
+
+**输出指标值：** `{"stochRsiK": 15.43, "stochRsiD": 18.67}`
+
+**适用场景：** 比普通 RSI 更灵敏，专门为捕捉短期超买超卖反转设计。StochRSI 在 RSI 的基础上再做一次随机处理，信号频率更高，适合高频短线交易。建议配合趋势指标使用以过滤假信号。
+
+---
+
+### 4.10 WR - 威廉指标
+
+| 属性 | 值 |
+|------|------|
+| 类型代码 | `WR` |
+| 默认参数 | `period = 14` |
+| 所需数据量 | `period` 根K线 |
+
+**算法：**
+
+```
+%R = (Highest_High(N) - Close) / (Highest_High(N) - Lowest_Low(N)) × (-100)
+
+取值范围: -100 ~ 0
+  -100: 收盘价等于区间最低价
+     0: 收盘价等于区间最高价
+```
+
+**信号逻辑：**
+- **BUY**: %R < -80（超卖区间，价格接近区间底部）
+- **SELL**: %R > -20（超买区间，价格接近区间顶部）
+- **NEUTRAL**: -80 ≤ %R ≤ -20
+
+**输出指标值：** `{"wr14": -85.23}`
+
+**适用场景：** 超灵敏的超买超卖震荡指标，反应速度比 RSI 和 KDJ 更快，非常适合短线高频交易的快速进出判断。计算周期越短，信号越灵敏、越频繁。
+
+> **注意：** WR 信号频率较高，单独使用容易产生假信号，建议与 VWAP 或 STOCH_RSI 组合使用。
+
+---
+
 ## 5. 开发者指南
 
 ### 5.1 项目结构
@@ -681,7 +778,10 @@ vertex/
 │       │       ├── MacdIndicator.java        # MACD
 │       │       ├── BollingerBandsIndicator.java  # BOLL
 │       │       ├── KdjIndicator.java         # KDJ
-│       │       └── AtrIndicator.java         # ATR
+│       │       ├── AtrIndicator.java         # ATR
+│       │       ├── VwapIndicator.java        # VWAP (高频)
+│       │       ├── StochRsiIndicator.java    # StochRSI (高频)
+│       │       └── WilliamsRIndicator.java   # WR (高频)
 │       ├── engine/
 │       │   ├── SignalGenerator.java     # 信号生成器
 │       │   ├── StrategyEngineService.java  # 策略引擎
@@ -696,7 +796,12 @@ vertex/
 │       │   └── BacktestController.java  # 回测 API
 │       ├── service/
 │       │   ├── StrategyServiceImpl.java
-│       │   └── SignalServiceImpl.java
+│       │   ├── SignalServiceImpl.java
+│       │   └── StrategyDataWarmupService.java  # 数据预热服务
+│       ├── config/
+│       │   ├── StrategyAutoConfiguration.java
+│       │   ├── StrategyProperties.java
+│       │   └── StrategyStartupRecovery.java    # 启动恢复
 │       └── mapper/
 │           ├── StrategyMapper.java
 │           └── SignalMapper.java
@@ -723,6 +828,9 @@ public enum IndicatorType {
     BOLL("BOLL", "布林带"),
     KDJ("KDJ", "随机指标"),
     ATR("ATR", "平均真实波幅"),
+    VWAP("VWAP", "成交量加权平均价"),
+    STOCH_RSI("STOCH_RSI", "随机RSI"),
+    WR("WR", "威廉指标"),
     // ↓ 在此添加新指标
     MY_INDICATOR("MY_INDICATOR", "我的自定义指标");
 
@@ -941,6 +1049,27 @@ public class MyIndicator implements TechnicalIndicator {
 |------|--------|----------|------|
 | `period` | 14 | 7 - 21 | 计算周期 |
 
+#### VWAP 参数
+
+| 参数 | 默认值 | 范围建议 | 说明 |
+|------|--------|----------|------|
+| — | — | — | VWAP 无需配置参数，自动使用全部可用K线计算 |
+
+#### STOCH_RSI 参数
+
+| 参数 | 默认值 | 范围建议 | 说明 |
+|------|--------|----------|------|
+| `rsiPeriod` | 14 | 6 - 25 | RSI 计算周期 |
+| `stochPeriod` | 14 | 6 - 25 | Stochastic 窗口周期 |
+| `kSmooth` | 3 | 2 - 5 | K 线平滑期数 |
+| `dSmooth` | 3 | 2 - 5 | D 线平滑期数 |
+
+#### WR 参数
+
+| 参数 | 默认值 | 范围建议 | 说明 |
+|------|--------|----------|------|
+| `period` | 14 | 5 - 21 | 回看周期，越短越灵敏 |
+
 ### 6.3 权重系统
 
 每个指标需设定 **权重值**（1-100），决定该指标在最终信号判定中的话语权。
@@ -954,6 +1083,9 @@ public class MyIndicator implements TechnicalIndicator {
 | 综合策略 | MACD + RSI + BOLL | 40 : 30 : 30 | 通用 |
 | 短线策略 | KDJ + EMA | 55 : 45 | 短周期频繁交易 |
 | 趋势+波动 | MACD + RSI + ATR | 50 : 30 : 20 | 趋势确认+波动过滤 |
+| 高频短线 | STOCH_RSI + WR + VWAP | 40 : 35 : 25 | 1m-15m 高频短线交易 |
+| VWAP 均值回归 | VWAP + RSI | 55 : 45 | 日内均值回归策略 |
+| 超短线震荡 | WR + KDJ | 50 : 50 | 超短线快速进出 |
 
 > **提示：** ATR 始终输出 NEUTRAL，分配权重给 ATR 相当于增加"弃权票"，可降低误信号率。
 
@@ -963,6 +1095,65 @@ public class MyIndicator implements TechnicalIndicator {
 - **禁用**：策略停止接收K线事件，已生成的历史信号不受影响
 
 在策略列表的操作列点击 **启用** / **禁用** 按钮切换。
+
+**启用时自动执行的操作：**
+
+1. **自动连接数据源**：如果策略对应交易所的 WebSocket 未连接，系统自动建立连接
+2. **自动订阅行情**：自动订阅策略配置的交易对和K线周期，避免手动操作
+3. **数据预热**：检查 RocksDB 中是否有足够的历史 K 线数据供指标计算，不足时自动通过交易所 REST API 补全
+
+### 6.5 启动恢复与数据预热
+
+系统重启后，所有 WebSocket 连接和订阅关系会丢失。**启动恢复机制**（`StrategyStartupRecovery`）会在系统完全启动后自动执行以下操作：
+
+```
+ApplicationReadyEvent 触发
+      ↓
+  查询所有 enabled=1 的策略
+      ↓ 按交易所分组
+  ┌───────────────────────────────────────┐
+  │  对每个交易所:                          │
+  │  1. 检查数据源是否已连接，未连接则启动  │
+  │  2. 订阅所有已启用策略的 symbol:interval │
+  │     (自动去重，相同交易对只订阅一次)     │
+  └───────────────────────────────────────┘
+      ↓
+  ┌───────────────────────────────────────┐
+  │  对每个已启用策略:                      │
+  │  1. 计算指标所需的 requiredDataPoints  │
+  │  2. 查询 RocksDB 中现有K线数据量       │
+  │  3. 不足 → 通过 REST API 分批补全      │
+  │     充足 → 跳过，记录日志              │
+  └───────────────────────────────────────┘
+      ↓
+  恢复完成，策略引擎就绪
+```
+
+**数据预热细节：**
+
+| 项目 | 说明 |
+|------|------|
+| **检查依据** | 策略配置的所有指标中，取最大的 `requiredDataPoints` |
+| **补全方式** | 通过交易所 REST API（`KLineRestClient`）拉取历史 K 线 |
+| **分批拉取** | Binance 每批 1000 条，OKX 每批 300 条 |
+| **存储目标** | 补全的 K 线直接存入 RocksDB |
+| **异常隔离** | 单个策略补全失败不影响其他策略的恢复 |
+
+**日志示例：**
+
+```
+[StartupRecovery] Found 3 enabled strategies, recovering...
+[StartupRecovery] Starting data source 'binance'...
+[StartupRecovery] Subscribing BTCUSDT:1h on binance
+[StartupRecovery] Subscription recovery completed, starting data warmup...
+[DataWarmup] Strategy 'BTC MACD策略' data insufficient: 10/45, starting backfill via REST...
+[DataWarmup] Strategy 'BTC MACD策略' backfill completed: 55 K-lines fetched for BTCUSDT:1h on binance.
+[DataWarmup] Strategy 'ETH RSI策略' data sufficient: 50/15 K-lines available.
+[StartupRecovery] Data warmup completed, 55 K-lines backfilled in total.
+[StartupRecovery] Full recovery completed.
+```
+
+> **注意：** 数据预热在策略启用和系统启动时均会自动执行。如果 RocksDB 中已有充足数据（如正常运行期间积累的数据），预热阶段会快速跳过。
 
 ---
 
@@ -1166,10 +1357,12 @@ vertex:
 
 | 配置键 | 默认值 | 说明 |
 |--------|--------|------|
-| `vertex.strategy.enabled` | `true` | 设为 `false` 可完全禁用策略引擎 |
+| `vertex.strategy.enabled` | `true` | 设为 `false` 可完全禁用策略引擎（同时禁用启动恢复） |
 | `vertex.strategy.rocksdb.data-dir` | `./data/rocksdb/strategy` | RocksDB 信号存储路径 |
 | `vertex.strategy.engine.max-kline-history` | `500` | 单次获取K线上限，增大可支持更大周期指标 |
 | `vertex.strategy.engine.only-closed-klines` | `true` | `true` = 仅在K线收线时分析，避免盘中噪音 |
+
+> **启动恢复说明：** 当 `vertex.strategy.enabled=true` 时，系统启动后会自动恢复已启用策略的数据源连接、行情订阅和历史数据补全，无需额外配置。
 
 ### 9.2 WebSocket 配置
 
@@ -1257,8 +1450,13 @@ WebSocket 使用 STOMP 协议，通过 SockJS 提供浏览器兼容性：
 
 A: 检查以下几点：
 1. 是否有对应交易对和周期的K线数据在入库
-2. 历史K线数量是否满足指标的最低要求（如 MACD 需要至少 45 根）
+2. 历史K线数量是否满足指标的最低要求（如 MACD 需要至少 45 根）。系统在策略启用时会自动尝试通过 REST API 补全数据，查看日志中的 `[DataWarmup]` 前缀确认补全是否成功
 3. `only-closed-klines` 设为 `true` 时，需等待K线收线
+4. 策略启用时会自动连接数据源并订阅行情，查看日志中的 `[AutoSubscribe]` 确认是否成功
+
+**Q: 系统重启后策略需要重新启用吗？**
+
+A: 不需要。系统启动时会自动恢复所有已启用策略的 WebSocket 连接、行情订阅和历史数据。查看启动日志中的 `[StartupRecovery]` 前缀确认恢复状态。
 
 **Q: 回测返回"数据不足"错误？**
 
@@ -1289,9 +1487,15 @@ A: WebSocket 支持按交易对订阅。修改前端 `useSignalWebSocket` 的订
 | 高频K线周期（M1） | 增大 `max-kline-history`，确保指标计算准确 |
 | 回测大时间范围 | 可能耗时较长，建议分段回测后对比 |
 | 信号存储增长 | 定期清理过期的 NEUTRAL 信号，减少数据库压力 |
+| 高频指标组合 | STOCH_RSI + WR + VWAP 组合适合 M1-M15 周期，信号频繁，注意止损控制 |
+| 启动恢复耗时 | 首次启动时数据补全可能耗时较长（取决于策略数量和网络），后续重启会很快 |
 
 ### C. 版本变更记录
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | 1.0 | - | 初始版本：7 种指标、策略回测、WebSocket 推送 |
+| 1.1 | - | 新增 VWAP、StochRSI、WR 高频短线指标（共 10 种指标） |
+| 1.2 | - | 新增数据源管理优化：取消订阅支持从列表选择 |
+| 1.3 | - | 策略启用时自动连接数据源、订阅行情、预热历史数据 |
+| 1.4 | - | 系统启动自动恢复：已启用策略的连接、订阅和数据补全 |

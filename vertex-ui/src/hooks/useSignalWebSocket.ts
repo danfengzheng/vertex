@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { SignalVO } from '../api/strategy';
+import { env } from '../config/env';
 
 interface UseSignalWebSocketOptions {
   /** 新信号回调 */
@@ -41,10 +42,10 @@ export const useSignalWebSocket = ({
     if (!enabled) return;
 
     try {
-      // SockJS 兼容的 WebSocket URL
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host;
-      const wsUrl = `${protocol}//${host}/api/ws/signal/websocket`;
+      // 根据 API 基础地址构建 WebSocket URL
+      // API_BASE_URL 例如 http://localhost:8080 → ws://localhost:8080
+      const baseUrl = env.API_BASE_URL.replace(/^http/, 'ws');
+      const wsUrl = `${baseUrl}/ws/signal/websocket`;
 
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
