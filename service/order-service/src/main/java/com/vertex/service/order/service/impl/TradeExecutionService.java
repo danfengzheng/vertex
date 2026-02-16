@@ -132,8 +132,9 @@ public class TradeExecutionService {
     private void doExecute(Order order, Strategy strategy) {
         try {
             if (order.getTradeMode() == ExecutionMode.PAPER) {
-                // 模拟交易
-                paperTradingService.simulateFill(order);
+                // 模拟交易 — 传递手续费率与回测对齐
+                BigDecimal feeRate = strategy != null ? strategy.getFeeRate() : null;
+                paperTradingService.simulateFill(order, feeRate);
             } else {
                 // 实盘交易
                 executeLive(order);
@@ -228,6 +229,8 @@ public class TradeExecutionService {
                         BigDecimal.ONE.add(strategy.getTakeProfitPct().divide(BigDecimal.valueOf(100), 10, java.math.RoundingMode.HALF_UP)));
                 position.setTakeProfit(takeProfit);
             }
+            // 持久化止盈止损到数据库
+            positionManagementService.updateStopLossTakeProfit(position);
         }
     }
 

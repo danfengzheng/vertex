@@ -49,4 +49,6 @@ public class StrategyCreateDTO {
     private BigDecimal stopLossPct;
     /** 止盈百分比 */
     private BigDecimal takeProfitPct;
+    /** 手续费率 */
+    private BigDecimal feeRate;
 }

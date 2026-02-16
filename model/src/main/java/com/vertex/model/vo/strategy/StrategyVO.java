@@ -40,6 +40,7 @@ public class StrategyVO implements Serializable {
     private BigDecimal tradeQuantity;
     private BigDecimal stopLossPct;
     private BigDecimal takeProfitPct;
+    private BigDecimal feeRate;
 
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

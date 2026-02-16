@@ -68,4 +68,7 @@ public class Strategy extends BaseEntity {
 
     /** 止盈百分比 */
     private BigDecimal takeProfitPct;
+
+    /** 手续费率（如 0.001 = 0.1%），与回测对齐 */
+    private BigDecimal feeRate;
 }

@@ -38,4 +38,5 @@ public class StrategyUpdateDTO {
     private BigDecimal tradeQuantity;
     private BigDecimal stopLossPct;
     private BigDecimal takeProfitPct;
+    private BigDecimal feeRate;
 }

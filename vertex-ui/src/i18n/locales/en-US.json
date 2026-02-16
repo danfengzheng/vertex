@@ -250,6 +250,8 @@
       "tradeQuantityPlaceholder": "Enter trade quantity per order",
       "stopLoss": "Stop Loss (%)",
       "takeProfit": "Take Profit (%)",
+      "feeRate": "Fee Rate",
+      "feeRateTip": "e.g. 0.001 = 0.1%, aligned with backtest parameters",
       "symbol": "Symbol",
       "side": "Side",
       "orderType": "Order Type",

@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 /**
@@ -50,8 +51,11 @@ public class PaperTradingService {
 
     /**
      * 模拟成交 — 填充订单的成交信息
+     *
+     * @param order   订单
+     * @param feeRate 手续费率（如 0.001 = 0.1%），为 null 或 0 时不收手续费
      */
-    public void simulateFill(Order order) {
+    public void simulateFill(Order order, BigDecimal feeRate) {
         BigDecimal currentPrice = getCurrentPrice(order.getExchange(), order.getSymbol());
         if (currentPrice == null) {
             order.setStatus(OrderStatus.REJECTED);
@@ -80,12 +84,22 @@ public class PaperTradingService {
 
         order.setFilledQuantity(order.getQuantity());
         order.setFilledPrice(fillPrice);
-        order.setFee(BigDecimal.ZERO);
+
+        // 计算手续费（与回测逻辑对齐: fee = fillPrice * quantity * feeRate）
+        if (feeRate != null && feeRate.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal fee = fillPrice.multiply(order.getQuantity())
+                    .multiply(feeRate)
+                    .setScale(10, RoundingMode.HALF_UP);
+            order.setFee(fee);
+        } else {
+            order.setFee(BigDecimal.ZERO);
+        }
+
         order.setStatus(OrderStatus.SIMULATED);
         order.setTradeMode(ExecutionMode.PAPER);
 
-        log.info("[Paper Trading] Order simulated: {} {} {} qty={} price={}",
+        log.info("[Paper Trading] Order simulated: {} {} {} qty={} price={} fee={}",
                 order.getSide(), order.getExchange(), order.getSymbol(),
-                order.getQuantity(), fillPrice);
+                order.getQuantity(), fillPrice, order.getFee());
     }
 }

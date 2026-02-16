@@ -250,6 +250,8 @@
       "tradeQuantityPlaceholder": "请输入每次交易数量",
       "stopLoss": "止损(%)",
       "takeProfit": "止盈(%)",
+      "feeRate": "手续费率",
+      "feeRateTip": "如 0.001 表示 0.1%，与回测参数保持一致",
       "symbol": "交易对",
       "side": "方向",
       "orderType": "订单类型",

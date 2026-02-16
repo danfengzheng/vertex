@@ -84,4 +84,5 @@ ALTER TABLE stg_strategy
     ADD COLUMN account_id BIGINT DEFAULT NULL COMMENT '关联交易账户ID' AFTER execution_mode,
     ADD COLUMN trade_quantity DECIMAL(30,10) DEFAULT NULL COMMENT '每次交易数量' AFTER account_id,
     ADD COLUMN stop_loss_pct DECIMAL(5,2) DEFAULT NULL COMMENT '止损百分比' AFTER trade_quantity,
-    ADD COLUMN take_profit_pct DECIMAL(5,2) DEFAULT NULL COMMENT '止盈百分比' AFTER stop_loss_pct;
+    ADD COLUMN take_profit_pct DECIMAL(5,2) DEFAULT NULL COMMENT '止盈百分比' AFTER stop_loss_pct,
+    ADD COLUMN fee_rate DECIMAL(10,6) DEFAULT NULL COMMENT '手续费率（如 0.001000 = 0.1%）' AFTER take_profit_pct;

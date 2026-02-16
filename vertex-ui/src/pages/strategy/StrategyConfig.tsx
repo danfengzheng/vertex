@@ -418,6 +418,7 @@ export const StrategyConfig = () => {
       tradeQuantity: record.tradeQuantity,
       stopLossPct: record.stopLossPct,
       takeProfitPct: record.takeProfitPct,
+      feeRate: record.feeRate,
     });
     setIndicatorTypes(record.indicatorConfigs.map((c) => c.indicatorType));
     setAutoTradeEnabled(record.autoTrade === 1);
@@ -814,6 +815,14 @@ export const StrategyConfig = () => {
                   label={t('text.trading.takeProfit')}
                 >
                   <InputNumber min={0} max={1000} step={0.5} style={{ width: 140 }} addonAfter="%" />
+                </Form.Item>
+
+                <Form.Item
+                  name="feeRate"
+                  label={t('text.trading.feeRate')}
+                  tooltip={t('text.trading.feeRateTip')}
+                >
+                  <InputNumber min={0} max={0.1} step={0.0001} style={{ width: 160 }} placeholder="0.001" />
                 </Form.Item>
               </Space>
             </>

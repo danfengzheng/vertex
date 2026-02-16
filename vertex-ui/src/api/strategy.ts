@@ -77,6 +77,8 @@ export interface StrategyVO {
   stopLossPct?: number;
   /** 止盈百分比 */
   takeProfitPct?: number;
+  /** 手续费率（如 0.001 = 0.1%） */
+  feeRate?: number;
   createTime: string;
   updateTime: string;
 }
@@ -113,6 +115,7 @@ export interface StrategyCreateDTO {
   tradeQuantity?: number;
   stopLossPct?: number;
   takeProfitPct?: number;
+  feeRate?: number;
 }
 
 /** 策略更新参数 */
@@ -131,6 +134,7 @@ export interface StrategyUpdateDTO {
   tradeQuantity?: number;
   stopLossPct?: number;
   takeProfitPct?: number;
+  feeRate?: number;
 }
 
 /** 策略查询参数 */

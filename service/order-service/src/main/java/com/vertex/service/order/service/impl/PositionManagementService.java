@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 
 /**
  * 持仓管理服务
@@ -188,6 +189,26 @@ public class PositionManagementService {
                 .eq(Position::getDeleted, 0)
                 .last("LIMIT 1");
         return positionMapper.selectOne(wrapper);
+    }
+
+    /**
+     * 更新持仓的止盈止损价格（持久化到数据库）
+     */
+    public void updateStopLossTakeProfit(Position position) {
+        positionMapper.updateById(position);
+        log.info("SL/TP updated: {} {} stopLoss={} takeProfit={}",
+                position.getExchange(), position.getSymbol(),
+                position.getStopLoss(), position.getTakeProfit());
+    }
+
+    /**
+     * 查询所有活跃持仓（用于定时止盈止损检查）
+     */
+    public List<Position> findAllOpenPositions() {
+        LambdaQueryWrapper<Position> wrapper = new LambdaQueryWrapper<Position>()
+                .eq(Position::getStatus, PositionStatus.OPEN)
+                .eq(Position::getDeleted, 0);
+        return positionMapper.selectList(wrapper);
     }
 
     private void updateUnrealizedPnl(Position position) {
