@@ -16,6 +16,10 @@ import {
   FundOutlined,
   ThunderboltOutlined,
   BookOutlined,
+  SwapOutlined,
+  BankOutlined,
+  OrderedListOutlined,
+  DashboardOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -49,6 +53,9 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
     }
     if (location.pathname.startsWith('/strategy')) {
       return ['strategy'];
+    }
+    if (location.pathname.startsWith('/trading')) {
+      return ['trading'];
     }
     return [];
   };
@@ -115,6 +122,28 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
           key: '/strategy/signals',
           icon: <ThunderboltOutlined />,
           label: t('text.strategy.signalTitle'),
+        },
+      ],
+    },
+    {
+      key: 'trading',
+      icon: <SwapOutlined />,
+      label: t('text.trading.title'),
+      children: [
+        {
+          key: '/trading/accounts',
+          icon: <BankOutlined />,
+          label: t('text.trading.accountTitle'),
+        },
+        {
+          key: '/trading/orders',
+          icon: <OrderedListOutlined />,
+          label: t('text.trading.orderTitle'),
+        },
+        {
+          key: '/trading/positions',
+          icon: <DashboardOutlined />,
+          label: t('text.trading.positionTitle'),
         },
       ],
     },

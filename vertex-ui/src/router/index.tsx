@@ -8,6 +8,9 @@ import { KLineQuery } from '../pages/quote/KLineQuery';
 import { StrategyConfig } from '../pages/strategy/StrategyConfig';
 import { SignalMonitor } from '../pages/strategy/SignalMonitor';
 import { StrategyGuide } from '../pages/guide/StrategyGuide';
+import { ExchangeAccountManagement } from '../pages/trading/ExchangeAccountManagement';
+import { OrderHistory } from '../pages/trading/OrderHistory';
+import { PositionMonitor } from '../pages/trading/PositionMonitor';
 
 export const AppRouter = () => {
   return (
@@ -21,6 +24,9 @@ export const AppRouter = () => {
         <Route path="/quote/kline" element={<KLineQuery />} />
         <Route path="/strategy/config" element={<StrategyConfig />} />
         <Route path="/strategy/signals" element={<SignalMonitor />} />
+        <Route path="/trading/accounts" element={<ExchangeAccountManagement />} />
+        <Route path="/trading/orders" element={<OrderHistory />} />
+        <Route path="/trading/positions" element={<PositionMonitor />} />
         <Route path="/guide/strategy" element={<StrategyGuide />} />
       </Routes>
     </MainLayout>

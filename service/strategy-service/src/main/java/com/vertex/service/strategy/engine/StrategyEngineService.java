@@ -17,6 +17,7 @@ import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import com.vertex.service.strategy.mapper.SignalMapper;
 import com.vertex.service.strategy.mapper.StrategyMapper;
 import com.vertex.service.strategy.store.SignalStore;
+import com.vertex.api.trading.ITradeExecutionListener;
 import com.vertex.service.strategy.websocket.SignalPushService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +48,10 @@ public class StrategyEngineService {
     /** 信号推送服务（可选依赖，WebSocket 未配置时为 null） */
     @Autowired(required = false)
     private SignalPushService signalPushService;
+
+    /** 交易执行监听器（可选依赖，trading 未启用时为 null） */
+    @Autowired(required = false)
+    private ITradeExecutionListener tradeExecutionListener;
 
     /**
      * 处理K线更新事件
@@ -166,6 +171,17 @@ public class StrategyEngineService {
         log.info("Strategy [{}] generated signal: {} (strength: {}) for {} {}",
                 strategy.getName(), signal.getSignalType(), signal.getSignalStrength(),
                 strategy.getExchange(), strategy.getSymbol());
+
+        // 交易执行钩子（可选）
+        if (tradeExecutionListener != null && strategy.getAutoTrade() != null
+                && strategy.getAutoTrade() == 1) {
+            try {
+                tradeExecutionListener.onSignal(strategy, signal);
+            } catch (Exception e) {
+                log.error("Trade execution failed for strategy [{}]: {}",
+                        strategy.getName(), e.getMessage(), e);
+            }
+        }
     }
 
     // ─── 辅助方法 ───────────────────────────────────────────────

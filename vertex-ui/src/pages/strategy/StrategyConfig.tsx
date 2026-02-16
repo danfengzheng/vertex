@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Table, Button, Space, message, Tag, Modal, Form, Select, Input, Switch,
-  InputNumber, Card, Popconfirm, Divider,
+  InputNumber, Card, Popconfirm, Divider, Tooltip,
 } from 'antd';
 import {
   PlusOutlined,
@@ -9,6 +9,7 @@ import {
   EditOutlined,
   ReloadOutlined,
   ExperimentOutlined,
+  SwapOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,6 +20,7 @@ import {
   INDICATOR_TYPE_LABELS,
 } from '../../api/strategy';
 import { KLINE_INTERVAL_LABELS, KLineInterval } from '../../api/quote';
+import { exchangeAccountApi, ExchangeAccountVO } from '../../api/trading';
 import { BacktestPanel } from './BacktestPanel';
 
 const INTERVAL_OPTIONS = Object.entries(KLINE_INTERVAL_LABELS).map(([value, label]) => ({
@@ -346,9 +348,24 @@ export const StrategyConfig = () => {
   // 指标配置联动
   const [indicatorTypes, setIndicatorTypes] = useState<(IndicatorType | undefined)[]>([]);
 
+  // 自动交易
+  const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
+  const [accounts, setAccounts] = useState<ExchangeAccountVO[]>([]);
+
   // 回测
   const [backtestVisible, setBacktestVisible] = useState(false);
   const [backtestStrategy, setBacktestStrategy] = useState<StrategyVO | null>(null);
+
+  const loadAccounts = async () => {
+    try {
+      const res = await exchangeAccountApi.list();
+      if (res.code === 200) {
+        setAccounts(res.data || []);
+      }
+    } catch {
+      // silent
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -369,12 +386,17 @@ export const StrategyConfig = () => {
     loadData();
   }, [pageNum, pageSize]);
 
+  useEffect(() => {
+    loadAccounts();
+  }, []);
+
   const handleCreate = () => {
     setEditingId(null);
     setEditingRecord(null);
     form.resetFields();
-    form.setFieldsValue({ indicatorConfigs: [{}] });
+    form.setFieldsValue({ indicatorConfigs: [{}], autoTrade: 0 });
     setIndicatorTypes([undefined]);
+    setAutoTradeEnabled(false);
     setModalVisible(true);
   };
 
@@ -389,8 +411,16 @@ export const StrategyConfig = () => {
       symbol: record.symbol,
       interval: record.interval,
       indicatorConfigs: record.indicatorConfigs,
+      autoTrade: record.autoTrade ?? 0,
+      tradeMode: record.tradeMode,
+      executionMode: record.executionMode,
+      accountId: record.accountId,
+      tradeQuantity: record.tradeQuantity,
+      stopLossPct: record.stopLossPct,
+      takeProfitPct: record.takeProfitPct,
     });
     setIndicatorTypes(record.indicatorConfigs.map((c) => c.indicatorType));
+    setAutoTradeEnabled(record.autoTrade === 1);
     setModalVisible(true);
   };
 
@@ -485,6 +515,20 @@ export const StrategyConfig = () => {
           checkedChildren={t('common.enabled')}
           unCheckedChildren={t('common.disabled')}
         />
+      ),
+    },
+    {
+      title: t('text.trading.autoTrade'),
+      key: 'autoTrade',
+      width: 100,
+      render: (_: unknown, record: StrategyVO) => (
+        record.autoTrade === 1 ? (
+          <Tooltip title={`${record.tradeMode || '-'} / ${record.executionMode || '-'}`}>
+            <Tag color="green" icon={<SwapOutlined />}>{t('common.enabled')}</Tag>
+          </Tooltip>
+        ) : (
+          <Tag>{t('common.disabled')}</Tag>
+        )
       ),
     },
     {
@@ -687,6 +731,93 @@ export const StrategyConfig = () => {
               </>
             )}
           </Form.List>
+
+          <Divider>{t('text.trading.title')}</Divider>
+
+          <Form.Item
+            name="autoTrade"
+            label={t('text.trading.autoTrade')}
+            valuePropName="checked"
+            getValueFromEvent={(checked: boolean) => checked ? 1 : 0}
+            getValueProps={(value: number) => ({ checked: value === 1 })}
+          >
+            <Switch
+              checkedChildren={t('common.enabled')}
+              unCheckedChildren={t('common.disabled')}
+              onChange={(checked) => setAutoTradeEnabled(checked)}
+            />
+          </Form.Item>
+
+          {autoTradeEnabled && (
+            <>
+              <Space style={{ width: '100%' }} size="large" wrap>
+                <Form.Item
+                  name="tradeMode"
+                  label={t('text.trading.tradeMode')}
+                  rules={[{ required: true, message: t('placeholder.common.select') }]}
+                  initialValue="AUTO"
+                >
+                  <Select style={{ width: 160 }}>
+                    <Select.Option value="AUTO">{t('text.trading.tradeModeAuto')}</Select.Option>
+                    <Select.Option value="MANUAL">{t('text.trading.tradeModeManual')}</Select.Option>
+                  </Select>
+                </Form.Item>
+
+                <Form.Item
+                  name="executionMode"
+                  label={t('text.trading.executionMode')}
+                  rules={[{ required: true, message: t('placeholder.common.select') }]}
+                  initialValue="PAPER"
+                >
+                  <Select style={{ width: 160 }}>
+                    <Select.Option value="PAPER">{t('text.trading.executionPaper')}</Select.Option>
+                    <Select.Option value="LIVE">{t('text.trading.executionLive')}</Select.Option>
+                  </Select>
+                </Form.Item>
+
+                <Form.Item
+                  name="accountId"
+                  label={t('text.trading.account')}
+                >
+                  <Select
+                    style={{ width: 200 }}
+                    allowClear
+                    placeholder={t('placeholder.common.select')}
+                  >
+                    {accounts.map((acc) => (
+                      <Select.Option key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.exchange})
+                      </Select.Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Space>
+
+              <Space style={{ width: '100%' }} size="large" wrap>
+                <Form.Item
+                  name="tradeQuantity"
+                  label={t('text.trading.tradeQuantity')}
+                  rules={[{ required: true, message: t('text.trading.tradeQuantityPlaceholder') }]}
+                >
+                  <InputNumber min={0} step={0.001} style={{ width: 160 }} placeholder="0.001" />
+                </Form.Item>
+
+                <Form.Item
+                  name="stopLossPct"
+                  label={t('text.trading.stopLoss')}
+                >
+                  <InputNumber min={0} max={100} step={0.5} style={{ width: 140 }} addonAfter="%" />
+                </Form.Item>
+
+                <Form.Item
+                  name="takeProfitPct"
+                  label={t('text.trading.takeProfit')}
+                >
+                  <InputNumber min={0} max={1000} step={0.5} style={{ width: 140 }} addonAfter="%" />
+                </Form.Item>
+              </Space>
+            </>
+          )}
         </Form>
       </Modal>
 

@@ -6,8 +6,12 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.vertex.common.core.base.BaseEntity;
 import com.vertex.model.entity.quote.KLineInterval;
+import com.vertex.model.entity.trading.ExecutionMode;
+import com.vertex.model.entity.trading.TradeMode;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+
+import java.math.BigDecimal;
 
 /**
  * 策略配置实体
@@ -41,4 +45,27 @@ public class Strategy extends BaseEntity {
 
     /** 是否启用 0-禁用 1-启用 */
     private Integer enabled;
+
+    // ─── 交易配置 ───────────────────────────────────
+
+    /** 是否开启自动交易 0-否 1-是 */
+    private Integer autoTrade;
+
+    /** 交易模式 AUTO/MANUAL */
+    private TradeMode tradeMode;
+
+    /** 执行模式 LIVE/PAPER */
+    private ExecutionMode executionMode;
+
+    /** 关联交易账户ID */
+    private Long accountId;
+
+    /** 每次交易数量 */
+    private BigDecimal tradeQuantity;
+
+    /** 止损百分比 */
+    private BigDecimal stopLossPct;
+
+    /** 止盈百分比 */
+    private BigDecimal takeProfitPct;
 }

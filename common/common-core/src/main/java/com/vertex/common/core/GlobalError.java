@@ -41,7 +41,21 @@ public enum GlobalError implements ErrorCode {
     SIGNAL_STORE_ERROR(4006, "信号存储异常"),
     INDICATOR_CALC_ERROR(4007, "指标计算异常"),
     STRATEGY_KLINE_INSUFFICIENT(4008, "K线数据不足"),
-    BACKTEST_INSUFFICIENT_DATA(4009, "回测数据不足，请先通过历史补全功能获取K线数据");
+    BACKTEST_INSUFFICIENT_DATA(4009, "回测数据不足，请先通过历史补全功能获取K线数据"),
+
+    // 交易异常
+    ACCOUNT_NOT_FOUND(5001, "交易账户不存在"),
+    ACCOUNT_DISABLED(5002, "交易账户已禁用"),
+    ACCOUNT_NAME_EXISTS(5003, "账户名称已存在"),
+    TRADE_ORDER_NOT_FOUND(5004, "交易订单不存在"),
+    TRADE_ORDER_CANNOT_CANCEL(5005, "当前订单状态无法取消"),
+    TRADE_INSUFFICIENT_BALANCE(5006, "账户余额不足"),
+    TRADE_EXECUTION_FAILED(5007, "交易执行失败"),
+    TRADE_API_ERROR(5008, "交易所API调用异常"),
+    TRADE_ENCRYPTION_ERROR(5009, "密钥加解密异常"),
+    POSITION_NOT_FOUND(5010, "持仓不存在"),
+    POSITION_ALREADY_CLOSED(5011, "持仓已关闭"),
+    TRADE_QUANTITY_INVALID(5012, "交易数量无效");
     @Getter
     private final Integer code;
     @Getter

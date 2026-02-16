@@ -1,0 +1,181 @@
+import { request } from '../utils/request';
+import type { ApiResponse, PageResult, PageQuery } from '../types/api';
+
+/**
+ * 交易模块 API
+ */
+
+// ─── 枚举类型 ─────────────────────────────────────
+
+export type OrderSide = 'BUY' | 'SELL';
+export type OrderType = 'MARKET' | 'LIMIT';
+export type OrderStatus = 'PENDING' | 'SUBMITTED' | 'FILLED' | 'PARTIALLY_FILLED' | 'CANCELLED' | 'REJECTED' | 'EXPIRED' | 'SIMULATED';
+export type TradeMode = 'AUTO' | 'MANUAL';
+export type ExecutionMode = 'LIVE' | 'PAPER';
+export type PositionSide = 'LONG' | 'SHORT';
+export type PositionStatus = 'OPEN' | 'CLOSED';
+
+// ─── 接口定义 ─────────────────────────────────────
+
+/** 交易所账户 VO */
+export interface ExchangeAccountVO {
+  id: string;
+  name: string;
+  exchange: string;
+  status: number;
+  createTime: string;
+  updateTime: string;
+}
+
+/** 交易订单 VO */
+export interface OrderVO {
+  id: string;
+  strategyId: string;
+  strategyName?: string;
+  accountId: string;
+  accountName?: string;
+  signalId: string;
+  exchange: string;
+  symbol: string;
+  side: OrderSide;
+  orderType: OrderType;
+  quantity: string;
+  price: string;
+  filledQuantity: string;
+  filledPrice: string;
+  fee: string;
+  status: OrderStatus;
+  tradeMode: ExecutionMode;
+  exchangeOrderId: string;
+  errorMsg: string;
+  createTime: string;
+  updateTime: string;
+}
+
+/** 持仓 VO */
+export interface PositionVO {
+  id: string;
+  strategyId: string;
+  strategyName?: string;
+  accountId: string;
+  accountName?: string;
+  exchange: string;
+  symbol: string;
+  side: PositionSide;
+  quantity: string;
+  entryPrice: string;
+  currentPrice: string;
+  unrealizedPnl: string;
+  realizedPnl: string;
+  stopLoss: string;
+  takeProfit: string;
+  status: PositionStatus;
+  tradeMode: ExecutionMode;
+  createTime: string;
+  updateTime: string;
+}
+
+/** 账户创建参数 */
+export interface ExchangeAccountCreateDTO {
+  name: string;
+  exchange?: string;
+  apiKey: string;
+  apiSecret: string;
+}
+
+/** 账户更新参数 */
+export interface ExchangeAccountUpdateDTO {
+  id: string;
+  name?: string;
+  apiKey?: string;
+  apiSecret?: string;
+}
+
+/** 手动下单参数 */
+export interface OrderCreateDTO {
+  accountId: string;
+  exchange: string;
+  symbol: string;
+  side: OrderSide;
+  orderType?: OrderType;
+  quantity: number;
+  price?: number;
+  executionMode?: ExecutionMode;
+}
+
+/** 订单查询参数 */
+export interface OrderQueryDTO extends PageQuery {
+  strategyId?: string;
+  exchange?: string;
+  symbol?: string;
+  side?: OrderSide;
+  status?: OrderStatus;
+  tradeMode?: ExecutionMode;
+  startTime?: number;
+  endTime?: number;
+}
+
+/** 持仓查询参数 */
+export interface PositionQueryDTO extends PageQuery {
+  strategyId?: string;
+  exchange?: string;
+  symbol?: string;
+  status?: PositionStatus;
+  tradeMode?: ExecutionMode;
+}
+
+// ─── API ─────────────────────────────────────────
+
+/** 交易所账户 API */
+export const exchangeAccountApi = {
+  create: (data: ExchangeAccountCreateDTO): Promise<ApiResponse<string>> =>
+    request.post('/trade/account', data),
+
+  update: (data: ExchangeAccountUpdateDTO): Promise<ApiResponse<void>> =>
+    request.put('/trade/account', data),
+
+  delete: (id: string): Promise<ApiResponse<void>> =>
+    request.delete(`/trade/account/${id}`),
+
+  getById: (id: string): Promise<ApiResponse<ExchangeAccountVO>> =>
+    request.get(`/trade/account/${id}`),
+
+  list: (): Promise<ApiResponse<ExchangeAccountVO[]>> =>
+    request.get('/trade/account/list'),
+
+  testConnection: (id: string): Promise<ApiResponse<boolean>> =>
+    request.post(`/trade/account/${id}/test`),
+};
+
+/** 交易订单 API */
+export const orderApi = {
+  create: (data: OrderCreateDTO): Promise<ApiResponse<string>> =>
+    request.post('/trade/order', data),
+
+  confirm: (id: string): Promise<ApiResponse<void>> =>
+    request.post(`/trade/order/${id}/confirm`),
+
+  reject: (id: string): Promise<ApiResponse<void>> =>
+    request.post(`/trade/order/${id}/reject`),
+
+  cancel: (id: string): Promise<ApiResponse<void>> =>
+    request.post(`/trade/order/${id}/cancel`),
+
+  page: (params: OrderQueryDTO): Promise<ApiResponse<PageResult<OrderVO>>> =>
+    request.get('/trade/order/page', { params }),
+
+  getById: (id: string): Promise<ApiResponse<OrderVO>> =>
+    request.get(`/trade/order/${id}`),
+};
+
+/** 持仓 API */
+export const positionApi = {
+  page: (params: PositionQueryDTO): Promise<ApiResponse<PageResult<PositionVO>>> =>
+    request.get('/trade/position/page', { params }),
+
+  getById: (id: string): Promise<ApiResponse<PositionVO>> =>
+    request.get(`/trade/position/${id}`),
+
+  close: (id: string): Promise<ApiResponse<void>> =>
+    request.post(`/trade/position/${id}/close`),
+};

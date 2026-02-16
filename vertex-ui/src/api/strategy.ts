@@ -47,6 +47,12 @@ export interface StrategyIndicatorConfig {
   interval?: KLineInterval;
 }
 
+/** 交易模式 */
+export type TradeMode = 'AUTO' | 'MANUAL';
+
+/** 执行模式 */
+export type ExecutionMode = 'LIVE' | 'PAPER';
+
 /** 策略 VO */
 export interface StrategyVO {
   id: string;
@@ -57,6 +63,20 @@ export interface StrategyVO {
   interval: KLineInterval;
   indicatorConfigs: StrategyIndicatorConfig[];
   enabled: number;
+  /** 是否自动交易 0-否 1-是 */
+  autoTrade: number;
+  /** 交易模式 */
+  tradeMode?: TradeMode;
+  /** 执行模式 */
+  executionMode?: ExecutionMode;
+  /** 交易所账户ID */
+  accountId?: string;
+  /** 每次交易数量 */
+  tradeQuantity?: number;
+  /** 止损百分比 */
+  stopLossPct?: number;
+  /** 止盈百分比 */
+  takeProfitPct?: number;
   createTime: string;
   updateTime: string;
 }
@@ -86,6 +106,13 @@ export interface StrategyCreateDTO {
   symbol: string;
   interval: KLineInterval;
   indicatorConfigs: StrategyIndicatorConfig[];
+  autoTrade?: number;
+  tradeMode?: TradeMode;
+  executionMode?: ExecutionMode;
+  accountId?: string;
+  tradeQuantity?: number;
+  stopLossPct?: number;
+  takeProfitPct?: number;
 }
 
 /** 策略更新参数 */
@@ -97,6 +124,13 @@ export interface StrategyUpdateDTO {
   symbol?: string;
   interval?: KLineInterval;
   indicatorConfigs?: StrategyIndicatorConfig[];
+  autoTrade?: number;
+  tradeMode?: TradeMode;
+  executionMode?: ExecutionMode;
+  accountId?: string;
+  tradeQuantity?: number;
+  stopLossPct?: number;
+  takeProfitPct?: number;
 }
 
 /** 策略查询参数 */
