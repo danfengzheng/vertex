@@ -1,6 +1,7 @@
 package com.vertex.service.strategy.engine;
 
 import com.vertex.model.entity.quote.KLine;
+import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.strategy.Signal;
 import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
@@ -32,14 +33,15 @@ public class SignalGenerator {
     private final IndicatorRegistry indicatorRegistry;
 
     /**
-     * 评估策略，生成信号
+     * 评估策略，生成信号（支持多周期K线）
      *
-     * @param strategy 策略实体
-     * @param configs  指标配置列表
-     * @param klines   时间升序K线数据
+     * @param strategy         策略实体
+     * @param configs          指标配置列表
+     * @param klinesByInterval 按周期分组的时间升序K线数据
      * @return Signal 实体（未设置 id）
      */
-    public Signal evaluate(Strategy strategy, List<StrategyIndicatorConfig> configs, List<KLine> klines) {
+    public Signal evaluate(Strategy strategy, List<StrategyIndicatorConfig> configs,
+                           Map<KLineInterval, List<KLine>> klinesByInterval) {
         Map<String, Object> allIndicatorValues = new HashMap<>();
         int buyWeight = 0;
         int sellWeight = 0;
@@ -49,6 +51,18 @@ public class SignalGenerator {
         for (StrategyIndicatorConfig config : configs) {
             TechnicalIndicator indicator = indicatorRegistry.get(config.getIndicatorType());
             int weight = config.getWeight() != null ? config.getWeight() : 50;
+
+            // 获取该指标对应周期的K线
+            KLineInterval effectiveInterval = config.getInterval() != null
+                    ? config.getInterval() : strategy.getInterval();
+            List<KLine> klines = klinesByInterval.getOrDefault(effectiveInterval, List.of());
+
+            if (klines.isEmpty()) {
+                neutralWeight += weight;  // 无数据时归为 NEUTRAL
+                descBuilder.append(config.getIndicatorType().getCode())
+                        .append("=NEUTRAL(no_data,w:").append(weight).append(") ");
+                continue;
+            }
 
             try {
                 IndicatorResult result = indicator.calculate(klines, config.getParams());
@@ -60,8 +74,12 @@ public class SignalGenerator {
                     case NEUTRAL -> neutralWeight += weight;
                 }
 
-                descBuilder.append(config.getIndicatorType().getCode())
-                        .append("=").append(result.getSuggestion())
+                // 描述中标注指标使用的周期（如果与策略默认不同）
+                descBuilder.append(config.getIndicatorType().getCode());
+                if (config.getInterval() != null && config.getInterval() != strategy.getInterval()) {
+                    descBuilder.append("[").append(config.getInterval().getCode()).append("]");
+                }
+                descBuilder.append("=").append(result.getSuggestion())
                         .append("(w:").append(weight).append(") ");
             } catch (Exception e) {
                 log.warn("Indicator {} calculation failed for strategy {}: {}",
@@ -89,7 +107,15 @@ public class SignalGenerator {
             strength = (int) Math.round((double) neutralWeight / totalWeight * 100);
         }
 
-        KLine lastKline = klines.get(klines.size() - 1);
+        // price/signalTime 取策略默认周期的最新K线（主周期）
+        List<KLine> defaultKlines = klinesByInterval.getOrDefault(strategy.getInterval(), List.of());
+        BigDecimal price = BigDecimal.ZERO;
+        long signalTime = System.currentTimeMillis();
+        if (!defaultKlines.isEmpty()) {
+            KLine lastKline = defaultKlines.get(defaultKlines.size() - 1);
+            price = lastKline.getClose();
+            signalTime = lastKline.getOpenTime();
+        }
 
         Signal signal = new Signal();
         signal.setStrategyId(strategy.getId());
@@ -99,8 +125,8 @@ public class SignalGenerator {
         signal.setInterval(strategy.getInterval());
         signal.setSignalType(signalType);
         signal.setSignalStrength(strength);
-        signal.setPrice(lastKline.getClose());
-        signal.setSignalTime(lastKline.getOpenTime());
+        signal.setPrice(price);
+        signal.setSignalTime(signalTime);
         signal.setIndicators(com.alibaba.fastjson2.JSON.toJSONString(allIndicatorValues));
         signal.setDescription(descBuilder.toString().trim());
 

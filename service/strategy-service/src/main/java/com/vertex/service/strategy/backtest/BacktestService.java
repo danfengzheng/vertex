@@ -21,10 +21,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import com.vertex.model.entity.quote.KLineInterval;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 策略回测服务
@@ -127,9 +131,11 @@ public class BacktestService {
                 continue;
             }
 
-            // 取窗口数据计算信号
+            // 取窗口数据计算信号（回测时所有指标共用策略默认周期的K线）
             List<KLine> window = klines.subList(Math.max(0, i - requiredDataPoints - 5), i + 1);
-            Signal signal = signalGenerator.evaluate(strategy, configs, window);
+            Map<KLineInterval, List<KLine>> klinesByInterval = new HashMap<>();
+            klinesByInterval.put(strategy.getInterval(), window);
+            Signal signal = signalGenerator.evaluate(strategy, configs, klinesByInterval);
 
             // 当前权益
             BigDecimal currentPrice = currentKline.getClose();

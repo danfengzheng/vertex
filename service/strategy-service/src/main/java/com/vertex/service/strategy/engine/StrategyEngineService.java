@@ -23,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.*;
 
 /**
  * 策略引擎服务（编排器）
@@ -50,6 +50,9 @@ public class StrategyEngineService {
 
     /**
      * 处理K线更新事件
+     * <p>
+     * 查找所有匹配 exchange + symbol 的已启用策略，
+     * 然后检查该策略是否有任何一个指标使用了更新的 K线周期。
      */
     public void processKLineUpdate(String exchange, String symbol, KLineInterval interval, List<KLine> klines) {
         // 如果配置了仅处理已收盘K线，则过滤
@@ -60,11 +63,10 @@ public class StrategyEngineService {
             }
         }
 
-        // 查找匹配的已启用策略
+        // 查找所有匹配 exchange + symbol 的已启用策略（不限 interval）
         LambdaQueryWrapper<Strategy> wrapper = new LambdaQueryWrapper<Strategy>()
                 .eq(Strategy::getExchange, exchange)
                 .eq(Strategy::getSymbol, symbol)
-                .eq(Strategy::getInterval, interval)
                 .eq(Strategy::getEnabled, 1)
                 .eq(Strategy::getDeleted, 0);
 
@@ -75,7 +77,12 @@ public class StrategyEngineService {
 
         for (Strategy strategy : strategies) {
             try {
-                runStrategy(strategy);
+                List<StrategyIndicatorConfig> configs = parseConfigs(strategy);
+                Set<KLineInterval> usedIntervals = collectAllIntervals(strategy, configs);
+                // 仅当更新的 interval 是该策略用到的周期之一时才执行
+                if (usedIntervals.contains(interval)) {
+                    runStrategy(strategy);
+                }
             } catch (Exception e) {
                 log.error("Strategy [{}] execution failed: {}", strategy.getName(), e.getMessage(), e);
             }
@@ -94,46 +101,50 @@ public class StrategyEngineService {
     }
 
     /**
-     * 执行单个策略
+     * 执行单个策略（支持多周期K线）
      */
     private void runStrategy(Strategy strategy) {
-        List<StrategyIndicatorConfig> configs = JSON.parseArray(
-                strategy.getIndicatorConfigs(), StrategyIndicatorConfig.class);
+        List<StrategyIndicatorConfig> configs = parseConfigs(strategy);
         if (configs == null || configs.isEmpty()) {
             log.warn("Strategy [{}] has no indicator configs", strategy.getName());
             return;
         }
 
-        // 计算所需的最大历史数据量
-        int requiredDataPoints = configs.stream()
-                .mapToInt(config -> {
-                    TechnicalIndicator ind = indicatorRegistry.get(config.getIndicatorType());
-                    return ind.requiredDataPoints(config.getParams());
-                })
-                .max()
-                .orElse(50);
+        // 按周期分组获取 K线
+        Map<KLineInterval, List<KLine>> klinesByInterval = new HashMap<>();
+        boolean hasEnoughData = false;
 
-        int fetchSize = Math.min(requiredDataPoints + 10, properties.getEngine().getMaxKlineHistory());
+        for (StrategyIndicatorConfig config : configs) {
+            KLineInterval effectiveInterval = getEffectiveInterval(config, strategy);
+            if (!klinesByInterval.containsKey(effectiveInterval)) {
+                TechnicalIndicator ind = indicatorRegistry.get(config.getIndicatorType());
+                int required = ind.requiredDataPoints(config.getParams());
+                int fetchSize = Math.min(required + 10, properties.getEngine().getMaxKlineHistory());
 
-        // 从 KLineStore 获取最新历史K线（降序查最新，再反转为升序供指标计算）
-        List<KLine> klines = klineStore.query(
-                strategy.getExchange(),
-                strategy.getSymbol(),
-                strategy.getInterval(),
-                null, null,
-                fetchSize,
-                false  // 先取最新N条
-        );
-        java.util.Collections.reverse(klines);  // 转为升序供 SignalGenerator
+                List<KLine> klines = klineStore.query(
+                        strategy.getExchange(), strategy.getSymbol(),
+                        effectiveInterval, null, null, fetchSize, false);
+                Collections.reverse(klines);
 
-        if (klines.size() < requiredDataPoints) {
-            log.debug("Strategy [{}] skipped: insufficient K-line data ({}/{})",
-                    strategy.getName(), klines.size(), requiredDataPoints);
+                if (klines.size() < required) {
+                    log.debug("Insufficient data for interval {} in strategy '{}' ({}/{})",
+                            effectiveInterval, strategy.getName(), klines.size(), required);
+                } else {
+                    hasEnoughData = true;
+                }
+                klinesByInterval.put(effectiveInterval, klines);
+            } else {
+                hasEnoughData = true; // 之前已放入且不为空
+            }
+        }
+
+        if (!hasEnoughData) {
+            log.debug("Strategy [{}] skipped: no interval has sufficient K-line data", strategy.getName());
             return;
         }
 
         // 生成信号
-        Signal signal = signalGenerator.evaluate(strategy, configs, klines);
+        Signal signal = signalGenerator.evaluate(strategy, configs, klinesByInterval);
 
         // 双写：MySQL + RocksDB
         signalMapper.insert(signal);
@@ -152,8 +163,32 @@ public class StrategyEngineService {
             }
         }
 
-        log.info("Strategy [{}] generated signal: {} (strength: {}) for {} {} {}",
+        log.info("Strategy [{}] generated signal: {} (strength: {}) for {} {}",
                 strategy.getName(), signal.getSignalType(), signal.getSignalStrength(),
-                strategy.getExchange(), strategy.getSymbol(), strategy.getInterval().getCode());
+                strategy.getExchange(), strategy.getSymbol());
+    }
+
+    // ─── 辅助方法 ───────────────────────────────────────────────
+
+    /** 解析指标配置 JSON */
+    private List<StrategyIndicatorConfig> parseConfigs(Strategy strategy) {
+        return JSON.parseArray(strategy.getIndicatorConfigs(), StrategyIndicatorConfig.class);
+    }
+
+    /** 获取指标的有效周期（有自定义则用自定义，否则用策略默认） */
+    private KLineInterval getEffectiveInterval(StrategyIndicatorConfig config, Strategy strategy) {
+        return config.getInterval() != null ? config.getInterval() : strategy.getInterval();
+    }
+
+    /** 收集策略所有用到的周期（去重） */
+    private Set<KLineInterval> collectAllIntervals(Strategy strategy, List<StrategyIndicatorConfig> configs) {
+        Set<KLineInterval> intervals = new HashSet<>();
+        intervals.add(strategy.getInterval()); // 始终包含默认周期
+        if (configs != null) {
+            for (StrategyIndicatorConfig c : configs) {
+                intervals.add(getEffectiveInterval(c, strategy));
+            }
+        }
+        return intervals;
     }
 }

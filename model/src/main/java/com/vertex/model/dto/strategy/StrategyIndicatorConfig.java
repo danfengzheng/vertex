@@ -1,5 +1,6 @@
 package com.vertex.model.dto.strategy;
 
+import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.strategy.IndicatorType;
 import lombok.Data;
 
@@ -20,4 +21,7 @@ public class StrategyIndicatorConfig implements Serializable {
 
     /** 权重 1-100，用于信号强度加权 */
     private Integer weight;
+
+    /** 指标专属K线周期（可选，为空时使用策略默认周期） */
+    private KLineInterval interval;
 }

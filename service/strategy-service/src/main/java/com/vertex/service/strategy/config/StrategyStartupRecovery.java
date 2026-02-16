@@ -1,6 +1,9 @@
 package com.vertex.service.strategy.config;
 
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.vertex.model.dto.strategy.StrategyIndicatorConfig;
+import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.strategy.mapper.StrategyMapper;
@@ -91,7 +94,7 @@ public class StrategyStartupRecovery {
     }
 
     /**
-     * 恢复单个交易所的连接和订阅
+     * 恢复单个交易所的连接和订阅（支持多周期指标）
      */
     private void recoverExchange(String exchange, List<Strategy> strategies) {
         QuoteDataSource ds = dataSources.stream()
@@ -115,19 +118,22 @@ public class StrategyStartupRecovery {
                 .map(sub -> sub.get("symbol") + ":" + sub.get("interval"))
                 .collect(Collectors.toSet());
 
-        // 3. 去重后订阅：同一个 symbol:interval 只需订阅一次
+        // 3. 遍历策略的所有指标周期，构建完整的订阅列表
         Set<String> toSubscribe = new LinkedHashSet<>();
         for (Strategy strategy : strategies) {
-            String key = strategy.getSymbol() + ":" + strategy.getInterval().name();
-            if (!existingSubscriptions.contains(key) && toSubscribe.add(key)) {
-                log.info("[StartupRecovery] Subscribing {}:{} on {}",
-                        strategy.getSymbol(), strategy.getInterval().getCode(), ds.exchangeCode());
-                try {
-                    ds.subscribe(strategy.getSymbol(), strategy.getInterval());
-                } catch (Exception e) {
-                    log.error("[StartupRecovery] Failed to subscribe {}:{} on {}: {}",
-                            strategy.getSymbol(), strategy.getInterval().getCode(),
-                            ds.exchangeCode(), e.getMessage());
+            Set<KLineInterval> allIntervals = collectAllIntervals(strategy);
+            for (KLineInterval iv : allIntervals) {
+                String key = strategy.getSymbol() + ":" + iv.name();
+                if (!existingSubscriptions.contains(key) && toSubscribe.add(key)) {
+                    log.info("[StartupRecovery] Subscribing {}:{} on {}",
+                            strategy.getSymbol(), iv.getCode(), ds.exchangeCode());
+                    try {
+                        ds.subscribe(strategy.getSymbol(), iv);
+                    } catch (Exception e) {
+                        log.error("[StartupRecovery] Failed to subscribe {}:{} on {}: {}",
+                                strategy.getSymbol(), iv.getCode(),
+                                ds.exchangeCode(), e.getMessage());
+                    }
                 }
             }
         }
@@ -139,5 +145,19 @@ public class StrategyStartupRecovery {
             log.info("[StartupRecovery] Recovered {} subscriptions for '{}'.",
                     toSubscribe.size(), ds.exchangeCode());
         }
+    }
+
+    /** 收集策略所有用到的K线周期（含指标自定义周期，去重） */
+    private Set<KLineInterval> collectAllIntervals(Strategy strategy) {
+        Set<KLineInterval> intervals = new HashSet<>();
+        intervals.add(strategy.getInterval());
+        List<StrategyIndicatorConfig> configs = JSON.parseArray(
+                strategy.getIndicatorConfigs(), StrategyIndicatorConfig.class);
+        if (configs != null) {
+            for (StrategyIndicatorConfig c : configs) {
+                intervals.add(c.getInterval() != null ? c.getInterval() : strategy.getInterval());
+            }
+        }
+        return intervals;
     }
 }

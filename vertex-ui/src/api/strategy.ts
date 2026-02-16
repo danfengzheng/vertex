@@ -43,6 +43,8 @@ export interface StrategyIndicatorConfig {
   indicatorType: IndicatorType;
   params: Record<string, number>;
   weight: number;
+  /** 指标专属K线周期（可选，为空时使用策略默认周期） */
+  interval?: KLineInterval;
 }
 
 /** 策略 VO */

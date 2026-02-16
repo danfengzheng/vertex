@@ -13,7 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.*;
 
 /**
  * 策略数据预热服务
@@ -33,7 +33,9 @@ public class StrategyDataWarmupService {
     private final List<KLineRestClient> restClients;
 
     /**
-     * 检查并预热策略所需数据。
+     * 检查并预热策略所需数据（支持多周期）。
+     * <p>
+     * 按指标的有效周期分组，每个周期独立检查和补全。
      *
      * @param strategy 已启用的策略
      * @return 补全的 K 线数量，0 表示数据已充足无需补全
@@ -46,29 +48,42 @@ public class StrategyDataWarmupService {
             return 0;
         }
 
-        // 1. 计算所有指标中最大的 requiredDataPoints
-        int requiredDataPoints = configs.stream()
-                .mapToInt(config -> {
-                    try {
-                        TechnicalIndicator ind = indicatorRegistry.get(config.getIndicatorType());
-                        return ind.requiredDataPoints(config.getParams());
-                    } catch (Exception e) {
-                        log.warn("[DataWarmup] Unknown indicator type '{}' in strategy '{}'",
-                                config.getIndicatorType(), strategy.getName());
-                        return 50; // 默认值
-                    }
-                })
-                .max()
-                .orElse(50);
+        // 1. 按周期分组，每组计算 max requiredDataPoints
+        Map<KLineInterval, Integer> requiredByInterval = new HashMap<>();
+        for (StrategyIndicatorConfig config : configs) {
+            KLineInterval iv = config.getInterval() != null
+                    ? config.getInterval() : strategy.getInterval();
+            try {
+                TechnicalIndicator ind = indicatorRegistry.get(config.getIndicatorType());
+                int required = ind.requiredDataPoints(config.getParams());
+                requiredByInterval.merge(iv, required, Math::max);
+            } catch (Exception e) {
+                log.warn("[DataWarmup] Unknown indicator type '{}' in strategy '{}'",
+                        config.getIndicatorType(), strategy.getName());
+                requiredByInterval.merge(iv, 50, Math::max);
+            }
+        }
 
+        // 2. 每个周期独立检查和补全
+        int totalBackfilled = 0;
+        for (var entry : requiredByInterval.entrySet()) {
+            totalBackfilled += warmupInterval(strategy, entry.getKey(), entry.getValue());
+        }
+        return totalBackfilled;
+    }
+
+    /**
+     * 预热单个周期的K线数据
+     */
+    private int warmupInterval(Strategy strategy, KLineInterval interval, int requiredDataPoints) {
         // 额外留 10 条冗余
         int fetchSize = requiredDataPoints + 10;
 
-        // 2. 查询 RocksDB 中现有数据量
+        // 查询 RocksDB 中现有数据量
         List<KLine> existingData = klineStore.query(
                 strategy.getExchange(),
                 strategy.getSymbol(),
-                strategy.getInterval(),
+                interval,
                 null, null,
                 fetchSize,
                 false  // 降序查最新
@@ -77,22 +92,21 @@ public class StrategyDataWarmupService {
         int existingCount = existingData.size();
 
         if (existingCount >= requiredDataPoints) {
-            log.info("[DataWarmup] Strategy '{}' data sufficient: {}/{} K-lines available.",
-                    strategy.getName(), existingCount, requiredDataPoints);
+            log.info("[DataWarmup] Strategy '{}' interval {} data sufficient: {}/{} K-lines available.",
+                    strategy.getName(), interval.getCode(), existingCount, requiredDataPoints);
             return 0;
         }
 
-        log.info("[DataWarmup] Strategy '{}' data insufficient: {}/{}, starting backfill via REST...",
-                strategy.getName(), existingCount, requiredDataPoints);
+        log.info("[DataWarmup] Strategy '{}' interval {} data insufficient: {}/{}, starting backfill...",
+                strategy.getName(), interval.getCode(), existingCount, requiredDataPoints);
 
-        // 3. 通过 REST API 拉取历史数据
-        return backfillViaRest(strategy, fetchSize);
+        return backfillViaRest(strategy, interval, fetchSize);
     }
 
     /**
-     * 通过 REST 接口拉取最近 N 条 K 线并存入 RocksDB
+     * 通过 REST 接口拉取指定周期的最近 N 条 K 线并存入 RocksDB
      */
-    private int backfillViaRest(Strategy strategy, int limit) {
+    private int backfillViaRest(Strategy strategy, KLineInterval interval, int limit) {
         try {
             KLineRestClient client = restClients.stream()
                     .filter(c -> strategy.getExchange().equalsIgnoreCase(c.exchangeCode()))
@@ -115,7 +129,7 @@ public class StrategyDataWarmupService {
                 int batch = Math.min(remaining, batchLimit);
                 List<KLine> klines = client.fetchKLines(
                         strategy.getSymbol(),
-                        strategy.getInterval(),
+                        interval,
                         null,    // startTime: null 表示由 endTime 向前
                         endTime,
                         batch
@@ -145,13 +159,13 @@ public class StrategyDataWarmupService {
 
             log.info("[DataWarmup] Strategy '{}' backfill completed: {} K-lines fetched for {}:{} on {}.",
                     strategy.getName(), totalFetched,
-                    strategy.getSymbol(), strategy.getInterval().getCode(),
+                    strategy.getSymbol(), interval.getCode(),
                     strategy.getExchange());
 
             return totalFetched;
         } catch (Exception e) {
-            log.error("[DataWarmup] Backfill failed for strategy '{}': {}",
-                    strategy.getName(), e.getMessage(), e);
+            log.error("[DataWarmup] Backfill failed for strategy '{}' interval {}: {}",
+                    strategy.getName(), interval.getCode(), e.getMessage(), e);
             return 0;
         }
     }

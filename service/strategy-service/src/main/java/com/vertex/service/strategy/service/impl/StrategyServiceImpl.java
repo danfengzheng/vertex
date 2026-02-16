@@ -12,6 +12,7 @@ import com.vertex.model.dto.strategy.StrategyCreateDTO;
 import com.vertex.model.dto.strategy.StrategyIndicatorConfig;
 import com.vertex.model.dto.strategy.StrategyQueryDTO;
 import com.vertex.model.dto.strategy.StrategyUpdateDTO;
+import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.vo.strategy.StrategyVO;
 import com.vertex.service.quote.source.QuoteDataSource;
@@ -22,8 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 策略服务实现
@@ -152,8 +152,8 @@ public class StrategyServiceImpl implements IStrategyService {
     }
 
     /**
-     * 启用策略时自动确保数据源已连接，并订阅对应交易对和周期。
-     * 如果数据源未连接则自动建立连接，如果尚未订阅该 symbol:interval 则自动订阅。
+     * 启用策略时自动确保数据源已连接，并订阅对应交易对和所有用到的周期。
+     * 遍历所有指标配置，收集所有需要的 K线周期，逐一检查并订阅。
      */
     private void autoSubscribe(Strategy strategy) {
         try {
@@ -172,24 +172,43 @@ public class StrategyServiceImpl implements IStrategyService {
                 ds.start();
             }
 
-            // 2. 检查是否已订阅该 symbol:interval，避免重复订阅
-            boolean alreadySubscribed = ds.getSubscriptions().stream()
-                    .anyMatch(sub -> strategy.getSymbol().equals(sub.get("symbol"))
-                            && strategy.getInterval().name().equals(sub.get("interval")));
+            // 2. 收集策略所有用到的周期（含指标自定义周期）
+            Set<KLineInterval> allIntervals = collectAllIntervals(strategy);
 
-            if (!alreadySubscribed) {
-                log.info("[AutoSubscribe] Subscribing {}:{} on {}",
-                        strategy.getSymbol(), strategy.getInterval().getCode(), ds.exchangeCode());
-                ds.subscribe(strategy.getSymbol(), strategy.getInterval());
-            } else {
-                log.info("[AutoSubscribe] Already subscribed to {}:{} on {}",
-                        strategy.getSymbol(), strategy.getInterval().getCode(), ds.exchangeCode());
+            // 3. 逐一检查并订阅
+            for (KLineInterval iv : allIntervals) {
+                boolean alreadySubscribed = ds.getSubscriptions().stream()
+                        .anyMatch(sub -> strategy.getSymbol().equals(sub.get("symbol"))
+                                && iv.name().equals(sub.get("interval")));
+
+                if (!alreadySubscribed) {
+                    log.info("[AutoSubscribe] Subscribing {}:{} on {}",
+                            strategy.getSymbol(), iv.getCode(), ds.exchangeCode());
+                    ds.subscribe(strategy.getSymbol(), iv);
+                } else {
+                    log.info("[AutoSubscribe] Already subscribed to {}:{} on {}",
+                            strategy.getSymbol(), iv.getCode(), ds.exchangeCode());
+                }
             }
         } catch (Exception e) {
             // 自动订阅失败不阻塞策略启用
             log.error("[AutoSubscribe] Failed to auto-subscribe for strategy '{}': {}",
                     strategy.getName(), e.getMessage(), e);
         }
+    }
+
+    /** 收集策略所有用到的K线周期（含指标自定义周期，去重） */
+    private Set<KLineInterval> collectAllIntervals(Strategy strategy) {
+        Set<KLineInterval> intervals = new HashSet<>();
+        intervals.add(strategy.getInterval()); // 始终包含默认周期
+        List<StrategyIndicatorConfig> configs = JSON.parseArray(
+                strategy.getIndicatorConfigs(), StrategyIndicatorConfig.class);
+        if (configs != null) {
+            for (StrategyIndicatorConfig c : configs) {
+                intervals.add(c.getInterval() != null ? c.getInterval() : strategy.getInterval());
+            }
+        }
+        return intervals;
     }
 
     @Override

@@ -217,7 +217,9 @@
       "trendThreshold": "趋势强度阈值",
       "sarNoTrend": "SAR 通过追踪止损点反转来判断趋势方向",
       "adxTrendStrength": "ADX 衡量趋势强度，+DI/-DI 判断方向",
-      "superTrendInfo": "SuperTrend 基于 ATR 的自适应趋势跟踪指标"
+      "superTrendInfo": "SuperTrend 基于 ATR 的自适应趋势跟踪指标",
+      "indicatorInterval": "指标周期",
+      "useDefault": "使用策略默认"
     }
   },
   "placeholder": {

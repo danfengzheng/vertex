@@ -655,6 +655,18 @@ export const StrategyConfig = () => {
                       >
                         <InputNumber min={1} max={100} style={{ width: 80 }} />
                       </Form.Item>
+
+                      <Form.Item
+                        name={[field.name, 'interval']}
+                        label={t('text.strategy.indicatorInterval')}
+                      >
+                        <Select
+                          allowClear
+                          placeholder={t('text.strategy.useDefault')}
+                          style={{ width: 120 }}
+                          options={INTERVAL_OPTIONS}
+                        />
+                      </Form.Item>
                     </Space>
 
                     <IndicatorParamsFields type={indicatorTypes[index]} prefix={[field.name]} />

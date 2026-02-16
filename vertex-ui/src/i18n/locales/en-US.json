@@ -217,7 +217,9 @@
       "volMultiplier": "Volume Multiplier",
       "signalPeriod": "Signal Period",
       "volConfirmInfo": "Detects volume surges to confirm trend signals",
-      "obvInfo": "Tracks cumulative volume flow direction"
+      "obvInfo": "Tracks cumulative volume flow direction",
+      "indicatorInterval": "Indicator Interval",
+      "useDefault": "Use strategy default"
     }
   },
   "placeholder": {
