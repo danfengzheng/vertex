@@ -209,9 +209,21 @@ export const backtestApi = {
   run: (config: BacktestConfigDTO): Promise<ApiResponse<BacktestResultVO>> =>
     request.post('/backtest/run', config),
 
-  /** 快速回测 — 使用最近 N 天数据对策略做完整回测 */
-  quick: (strategyId: string, days?: number, initialCapital?: number): Promise<ApiResponse<BacktestResultVO>> =>
+  /** 快速回测 — 使用最近 N 天数据对策略做完整回测，参数与策略配置回测保持一致 */
+  quick: (params: {
+    strategyId: string;
+    days?: number;
+    initialCapital?: number;
+    positionRatio?: number;
+    feeRate?: number;
+  }): Promise<ApiResponse<BacktestResultVO>> =>
     request.post('/backtest/quick', null, {
-      params: { strategyId, days: days ?? 30, initialCapital: initialCapital ?? 10000 },
+      params: {
+        strategyId: params.strategyId,
+        days: params.days ?? 30,
+        initialCapital: params.initialCapital ?? 10000,
+        positionRatio: params.positionRatio ?? 1,
+        feeRate: params.feeRate ?? 0.001,
+      },
     }),
 };

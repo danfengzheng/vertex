@@ -22,18 +22,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import com.vertex.model.entity.quote.KLineInterval;
+import com.vertex.service.strategy.config.StrategyProperties;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 策略回测服务
  * <p>
  * 基于历史K线数据，模拟策略交易，计算收益指标。
+ * 支持多周期指标，与 StrategyEngineService 信号逻辑一致。
  * </p>
  */
 @Slf4j
@@ -45,6 +45,7 @@ public class BacktestService {
     private final KLineStore klineStore;
     private final IndicatorRegistry indicatorRegistry;
     private final SignalGenerator signalGenerator;
+    private final StrategyProperties properties;
 
     /**
      * 执行策略回测
@@ -62,51 +63,72 @@ public class BacktestService {
             throw new BizException(GlobalError.STRATEGY_CONFIG_ERROR);
         }
 
-        // 2. 计算所需历史数据量
-        int requiredDataPoints = indicatorConfigs.stream()
-                .mapToInt(ic -> {
-                    TechnicalIndicator ind = indicatorRegistry.get(ic.getIndicatorType());
-                    return ind.requiredDataPoints(ic.getParams());
-                })
-                .max()
-                .orElse(50);
+        // 2. 按周期计算所需数据量，加载多周期K线（与 StrategyEngineService 一致）
+        Map<KLineInterval, Integer> requiredByInterval = new HashMap<>();
+        Set<KLineInterval> allIntervals = new HashSet<>();
+        allIntervals.add(strategy.getInterval());
+        for (StrategyIndicatorConfig ic : indicatorConfigs) {
+            KLineInterval iv = getEffectiveInterval(ic, strategy);
+            allIntervals.add(iv);
+            int req = indicatorRegistry.get(ic.getIndicatorType()).requiredDataPoints(ic.getParams());
+            requiredByInterval.merge(iv, req, Math::max);
+        }
 
-        // 3. 前推获取足够的K线数据
-        long intervalMillis = strategy.getInterval().getMillis();
-        long prefetchStart = config.getStartTime() - intervalMillis * (requiredDataPoints + 10);
+        Map<KLineInterval, List<KLine>> allKlinesByInterval = new HashMap<>();
+        int mainRequired = requiredByInterval.getOrDefault(strategy.getInterval(), 50);
+        long mainIntervalMillis = strategy.getInterval().getMillis();
+        long mainPrefetchStart = config.getStartTime() - mainIntervalMillis * (mainRequired + 10);
 
-        List<KLine> allKlines = klineStore.query(
-                strategy.getExchange(),
-                strategy.getSymbol(),
-                strategy.getInterval(),
-                prefetchStart,
-                config.getEndTime(),
-                Integer.MAX_VALUE,
-                true   // 回测需要升序（旧→新）
-        );
+        List<KLine> mainKlines = klineStore.query(
+                strategy.getExchange(), strategy.getSymbol(), strategy.getInterval(),
+                mainPrefetchStart, config.getEndTime(), Integer.MAX_VALUE, true);
+        allKlinesByInterval.put(strategy.getInterval(), mainKlines);
 
-        log.info("Backtest [{}] loaded {} K-lines from RocksDB ({} {} {} from {} to {}), required: {}",
-                strategy.getName(), allKlines.size(),
-                strategy.getExchange(), strategy.getSymbol(), strategy.getInterval().getCode(),
-                prefetchStart, config.getEndTime(), requiredDataPoints + 1);
+        for (KLineInterval iv : allIntervals) {
+            if (iv.equals(strategy.getInterval())) continue;
+            int req = requiredByInterval.getOrDefault(iv, 50);
+            long ivMillis = iv.getMillis();
+            long prefetchStart = config.getStartTime() - ivMillis * (req + 10);
+            List<KLine> ivKlines = klineStore.query(
+                    strategy.getExchange(), strategy.getSymbol(), iv,
+                    prefetchStart, config.getEndTime(), Integer.MAX_VALUE, true);
+            allKlinesByInterval.put(iv, ivKlines);
+        }
 
-        if (allKlines.size() < requiredDataPoints + 1) {
+        if (allIntervals.size() > 1) {
+            log.info("Backtest [{}] multi-interval mode: {}", strategy.getName(),
+                    allIntervals.stream().map(KLineInterval::getCode).sorted().toList());
+        }
+        log.info("Backtest [{}] loaded K-lines: {} {} (main: {} bars), required: {}",
+                strategy.getName(), strategy.getExchange(), strategy.getSymbol(),
+                mainKlines.size(), mainRequired + 1);
+
+        if (mainKlines.size() < mainRequired + 1) {
             log.warn("Backtest [{}] insufficient data: got {} K-lines, need at least {}. "
                     + "Please use the backfill feature to fetch historical K-line data first.",
-                    strategy.getName(), allKlines.size(), requiredDataPoints + 1);
+                    strategy.getName(), mainKlines.size(), mainRequired + 1);
             throw new BizException(GlobalError.BACKTEST_INSUFFICIENT_DATA);
         }
 
-        // 4. 执行模拟交易
-        return simulateTrades(strategy, indicatorConfigs, allKlines, config, requiredDataPoints);
+        // 3. 执行模拟交易
+        return simulateTrades(strategy, indicatorConfigs, mainKlines, allKlinesByInterval, config,
+                mainRequired, requiredByInterval);
+    }
+
+    private KLineInterval getEffectiveInterval(StrategyIndicatorConfig config, Strategy strategy) {
+        return config.getInterval() != null ? config.getInterval() : strategy.getInterval();
     }
 
     private BacktestResultVO simulateTrades(
             Strategy strategy,
             List<StrategyIndicatorConfig> configs,
             List<KLine> klines,
+            Map<KLineInterval, List<KLine>> allKlinesByInterval,
             BacktestConfigDTO config,
-            int requiredDataPoints) {
+            int mainRequiredDataPoints,
+            Map<KLineInterval, Integer> requiredByInterval) {
+
+        int maxKlineHistory = properties.getEngine().getMaxKlineHistory();
 
         BigDecimal capital = config.getInitialCapital();
         BigDecimal position = BigDecimal.ZERO;
@@ -122,8 +144,8 @@ public class BacktestService {
         int maxDrawdownDuration = 0;
         int currentDrawdownDuration = 0;
 
-        // 滑动窗口模拟
-        for (int i = requiredDataPoints; i < klines.size(); i++) {
+        // 滑动窗口模拟（以策略主周期为时间轴）
+        for (int i = mainRequiredDataPoints; i < klines.size(); i++) {
             KLine currentKline = klines.get(i);
 
             // 仅处理回测时间范围内的K线
@@ -131,10 +153,25 @@ public class BacktestService {
                 continue;
             }
 
-            // 取窗口数据计算信号（回测时所有指标共用策略默认周期的K线）
-            List<KLine> window = klines.subList(Math.max(0, i - requiredDataPoints - 5), i + 1);
+            // 构建多周期 K 线窗口，与 StrategyEngineService 一致（required + 10）
             Map<KLineInterval, List<KLine>> klinesByInterval = new HashMap<>();
-            klinesByInterval.put(strategy.getInterval(), window);
+            klinesByInterval.put(strategy.getInterval(), klines.subList(Math.max(0, i - mainRequiredDataPoints - 9), i + 1));
+
+            for (Map.Entry<KLineInterval, List<KLine>> e : allKlinesByInterval.entrySet()) {
+                if (e.getKey().equals(strategy.getInterval())) continue;
+                List<KLine> ivList = e.getValue();
+                int req = requiredByInterval.getOrDefault(e.getKey(), 50);
+                int fetchSize = Math.min(req + 10, maxKlineHistory);
+                List<KLine> window = ivList.stream()
+                        .filter(k -> k.getOpenTime() <= currentKline.getOpenTime())
+                        .collect(Collectors.collectingAndThen(Collectors.toList(), list -> {
+                            int from = Math.max(0, list.size() - fetchSize);
+                            return list.subList(from, list.size());
+                        }));
+                if (window.size() >= req) {
+                    klinesByInterval.put(e.getKey(), window);
+                }
+            }
             Signal signal = signalGenerator.evaluate(strategy, configs, klinesByInterval);
 
             // 当前权益

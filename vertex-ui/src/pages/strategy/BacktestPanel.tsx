@@ -253,6 +253,17 @@ export const BacktestPanel = ({ strategyId, strategyName, visible, onClose }: Ba
         >
           <DatePicker.RangePicker showTime style={{ width: 340 }} />
         </Form.Item>
+        <Space.Compact style={{ marginLeft: 8 }}>
+          <Button onClick={() => form.setFieldValue('timeRange', [dayjs().subtract(7, 'day'), dayjs()])}>
+            {t('text.strategy.backtestPreset7d')}
+          </Button>
+          <Button onClick={() => form.setFieldValue('timeRange', [dayjs().subtract(30, 'day'), dayjs()])}>
+            {t('text.strategy.backtestPreset30d')}
+          </Button>
+          <Button onClick={() => form.setFieldValue('timeRange', [dayjs().subtract(90, 'day'), dayjs()])}>
+            {t('text.strategy.backtestPreset90d')}
+          </Button>
+        </Space.Compact>
         <Form.Item name="initialCapital" label={t('text.strategy.initialCapital')} initialValue={10000}>
           <InputNumber min={100} step={1000} style={{ width: 110 }} addonAfter="U" />
         </Form.Item>
@@ -333,7 +344,9 @@ export const BacktestPanel = ({ strategyId, strategyName, visible, onClose }: Ba
               size="small"
               style={{ marginBottom: 20 }}
               extra={
-                <Space size="small" style={{ fontSize: 12, color: '#999' }}>
+                <Space size="small" style={{ fontSize: 12, color: '#999' }} wrap>
+                  <span>{t('text.strategy.backtestTimeRange')}: {dayjs(Number(result.startTime)).format('YYYY-MM-DD HH:mm')} ~ {dayjs(Number(result.endTime)).format('YYYY-MM-DD HH:mm')}</span>
+                  <Divider type="vertical" />
                   <span>{t('text.strategy.initialCapital')}: {result.initialCapital}</span>
                   <Divider type="vertical" />
                   <span>{t('text.strategy.finalCapital')}: {result.finalCapital}</span>
@@ -365,6 +378,7 @@ export const BacktestPanel = ({ strategyId, strategyName, visible, onClose }: Ba
           <div style={{ textAlign: 'center', padding: '60px 0', color: '#999' }}>
             <ExperimentOutlined style={{ fontSize: 48, marginBottom: 16, display: 'block' }} />
             <p>配置回测参数后点击"执行回测"开始</p>
+            <p style={{ fontSize: 12, marginTop: 8 }}>{t('text.strategy.backtestTip')}</p>
           </div>
         )}
       </Spin>

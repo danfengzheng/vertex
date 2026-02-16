@@ -152,11 +152,16 @@ const QuickBacktestResult = ({
       size="small"
       style={{ marginBottom: 16, borderColor: '#1890ff', borderWidth: 1 }}
       title={
-        <Space>
+        <Space wrap>
           <ExperimentOutlined style={{ color: '#1890ff' }} />
           <span>{t('text.strategy.quickBacktestResult')}</span>
           <Tag color="blue">{strategyName}</Tag>
           <Tag>{t('text.strategy.recentDays').replace('{{days}}', String(days))}</Tag>
+          {result.startTime != null && result.endTime != null && (
+            <span style={{ fontSize: 12, color: '#999' }}>
+              {dayjs(Number(result.startTime)).format('YYYY-MM-DD HH:mm')} ~ {dayjs(Number(result.endTime)).format('YYYY-MM-DD HH:mm')}
+            </span>
+          )}
         </Space>
       }
       extra={
@@ -339,11 +344,11 @@ export const SignalMonitor = () => {
     }
   };
 
-  /** 快速回测 */
+  /** 快速回测（参数与策略配置回测默认一致，便于结果对比） */
   const handleQuickBacktest = async (sid: string, sName: string, days: number) => {
     setQuickBacktestLoading(sid);
     try {
-      const response = await backtestApi.quick(sid, days);
+      const response = await backtestApi.quick({ strategyId: sid, days, initialCapital: 10000, positionRatio: 1, feeRate: 0.001 });
       if (response.code === 200) {
         setQuickBacktestResult(response.data);
         setQuickBacktestStrategy(sName);

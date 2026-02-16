@@ -35,7 +35,9 @@ public class BacktestController {
     public Result<BacktestResultVO> quickBacktest(
             @RequestParam Long strategyId,
             @RequestParam(defaultValue = "30") Integer days,
-            @RequestParam(defaultValue = "10000") BigDecimal initialCapital) {
+            @RequestParam(required = false) BigDecimal initialCapital,
+            @RequestParam(required = false) BigDecimal positionRatio,
+            @RequestParam(required = false) BigDecimal feeRate) {
         long endTime = System.currentTimeMillis();
         long startTime = endTime - (long) days * 24 * 60 * 60 * 1000;
 
@@ -43,9 +45,9 @@ public class BacktestController {
         config.setStrategyId(strategyId);
         config.setStartTime(startTime);
         config.setEndTime(endTime);
-        config.setInitialCapital(initialCapital);
-        config.setPositionRatio(BigDecimal.ONE);
-        config.setFeeRate(new BigDecimal("0.001"));
+        config.setInitialCapital(initialCapital != null ? initialCapital : new BigDecimal("10000"));
+        config.setPositionRatio(positionRatio != null ? positionRatio : BigDecimal.ONE);
+        config.setFeeRate(feeRate != null ? feeRate : new BigDecimal("0.001"));
 
         return Result.success(backtestService.runBacktest(config));
     }
