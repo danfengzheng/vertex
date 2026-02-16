@@ -1081,3 +1081,25 @@ Block cache LRUCache@0x6000076ae598#35466 capacity: 8.00 MB seed: 464347716 usag
 Block cache entry stats(count,size,portion): DataBlock(512,7.92 MB,99.0339%) Misc(1,0.00 KB,0%)
 
 ** File Read Latency Histogram By Level [default] **
+2026/02/17-02:18:33.910495 13026684928 [/db_impl/db_impl.cc:1166] ------- DUMPING STATS -------
+2026/02/17-02:18:33.910552 13026684928 [/db_impl/db_impl.cc:1167] 
+** DB Stats **
+Uptime(secs): 30600.4 total, 600.0 interval
+Cumulative writes: 29K writes, 29K keys, 29K commit groups, 1.0 writes per commit group, ingest: 0.01 GB, 0.00 MB/s
+Cumulative WAL: 29K writes, 0 syncs, 29112.00 writes per sync, written: 0.01 GB, 0.00 MB/s
+Cumulative stall: 00:00:0.000 H:M:S, 0.0 percent
+Interval writes: 556 writes, 556 keys, 556 commit groups, 1.0 writes per commit group, ingest: 0.18 MB, 0.00 MB/s
+Interval WAL: 556 writes, 0 syncs, 556.00 writes per sync, written: 0.00 GB, 0.00 MB/s
+Interval stall: 00:00:0.000 H:M:S, 0.0 percent
+Write Stall (count): write-buffer-manager-limit-stops: 0
+2026/02/17-02:28:33.915612 13026684928 [/db_impl/db_impl.cc:1166] ------- DUMPING STATS -------
+2026/02/17-02:28:33.915720 13026684928 [/db_impl/db_impl.cc:1167] 
+** DB Stats **
+Uptime(secs): 31200.4 total, 600.0 interval
+Cumulative writes: 29K writes, 29K keys, 29K commit groups, 1.0 writes per commit group, ingest: 0.01 GB, 0.00 MB/s
+Cumulative WAL: 29K writes, 0 syncs, 29646.00 writes per sync, written: 0.01 GB, 0.00 MB/s
+Cumulative stall: 00:00:0.000 H:M:S, 0.0 percent
+Interval writes: 534 writes, 534 keys, 534 commit groups, 1.0 writes per commit group, ingest: 0.17 MB, 0.00 MB/s
+Interval WAL: 534 writes, 0 syncs, 534.00 writes per sync, written: 0.00 GB, 0.00 MB/s
+Interval stall: 00:00:0.000 H:M:S, 0.0 percent
+Write Stall (count): write-buffer-manager-limit-stops: 0

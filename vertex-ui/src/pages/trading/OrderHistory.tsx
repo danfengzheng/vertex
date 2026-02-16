@@ -27,6 +27,18 @@ const ORDER_STATUS_COLOR: Record<OrderStatus, string> = {
   SIMULATED: 'blue',
 };
 
+/** 订单状态 → i18n key 映射 */
+const ORDER_STATUS_I18N_KEY: Record<OrderStatus, string> = {
+  PENDING: 'pending',
+  SUBMITTED: 'submitted',
+  FILLED: 'filled',
+  PARTIALLY_FILLED: 'partiallyFilled',
+  CANCELLED: 'cancelled',
+  REJECTED: 'rejected',
+  EXPIRED: 'expired',
+  SIMULATED: 'simulated',
+};
+
 export const OrderHistory = () => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -120,7 +132,7 @@ export const OrderHistory = () => {
       key: 'status',
       width: 100,
       render: (val: OrderStatus) => (
-        <Tag color={ORDER_STATUS_COLOR[val] || 'default'}>{t(`text.trading.${val.toLowerCase()}`) || val}</Tag>
+        <Tag color={ORDER_STATUS_COLOR[val] || 'default'}>{t(`text.trading.${ORDER_STATUS_I18N_KEY[val]}`)}</Tag>
       ),
     },
     {
@@ -135,13 +147,13 @@ export const OrderHistory = () => {
       ),
     },
     {
-      title: t('text.common.createTime'),
+      title: t('common.createTime'),
       dataIndex: 'createTime',
       key: 'createTime',
       width: 180,
     },
     {
-      title: t('text.common.operation'),
+      title: t('common.operation'),
       key: 'action',
       width: 200,
       render: (_: any, record: OrderVO) => (
@@ -194,7 +206,7 @@ export const OrderHistory = () => {
             { value: 'PAPER', label: t('text.trading.paper') },
           ]}
         />
-        <Button icon={<ReloadOutlined />} onClick={fetchOrders}>{t('text.common.refresh')}</Button>
+        <Button icon={<ReloadOutlined />} onClick={fetchOrders}>{t('text.trading.refresh')}</Button>
       </div>
       <Table
         columns={columns}

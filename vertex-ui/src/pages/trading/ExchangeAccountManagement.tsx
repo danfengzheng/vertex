@@ -107,18 +107,18 @@ export const ExchangeAccountManagement = () => {
       key: 'status',
       render: (val: number) =>
         val === 1 ? (
-          <Tag icon={<CheckCircleOutlined />} color="success">{t('text.common.enabled')}</Tag>
+          <Tag icon={<CheckCircleOutlined />} color="success">{t('common.enabled')}</Tag>
         ) : (
-          <Tag icon={<CloseCircleOutlined />} color="error">{t('text.common.disabled')}</Tag>
+          <Tag icon={<CloseCircleOutlined />} color="error">{t('common.disabled')}</Tag>
         ),
     },
     {
-      title: t('text.common.createTime'),
+      title: t('common.createTime'),
       dataIndex: 'createTime',
       key: 'createTime',
     },
     {
-      title: t('text.common.operation'),
+      title: t('common.operation'),
       key: 'action',
       render: (_: any, record: ExchangeAccountVO) => (
         <Space>
@@ -131,11 +131,11 @@ export const ExchangeAccountManagement = () => {
             {t('text.trading.testConnection')}
           </Button>
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
-            {t('text.common.edit')}
+            {t('common.edit')}
           </Button>
-          <Popconfirm title={t('message.common.deleteConfirm')} onConfirm={() => handleDelete(record.id)}>
+          <Popconfirm title={t('message.trading.deleteConfirm')} onConfirm={() => handleDelete(record.id)}>
             <Button type="link" danger icon={<DeleteOutlined />}>
-              {t('text.common.delete')}
+              {t('common.delete')}
             </Button>
           </Popconfirm>
         </Space>
@@ -147,7 +147,7 @@ export const ExchangeAccountManagement = () => {
     <div>
       <div style={{ marginBottom: 16 }}>
         <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-          {t('text.common.create')}
+          {t('common.add')}
         </Button>
       </div>
       <Table
@@ -158,7 +158,7 @@ export const ExchangeAccountManagement = () => {
         pagination={false}
       />
       <Modal
-        title={editingId ? t('text.common.edit') : t('text.common.create')}
+        title={editingId ? t('common.edit') : t('common.add')}
         open={modalOpen}
         onOk={handleSubmit}
         onCancel={() => setModalOpen(false)}

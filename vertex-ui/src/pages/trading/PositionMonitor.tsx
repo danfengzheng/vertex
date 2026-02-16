@@ -151,7 +151,7 @@ export const PositionMonitor = () => {
       ),
     },
     {
-      title: t('text.common.operation'),
+      title: t('common.operation'),
       key: 'action',
       width: 120,
       render: (_: any, record: PositionVO) => (
@@ -189,7 +189,7 @@ export const PositionMonitor = () => {
             { value: 'PAPER', label: t('text.trading.paper') },
           ]}
         />
-        <Button icon={<ReloadOutlined />} onClick={fetchPositions}>{t('text.common.refresh')}</Button>
+        <Button icon={<ReloadOutlined />} onClick={fetchPositions}>{t('text.trading.refresh')}</Button>
       </div>
       <Table
         columns={columns}

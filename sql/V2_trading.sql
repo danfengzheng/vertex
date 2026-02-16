@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS trd_position (
 -- 策略表增加交易配置字段
 ALTER TABLE stg_strategy
     ADD COLUMN auto_trade TINYINT NOT NULL DEFAULT 0 COMMENT '是否开启自动交易 0-否 1-是' AFTER enabled,
-    ADD COLUMN trade_mode VARCHAR(10) DEFAULT 'PAPER' COMMENT '交易模式: AUTO/MANUAL' AFTER auto_trade,
+    ADD COLUMN trade_mode VARCHAR(10) DEFAULT NULL COMMENT '交易模式: AUTO/MANUAL' AFTER auto_trade,
     ADD COLUMN execution_mode VARCHAR(10) DEFAULT 'PAPER' COMMENT '执行模式: LIVE/PAPER' AFTER trade_mode,
     ADD COLUMN account_id BIGINT DEFAULT NULL COMMENT '关联交易账户ID' AFTER execution_mode,
     ADD COLUMN trade_quantity DECIMAL(30,10) DEFAULT NULL COMMENT '每次交易数量' AFTER account_id,
