@@ -7,13 +7,11 @@ import com.vertex.model.entity.strategy.Signal;
 import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.entity.trading.*;
-import com.vertex.model.vo.trading.OrderVO;
 import com.vertex.service.order.client.BinanceTradeClient;
 import com.vertex.service.order.mapper.OrderMapper;
-import com.vertex.service.order.websocket.TradePushService;
+import com.vertex.service.order.notify.CompositeTradeNotifier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -38,9 +36,7 @@ public class TradeExecutionService {
     private final PaperTradingService paperTradingService;
     private final PositionManagementService positionManagementService;
     private final BinanceTradeClient binanceTradeClient;
-
-    @Autowired(required = false)
-    private TradePushService tradePushService;
+    private final CompositeTradeNotifier compositeTradeNotifier;
 
     /**
      * 信号触发的交易执行入口
@@ -48,6 +44,23 @@ public class TradeExecutionService {
     public void executeSignal(Strategy strategy, Signal signal) {
         // 仅处理 BUY/SELL 信号
         if (signal.getSignalType() == SignalType.NEUTRAL) {
+            return;
+        }
+
+        // 持仓检查：避免重复开仓或无仓位平仓
+        Position openPosition = positionManagementService.findOpenPosition(
+                strategy.getId(), strategy.getAccountId(),
+                strategy.getExchange(), strategy.getSymbol());
+
+        if (openPosition != null && signal.getSignalType() == SignalType.BUY) {
+            log.debug("Strategy [{}] already has open position for {} {}, ignoring BUY signal",
+                    strategy.getName(), strategy.getExchange(), strategy.getSymbol());
+            return;
+        }
+
+        if (openPosition == null && signal.getSignalType() == SignalType.SELL) {
+            log.debug("Strategy [{}] has no open position for {} {}, ignoring SELL signal",
+                    strategy.getName(), strategy.getExchange(), strategy.getSymbol());
             return;
         }
 
@@ -80,10 +93,7 @@ public class TradeExecutionService {
             order.setStatus(OrderStatus.PENDING);
             orderMapper.insert(order);
 
-            // WebSocket 通知前端
-            if (tradePushService != null) {
-                tradePushService.pushPendingOrder(toVO(order));
-            }
+            compositeTradeNotifier.notifyOrderCreated(order, strategy);
 
             log.info("Pending order created for strategy [{}]: {} {} {}",
                     strategy.getName(), side, strategy.getSymbol(), order.getQuantity());
@@ -91,6 +101,9 @@ public class TradeExecutionService {
             // AUTO 模式: 直接执行
             order.setStatus(OrderStatus.SUBMITTED);
             orderMapper.insert(order);
+
+            compositeTradeNotifier.notifyOrderCreated(order, strategy);
+
             doExecute(order, strategy);
         }
     }
@@ -152,10 +165,8 @@ public class TradeExecutionService {
                 }
             }
 
-            // WebSocket 通知
-            if (tradePushService != null) {
-                tradePushService.pushOrderUpdate(toVO(order));
-            }
+            // 通知所有渠道（WebSocket、Telegram 等）
+            compositeTradeNotifier.notifyOrderFilled(order);
 
         } catch (Exception e) {
             order.setStatus(OrderStatus.REJECTED);
@@ -234,27 +245,4 @@ public class TradeExecutionService {
         }
     }
 
-    private OrderVO toVO(Order order) {
-        return OrderVO.builder()
-                .id(order.getId())
-                .strategyId(order.getStrategyId())
-                .accountId(order.getAccountId())
-                .signalId(order.getSignalId())
-                .exchange(order.getExchange())
-                .symbol(order.getSymbol())
-                .side(order.getSide())
-                .orderType(order.getOrderType())
-                .quantity(order.getQuantity())
-                .price(order.getPrice())
-                .filledQuantity(order.getFilledQuantity())
-                .filledPrice(order.getFilledPrice())
-                .fee(order.getFee())
-                .status(order.getStatus())
-                .tradeMode(order.getTradeMode())
-                .exchangeOrderId(order.getExchangeOrderId())
-                .errorMsg(order.getErrorMsg())
-                .createTime(order.getCreateTime())
-                .updateTime(order.getUpdateTime())
-                .build();
-    }
 }
