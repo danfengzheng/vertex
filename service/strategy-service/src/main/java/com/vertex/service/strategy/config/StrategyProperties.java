@@ -31,5 +31,7 @@ public class StrategyProperties {
         private int maxKlineHistory = 500;
         /** 是否仅处理已收盘K线 */
         private boolean onlyClosedKlines = true;
+        /** 策略评估最小间隔（毫秒），仅在 onlyClosedKlines=false 时生效，0 表示禁用节流 */
+        private long minEvalIntervalMs = 5000;
     }
 }

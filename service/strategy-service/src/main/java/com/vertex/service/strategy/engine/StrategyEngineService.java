@@ -26,6 +26,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 策略引擎服务（编排器）
@@ -53,6 +54,12 @@ public class StrategyEngineService {
     /** 交易执行监听器（可选依赖，trading 未启用时为 null） */
     @Autowired(required = false)
     private ITradeExecutionListener tradeExecutionListener;
+
+    /** 节流：记录每个策略的上次执行时间戳（毫秒） */
+    private final ConcurrentHashMap<Long, Long> lastEvalTimeMap = new ConcurrentHashMap<>();
+
+    /** 去重：缓存每个策略的上一次信号快照 */
+    private final ConcurrentHashMap<Long, SignalSnapshot> lastSignalMap = new ConcurrentHashMap<>();
 
     /**
      * 处理K线更新事件
@@ -87,6 +94,11 @@ public class StrategyEngineService {
                 Set<KLineInterval> usedIntervals = collectAllIntervals(strategy, configs);
                 // 仅当更新的 interval 是该策略用到的周期之一时才执行
                 if (usedIntervals.contains(interval)) {
+                    // 节流：非收盘K线模式下，限制评估频率
+                    if (!properties.getEngine().isOnlyClosedKlines() && isThrottled(strategy.getId())) {
+                        log.debug("Strategy [{}] throttled, skipping evaluation", strategy.getName());
+                        continue;
+                    }
                     runStrategy(strategy);
                 }
             } catch (Exception e) {
@@ -151,9 +163,19 @@ public class StrategyEngineService {
 
         // 生成信号
         Signal signal = signalGenerator.evaluate(strategy, configs, klinesByInterval);
-        if(signal.getSignalType() == SignalType.NEUTRAL) {
+
+        // 跳过 NEUTRAL 信号，不写库不推送
+        if (signal.getSignalType() == SignalType.NEUTRAL) {
             return;
         }
+
+        // 去重：与上一次信号比较，如果 signalType 和 signalStrength 未变化则跳过
+        if (isDuplicateSignal(strategy.getId(), signal)) {
+            log.debug("Strategy [{}] signal unchanged ({}, strength: {}), skipping persistence and push",
+                    strategy.getName(), signal.getSignalType(), signal.getSignalStrength());
+            return;
+        }
+
         // 双写：MySQL + RocksDB
         signalMapper.insert(signal);
         try {
@@ -209,5 +231,45 @@ public class StrategyEngineService {
             }
         }
         return intervals;
+    }
+
+    // ─── 节流 & 去重 ─────────────────────────────────────────────
+
+    /**
+     * 检查策略是否在节流冷却期内
+     * <p>
+     * 如果距上次执行时间不足 minEvalIntervalMs，返回 true（应跳过）。
+     * 否则更新时间戳并返回 false（允许执行）。
+     * </p>
+     */
+    private boolean isThrottled(Long strategyId) {
+        long minInterval = properties.getEngine().getMinEvalIntervalMs();
+        if (minInterval <= 0) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        Long lastTime = lastEvalTimeMap.get(strategyId);
+        if (lastTime != null && (now - lastTime) < minInterval) {
+            return true;
+        }
+        lastEvalTimeMap.put(strategyId, now);
+        return false;
+    }
+
+    /**
+     * 检查信号是否与上一次相同（去重）
+     * <p>
+     * 比较 signalType 和 signalStrength。若相同返回 true（应跳过）。
+     * 若不同，更新缓存并返回 false（新信号，需要持久化和推送）。
+     * </p>
+     */
+    private boolean isDuplicateSignal(Long strategyId, Signal signal) {
+        SignalSnapshot current = new SignalSnapshot(signal.getSignalType(), signal.getSignalStrength());
+        SignalSnapshot previous = lastSignalMap.put(strategyId, current);
+        return current.equals(previous);
+    }
+
+    /** 轻量信号快照，用于去重比较 */
+    private record SignalSnapshot(SignalType signalType, int signalStrength) {
     }
 }
