@@ -14,7 +14,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import com.alibaba.fastjson2.JSONArray;
+
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * 核心交易执行器
@@ -66,6 +69,19 @@ public class TradeExecutionService {
 
         OrderSide side = signal.getSignalType() == SignalType.BUY ? OrderSide.BUY : OrderSide.SELL;
 
+        // 确定下单数量：卖出时使用持仓数量（避免因手续费扣减导致余额不足），买入时使用策略配置
+        BigDecimal quantity;
+        if (side == OrderSide.SELL && openPosition != null) {
+            quantity = openPosition.getQuantity();
+        } else {
+            quantity = strategy.getTradeQuantity();
+        }
+
+        if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("Strategy [{}] has invalid trade quantity", strategy.getName());
+            return;
+        }
+
         // 创建订单
         Order order = new Order();
         order.setStrategyId(strategy.getId());
@@ -75,13 +91,8 @@ public class TradeExecutionService {
         order.setSymbol(strategy.getSymbol());
         order.setSide(side);
         order.setOrderType(OrderType.MARKET);
-        order.setQuantity(strategy.getTradeQuantity());
+        order.setQuantity(quantity);
         order.setTradeMode(strategy.getExecutionMode());
-
-        if (order.getQuantity() == null || order.getQuantity().compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("Strategy [{}] has invalid trade quantity", strategy.getName());
-            return;
-        }
 
         TradeMode tradeMode = strategy.getTradeMode();
         if (tradeMode == null) {
@@ -199,12 +210,43 @@ public class TradeExecutionService {
 
         if ("FILLED".equals(status)) {
             order.setStatus(OrderStatus.FILLED);
-            order.setFilledQuantity(result.getBigDecimal("executedQty"));
-            // 计算加权平均成交价
-            BigDecimal cummQuoteQty = result.getBigDecimal("cummulativeQuoteQty");
             BigDecimal executedQty = result.getBigDecimal("executedQty");
+            BigDecimal cummQuoteQty = result.getBigDecimal("cummulativeQuoteQty");
+
+            // 计算加权平均成交价
             if (executedQty != null && executedQty.compareTo(BigDecimal.ZERO) > 0) {
-                order.setFilledPrice(cummQuoteQty.divide(executedQty, 10, java.math.RoundingMode.HALF_UP));
+                order.setFilledPrice(cummQuoteQty.divide(executedQty, 10, RoundingMode.HALF_UP));
+            }
+
+            // 从 fills 数组中提取手续费，计算实际到账量
+            // Binance MARKET 买单默认从买入的币中扣手续费（除非用 BNB 抵扣）
+            BigDecimal totalFee = BigDecimal.ZERO;
+            boolean feeInBaseAsset = false;
+            JSONArray fills = result.getJSONArray("fills");
+            if (fills != null && !fills.isEmpty()) {
+                // 判断手续费币种：取第一笔 fill 的 commissionAsset
+                String baseAsset = extractBaseAsset(order.getSymbol());
+                for (int j = 0; j < fills.size(); j++) {
+                    JSONObject fill = fills.getJSONObject(j);
+                    BigDecimal commission = fill.getBigDecimal("commission");
+                    String commissionAsset = fill.getString("commissionAsset");
+                    if (commission != null) {
+                        totalFee = totalFee.add(commission);
+                        if (baseAsset != null && baseAsset.equalsIgnoreCase(commissionAsset)) {
+                            feeInBaseAsset = true;
+                        }
+                    }
+                }
+            }
+            order.setFee(totalFee);
+
+            // 如果手续费从买入的币中扣除（BUY 且手续费币种 = 基础资产），实际到账量需扣减
+            if (order.getSide() == OrderSide.BUY && feeInBaseAsset) {
+                order.setFilledQuantity(executedQty.subtract(totalFee));
+                log.info("[Live Trade] BUY fee deducted from base asset: executedQty={}, fee={}, actualQty={}",
+                        executedQty, totalFee, order.getFilledQuantity());
+            } else {
+                order.setFilledQuantity(executedQty);
             }
         } else if ("PARTIALLY_FILLED".equals(status)) {
             order.setStatus(OrderStatus.PARTIALLY_FILLED);
@@ -220,6 +262,15 @@ public class TradeExecutionService {
     /**
      * 为新开仓设置止盈止损
      */
+    /**
+     * 从交易对中提取基础资产（如 BTC-USDT → BTC）
+     */
+    private String extractBaseAsset(String symbol) {
+        if (symbol == null) return null;
+        int idx = symbol.indexOf('-');
+        return idx > 0 ? symbol.substring(0, idx).toUpperCase() : symbol.toUpperCase();
+    }
+
     private void setStopLossTakeProfit(Order order, Strategy strategy) {
         if (strategy.getStopLossPct() == null && strategy.getTakeProfitPct() == null) {
             return;

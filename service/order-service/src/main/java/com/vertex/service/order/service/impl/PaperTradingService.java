@@ -82,7 +82,6 @@ public class PaperTradingService {
             fillPrice = currentPrice;
         }
 
-        order.setFilledQuantity(order.getQuantity());
         order.setFilledPrice(fillPrice);
 
         // 计算手续费（与回测逻辑对齐: fee = fillPrice * quantity * feeRate）
@@ -91,15 +90,25 @@ public class PaperTradingService {
                     .multiply(feeRate)
                     .setScale(10, RoundingMode.HALF_UP);
             order.setFee(fee);
+
+            // 买入时手续费从币数量中扣减（模拟实盘行为：交易所从买入的币中扣手续费）
+            if (order.getSide() == OrderSide.BUY) {
+                BigDecimal feeInQty = order.getQuantity().multiply(feeRate)
+                        .setScale(10, RoundingMode.DOWN);
+                order.setFilledQuantity(order.getQuantity().subtract(feeInQty));
+            } else {
+                order.setFilledQuantity(order.getQuantity());
+            }
         } else {
             order.setFee(BigDecimal.ZERO);
+            order.setFilledQuantity(order.getQuantity());
         }
 
         order.setStatus(OrderStatus.SIMULATED);
         order.setTradeMode(ExecutionMode.PAPER);
 
-        log.info("[Paper Trading] Order simulated: {} {} {} qty={} price={} fee={}",
+        log.info("[Paper Trading] Order simulated: {} {} {} qty={} actualQty={} price={} fee={}",
                 order.getSide(), order.getExchange(), order.getSymbol(),
-                order.getQuantity(), fillPrice, order.getFee());
+                order.getQuantity(), order.getFilledQuantity(), fillPrice, order.getFee());
     }
 }
