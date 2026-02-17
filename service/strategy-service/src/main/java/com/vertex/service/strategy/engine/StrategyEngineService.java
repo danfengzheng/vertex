@@ -8,6 +8,7 @@ import com.vertex.model.dto.strategy.StrategyIndicatorConfig;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.strategy.Signal;
+import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.vo.strategy.SignalVO;
 import com.vertex.service.quote.store.KLineStore;
@@ -150,7 +151,9 @@ public class StrategyEngineService {
 
         // 生成信号
         Signal signal = signalGenerator.evaluate(strategy, configs, klinesByInterval);
-
+        if(signal.getSignalType() == SignalType.NEUTRAL) {
+            return;
+        }
         // 双写：MySQL + RocksDB
         signalMapper.insert(signal);
         try {

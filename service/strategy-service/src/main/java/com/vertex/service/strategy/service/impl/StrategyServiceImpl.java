@@ -55,6 +55,15 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setInterval(dto.getInterval());
         strategy.setIndicatorConfigs(JSON.toJSONString(dto.getIndicatorConfigs()));
         strategy.setEnabled(0); // 默认禁用
+        // 交易配置
+        strategy.setAutoTrade(dto.getAutoTrade());
+        strategy.setTradeMode(dto.getTradeMode());
+        strategy.setExecutionMode(dto.getExecutionMode());
+        strategy.setAccountId(dto.getAccountId());
+        strategy.setTradeQuantity(dto.getTradeQuantity());
+        strategy.setStopLossPct(dto.getStopLossPct());
+        strategy.setTakeProfitPct(dto.getTakeProfitPct());
+        strategy.setFeeRate(dto.getFeeRate());
         strategyMapper.insert(strategy);
         return strategy.getId();
     }
@@ -85,6 +94,15 @@ public class StrategyServiceImpl implements IStrategyService {
         if (dto.getIndicatorConfigs() != null && !dto.getIndicatorConfigs().isEmpty()) {
             strategy.setIndicatorConfigs(JSON.toJSONString(dto.getIndicatorConfigs()));
         }
+        // 交易配置
+        if (dto.getAutoTrade() != null) strategy.setAutoTrade(dto.getAutoTrade());
+        if (dto.getTradeMode() != null) strategy.setTradeMode(dto.getTradeMode());
+        if (dto.getExecutionMode() != null) strategy.setExecutionMode(dto.getExecutionMode());
+        if (dto.getAccountId() != null) strategy.setAccountId(dto.getAccountId());
+        if (dto.getTradeQuantity() != null) strategy.setTradeQuantity(dto.getTradeQuantity());
+        if (dto.getStopLossPct() != null) strategy.setStopLossPct(dto.getStopLossPct());
+        if (dto.getTakeProfitPct() != null) strategy.setTakeProfitPct(dto.getTakeProfitPct());
+        if (dto.getFeeRate() != null) strategy.setFeeRate(dto.getFeeRate());
 
         strategyMapper.updateById(strategy);
     }

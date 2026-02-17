@@ -8,9 +8,10 @@ spring:
   # 数据源
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/vertex?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:33306/vertex?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
     username: root
-    password: root123
+    password: root
+#    password: root123
     druid:
       initial-size: 5
       min-idle: 5
@@ -61,7 +62,8 @@ vertex:
     # Token请求头，默认为 "Authorization"
     header: "Authorization"
   crypto:
-    key: ${VERTEX_CRYPTO_KEY:}
+#    key: ${VERTEX_CRYPTO_KEY:"pl8LbcpdRsc5AbYphlxM9inSFbhajqJ+oHLUJbJFSP0="}
+    key: pl8LbcpdRsc5AbYphlxM9inSFbhajqJ+oHLUJbJFSP0=
   strategy:
     enabled: true
     rocksdb:
