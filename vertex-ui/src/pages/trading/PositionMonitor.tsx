@@ -96,6 +96,14 @@ export const PositionMonitor = () => {
       render: (val: string) => val || '-',
     },
     {
+      title: t('text.trading.closePrice'),
+      dataIndex: 'closePrice',
+      key: 'closePrice',
+      width: 120,
+      render: (val: string, record: PositionVO) =>
+        record.status === 'CLOSED' && val ? val : '-',
+    },
+    {
       title: t('text.trading.unrealizedPnl'),
       dataIndex: 'unrealizedPnl',
       key: 'unrealizedPnl',
@@ -159,6 +167,14 @@ export const PositionMonitor = () => {
       render: (val: string) => val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-',
     },
     {
+      title: t('text.trading.closedAt'),
+      dataIndex: 'closedAt',
+      key: 'closedAt',
+      width: 180,
+      render: (val: string, record: PositionVO) =>
+        record.status === 'CLOSED' && val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-',
+    },
+    {
       title: t('common.operation'),
       key: 'action',
       width: 120,
@@ -204,7 +220,7 @@ export const PositionMonitor = () => {
         dataSource={positions}
         loading={loading}
         rowKey="id"
-        scroll={{ x: 1600 }}
+        scroll={{ x: 1900 }}
         pagination={{
           current: query.pageNum,
           pageSize: query.pageSize,

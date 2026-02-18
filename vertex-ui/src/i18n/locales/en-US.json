@@ -291,6 +291,8 @@
       "short": "Short",
       "open": "Open",
       "closed": "Closed",
+      "closePrice": "Close Price",
+      "closedAt": "Closed At",
       "closePosition": "Close",
       "closeConfirm": "Close this position?",
       "testConnection": "Test Connection",

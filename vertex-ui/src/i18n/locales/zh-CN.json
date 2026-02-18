@@ -291,6 +291,8 @@
       "short": "做空",
       "open": "持仓中",
       "closed": "已平仓",
+      "closePrice": "平仓价",
+      "closedAt": "平仓时间",
       "closePosition": "平仓",
       "closeConfirm": "确认平仓该持仓？",
       "testConnection": "测试连接",

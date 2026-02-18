@@ -69,6 +69,8 @@ export interface PositionVO {
   realizedPnl: string;
   stopLoss: string;
   takeProfit: string;
+  closePrice: string;
+  closedAt: string;
   status: PositionStatus;
   tradeMode: ExecutionMode;
   createTime: string;

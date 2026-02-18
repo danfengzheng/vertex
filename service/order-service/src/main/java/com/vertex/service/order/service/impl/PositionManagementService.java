@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -101,11 +102,13 @@ public class PositionManagementService {
             existing.setRealizedPnl(existing.getRealizedPnl().add(pnl));
             existing.setUnrealizedPnl(BigDecimal.ZERO);
             existing.setCurrentPrice(order.getFilledPrice());
+            existing.setClosePrice(order.getFilledPrice());
+            existing.setClosedAt(LocalDateTime.now());
             existing.setStatus(PositionStatus.CLOSED);
 
             positionMapper.updateById(existing);
-            log.info("Position closed: {} {} pnl={}",
-                    order.getExchange(), order.getSymbol(), pnl);
+            log.info("Position closed: {} {} closePrice={} pnl={}",
+                    order.getExchange(), order.getSymbol(), order.getFilledPrice(), pnl);
         } else {
             // 部分平仓
             existing.setQuantity(existing.getQuantity().subtract(sellQty));
@@ -128,12 +131,15 @@ public class PositionManagementService {
 
         position.setQuantity(BigDecimal.ZERO);
         position.setCurrentPrice(closePrice);
+        position.setClosePrice(closePrice);
+        position.setClosedAt(LocalDateTime.now());
         position.setRealizedPnl(position.getRealizedPnl().add(pnl));
         position.setUnrealizedPnl(BigDecimal.ZERO);
         position.setStatus(PositionStatus.CLOSED);
 
         positionMapper.updateById(position);
-        log.info("Position manually closed: {} {} pnl={}", position.getExchange(), position.getSymbol(), pnl);
+        log.info("Position manually closed: {} {} closePrice={} pnl={}",
+                position.getExchange(), position.getSymbol(), closePrice, pnl);
     }
 
     /**

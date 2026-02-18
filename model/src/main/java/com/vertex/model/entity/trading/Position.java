@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * 持仓实体
@@ -55,6 +56,12 @@ public class Position extends BaseEntity {
 
     /** 止盈价 */
     private BigDecimal takeProfit;
+
+    /** 平仓价格 */
+    private BigDecimal closePrice;
+
+    /** 平仓时间 */
+    private LocalDateTime closedAt;
 
     /** 持仓状态 OPEN/CLOSED */
     private PositionStatus status;
