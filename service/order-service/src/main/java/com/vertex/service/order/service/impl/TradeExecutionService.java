@@ -8,6 +8,7 @@ import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.entity.trading.*;
 import com.vertex.service.order.client.BinanceTradeClient;
+import com.vertex.service.order.config.TradingProperties;
 import com.vertex.service.order.mapper.OrderMapper;
 import com.vertex.service.order.notify.CompositeTradeNotifier;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ public class TradeExecutionService {
     private final PositionManagementService positionManagementService;
     private final BinanceTradeClient binanceTradeClient;
     private final CompositeTradeNotifier compositeTradeNotifier;
+    private final TradingProperties tradingProperties;
 
     /**
      * 信号触发的交易执行入口
@@ -92,6 +94,7 @@ public class TradeExecutionService {
         order.setSide(side);
         order.setOrderType(OrderType.MARKET);
         order.setQuantity(quantity);
+        order.setPrice(signal.getPrice());  // 记录信号触发价格，用于滑点校验
         order.setTradeMode(strategy.getExecutionMode());
 
         TradeMode tradeMode = strategy.getTradeMode();
@@ -160,8 +163,11 @@ public class TradeExecutionService {
                 BigDecimal feeRate = strategy != null ? strategy.getFeeRate() : null;
                 paperTradingService.simulateFill(order, feeRate);
             } else {
-                // 实盘交易
-                executeLive(order);
+                // 实盘交易：滑点保护 → 执行
+                if (applySlippageProtection(order)) {
+                    executeLive(order);
+                }
+                // applySlippageProtection 返回 false 时已设置 REJECTED 状态
             }
 
             orderMapper.updateById(order);
@@ -185,6 +191,75 @@ public class TradeExecutionService {
             orderMapper.updateById(order);
             log.error("Trade execution failed for order {}: {}", order.getId(), e.getMessage(), e);
         }
+    }
+
+    /**
+     * 滑点保护：检查当前市价与信号价偏差，通过后转换为 LIMIT 单
+     *
+     * @return true 允许执行，false 拒绝（order 已设为 REJECTED）
+     */
+    private boolean applySlippageProtection(Order order) {
+        TradingProperties.Slippage config = tradingProperties.getSlippage();
+        if (config == null || !config.isEnabled()) {
+            return true;  // 未启用，保持 MARKET 单原有行为
+        }
+
+        // 1. 获取当前市价
+        BigDecimal currentPrice = paperTradingService.getCurrentPrice(
+                order.getExchange(), order.getSymbol());
+        if (currentPrice == null) {
+            log.warn("[Slippage] No price data for {} {}, falling back to MARKET order",
+                    order.getExchange(), order.getSymbol());
+            return true;  // 无价格数据时降级为 MARKET
+        }
+
+        // 2. 滑点检查：比较信号价格 vs 当前市价
+        BigDecimal signalPrice = order.getPrice();
+        if (signalPrice != null && signalPrice.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal deviation = currentPrice.subtract(signalPrice).abs()
+                    .divide(signalPrice, 6, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100));
+
+            if (deviation.compareTo(config.getMaxSlippagePct()) > 0) {
+                log.warn("[Slippage] Price deviation {}% exceeds max {}% (signal={}, current={}), rejecting order",
+                        deviation, config.getMaxSlippagePct(), signalPrice, currentPrice);
+                order.setStatus(OrderStatus.REJECTED);
+                order.setErrorMsg(String.format("价格偏差 %s%% 超过阈值 %s%% (信号价: %s, 当前价: %s)",
+                        deviation.setScale(2, RoundingMode.HALF_UP),
+                        config.getMaxSlippagePct(),
+                        signalPrice, currentPrice));
+                return false;
+            }
+        }
+
+        // 3. 转换为 LIMIT 单
+        BigDecimal limitPricePct = config.getLimitPricePct()
+                .divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP);
+
+        BigDecimal limitPrice;
+        if (order.getSide() == OrderSide.BUY) {
+            // 买入限价 = 当前市价 × (1 + pct)，允许略高于市价买入
+            limitPrice = currentPrice.multiply(BigDecimal.ONE.add(limitPricePct));
+        } else {
+            // 卖出限价 = 当前市价 × (1 - pct)，允许略低于市价卖出
+            limitPrice = currentPrice.multiply(BigDecimal.ONE.subtract(limitPricePct));
+        }
+
+        order.setOrderType(OrderType.LIMIT);
+        order.setPrice(limitPrice.setScale(getPriceScale(currentPrice), RoundingMode.HALF_UP));
+
+        log.info("[Slippage] Converted to LIMIT order: {} {} price={} (current={}, signal={})",
+                order.getSide(), order.getSymbol(), order.getPrice(), currentPrice, signalPrice);
+        return true;
+    }
+
+    /**
+     * 根据价格量级决定小数位精度（Binance 对不同币种有不同精度要求）
+     */
+    private int getPriceScale(BigDecimal price) {
+        if (price.compareTo(BigDecimal.valueOf(10)) < 0) return 4;
+        if (price.compareTo(BigDecimal.valueOf(1000)) < 0) return 2;
+        return 2;
     }
 
     /**

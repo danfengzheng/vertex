@@ -192,6 +192,13 @@ public class PositionManagementService {
     }
 
     /**
+     * 更新持仓的当前价格和未实现盈亏（持久化到数据库）
+     */
+    public void updateCurrentPrice(Position position) {
+        positionMapper.updateById(position);
+    }
+
+    /**
      * 更新持仓的止盈止损价格（持久化到数据库）
      */
     public void updateStopLossTakeProfit(Position position) {
