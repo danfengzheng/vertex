@@ -7,6 +7,7 @@ import {
   StopOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import dayjs from 'dayjs';
 import {
   orderApi,
   OrderVO,
@@ -151,6 +152,7 @@ export const OrderHistory = () => {
       dataIndex: 'createTime',
       key: 'createTime',
       width: 180,
+      render: (val: string) => val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-',
     },
     {
       title: t('common.operation'),
