@@ -139,9 +139,21 @@ public class StrategyEngineService {
                 int required = ind.requiredDataPoints(config.getParams());
                 int fetchSize = Math.min(required + 10, properties.getEngine().getMaxKlineHistory());
 
+                // 多取一些以弥补过滤未收盘K线后的数量损失
+                int querySize = properties.getEngine().isOnlyClosedKlines() ? fetchSize + 1 : fetchSize;
                 List<KLine> klines = klineStore.query(
                         strategy.getExchange(), strategy.getSymbol(),
-                        effectiveInterval, null, null, fetchSize, false);
+                        effectiveInterval, null, null, querySize, false);
+
+                // 过滤未收盘K线，确保指标计算只使用已收盘数据（与回测一致）
+                if (properties.getEngine().isOnlyClosedKlines()) {
+                    klines = klines.stream()
+                            .filter(k -> Boolean.TRUE.equals(k.getClosed()))
+                            .toList();
+                }
+
+                // 降序查询结果翻转为升序（时间从早到晚）
+                klines = new ArrayList<>(klines);
                 Collections.reverse(klines);
 
                 if (klines.size() < required) {
