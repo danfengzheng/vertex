@@ -26,24 +26,27 @@ public class PaperTradingService {
 
     private final KLineStore klineStore;
 
+    /** 按周期从小到大排列，优先取最小周期的最新价格 */
+    private static final KLineInterval[] PRICE_QUERY_INTERVALS = {
+            KLineInterval.M1, KLineInterval.M3, KLineInterval.M5,
+            KLineInterval.M15, KLineInterval.M30,
+            KLineInterval.H1, KLineInterval.H2, KLineInterval.H4,
+            KLineInterval.H6, KLineInterval.H8, KLineInterval.H12,
+            KLineInterval.D1
+    };
+
     /**
      * 获取当前价格（从 KLineStore 取最新 K线收盘价）
+     * <p>
+     * 按周期从小到大依次查询，返回第一个有数据的周期的最新收盘价。
+     * 策略可能只订阅了特定周期（如 15m），因此需要遍历所有周期。
      */
     public BigDecimal getCurrentPrice(String exchange, String symbol) {
-        // 使用 1m K线获取最近价格
-        List<KLine> klines = klineStore.query(exchange, symbol, KLineInterval.M1, null, null, 1, false);
-        if (!klines.isEmpty()) {
-            return klines.get(0).getClose();
-        }
-        // 回退到 5m
-        klines = klineStore.query(exchange, symbol, KLineInterval.M5, null, null, 1, false);
-        if (!klines.isEmpty()) {
-            return klines.get(0).getClose();
-        }
-        // 回退到 1h
-        klines = klineStore.query(exchange, symbol, KLineInterval.H1, null, null, 1, false);
-        if (!klines.isEmpty()) {
-            return klines.get(0).getClose();
+        for (KLineInterval interval : PRICE_QUERY_INTERVALS) {
+            List<KLine> klines = klineStore.query(exchange, symbol, interval, null, null, 1, false);
+            if (!klines.isEmpty()) {
+                return klines.get(0).getClose();
+            }
         }
         log.warn("No price data available for {}:{}", exchange, symbol);
         return null;
