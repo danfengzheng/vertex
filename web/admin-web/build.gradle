@@ -36,6 +36,7 @@ bootJar {
     mainClass = 'com.vertex.admin.web.AdminApplication'
 }
 
+// 只打可执行 fat jar，禁用 plain jar，避免打出仅几百字节的无用包
 jar {
     enabled = false
 }

@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
+import dayjs from 'dayjs';
 import { Table, Button, Space, message, Tag, Select, Popconfirm } from 'antd';
 import { ReloadOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import dayjs from 'dayjs';
 import {
   positionApi,
   PositionVO,
@@ -96,14 +96,6 @@ export const PositionMonitor = () => {
       render: (val: string) => val || '-',
     },
     {
-      title: t('text.trading.closePrice'),
-      dataIndex: 'closePrice',
-      key: 'closePrice',
-      width: 120,
-      render: (val: string, record: PositionVO) =>
-        record.status === 'CLOSED' && val ? val : '-',
-    },
-    {
       title: t('text.trading.unrealizedPnl'),
       dataIndex: 'unrealizedPnl',
       key: 'unrealizedPnl',
@@ -163,16 +155,15 @@ export const PositionMonitor = () => {
       title: t('common.createTime'),
       dataIndex: 'createTime',
       key: 'createTime',
-      width: 180,
+      width: 170,
       render: (val: string) => val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-',
     },
     {
-      title: t('text.trading.closedAt'),
-      dataIndex: 'closedAt',
-      key: 'closedAt',
-      width: 180,
-      render: (val: string, record: PositionVO) =>
-        record.status === 'CLOSED' && val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-',
+      title: t('common.updateTime'),
+      dataIndex: 'updateTime',
+      key: 'updateTime',
+      width: 170,
+      render: (val: string) => val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-',
     },
     {
       title: t('common.operation'),
@@ -220,7 +211,7 @@ export const PositionMonitor = () => {
         dataSource={positions}
         loading={loading}
         rowKey="id"
-        scroll={{ x: 1900 }}
+        scroll={{ x: 1400 }}
         pagination={{
           current: query.pageNum,
           pageSize: query.pageSize,

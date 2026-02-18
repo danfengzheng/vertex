@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import dayjs from 'dayjs';
 import { Table, Button, Space, message, Tag, Select, Popconfirm } from 'antd';
 import {
   ReloadOutlined,
@@ -7,7 +8,6 @@ import {
   StopOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import dayjs from 'dayjs';
 import {
   orderApi,
   OrderVO,
@@ -151,7 +151,14 @@ export const OrderHistory = () => {
       title: t('common.createTime'),
       dataIndex: 'createTime',
       key: 'createTime',
-      width: 180,
+      width: 170,
+      render: (val: string) => val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-',
+    },
+    {
+      title: t('common.updateTime'),
+      dataIndex: 'updateTime',
+      key: 'updateTime',
+      width: 170,
       render: (val: string) => val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-',
     },
     {
