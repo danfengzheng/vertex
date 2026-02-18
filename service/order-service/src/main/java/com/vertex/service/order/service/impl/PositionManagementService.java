@@ -93,8 +93,11 @@ public class PositionManagementService {
         }
 
         BigDecimal sellQty = order.getFilledQuantity();
-        BigDecimal pnl = order.getFilledPrice().subtract(existing.getEntryPrice())
+        BigDecimal grossPnl = order.getFilledPrice().subtract(existing.getEntryPrice())
                 .multiply(sellQty);
+        // 扣除卖出手续费，与回测 PnL 计算对齐
+        BigDecimal sellFee = order.getFee() != null ? order.getFee() : BigDecimal.ZERO;
+        BigDecimal pnl = grossPnl.subtract(sellFee);
 
         if (sellQty.compareTo(existing.getQuantity()) >= 0) {
             // 全部平仓
@@ -107,8 +110,8 @@ public class PositionManagementService {
             existing.setStatus(PositionStatus.CLOSED);
 
             positionMapper.updateById(existing);
-            log.info("Position closed: {} {} closePrice={} pnl={}",
-                    order.getExchange(), order.getSymbol(), order.getFilledPrice(), pnl);
+            log.info("Position closed: {} {} closePrice={} grossPnl={} fee={} netPnl={}",
+                    order.getExchange(), order.getSymbol(), order.getFilledPrice(), grossPnl, sellFee, pnl);
         } else {
             // 部分平仓
             existing.setQuantity(existing.getQuantity().subtract(sellQty));
@@ -117,8 +120,8 @@ public class PositionManagementService {
             updateUnrealizedPnl(existing);
 
             positionMapper.updateById(existing);
-            log.info("Position reduced: {} {} remainQty={} pnl={}",
-                    order.getExchange(), order.getSymbol(), existing.getQuantity(), pnl);
+            log.info("Position reduced: {} {} remainQty={} grossPnl={} fee={} netPnl={}",
+                    order.getExchange(), order.getSymbol(), existing.getQuantity(), grossPnl, sellFee, pnl);
         }
     }
 
@@ -222,6 +225,36 @@ public class PositionManagementService {
                 .eq(Position::getStatus, PositionStatus.OPEN)
                 .eq(Position::getDeleted, 0);
         return positionMapper.selectList(wrapper);
+    }
+
+    /**
+     * 计算策略所有已关闭仓位的累计已实现盈亏
+     */
+    public BigDecimal getTotalRealizedPnl(Long strategyId, Long accountId) {
+        LambdaQueryWrapper<Position> wrapper = new LambdaQueryWrapper<Position>()
+                .eq(Position::getStrategyId, strategyId)
+                .eq(Position::getAccountId, accountId)
+                .eq(Position::getStatus, PositionStatus.CLOSED)
+                .eq(Position::getDeleted, 0);
+        List<Position> closedPositions = positionMapper.selectList(wrapper);
+        return closedPositions.stream()
+                .map(p -> p.getRealizedPnl() != null ? p.getRealizedPnl() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * 计算策略当前持仓占用的资金（entryPrice * quantity 之和）
+     */
+    public BigDecimal getOccupiedCapital(Long strategyId, Long accountId) {
+        LambdaQueryWrapper<Position> wrapper = new LambdaQueryWrapper<Position>()
+                .eq(Position::getStrategyId, strategyId)
+                .eq(Position::getAccountId, accountId)
+                .eq(Position::getStatus, PositionStatus.OPEN)
+                .eq(Position::getDeleted, 0);
+        List<Position> openPositions = positionMapper.selectList(wrapper);
+        return openPositions.stream()
+                .map(p -> p.getEntryPrice().multiply(p.getQuantity()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private void updateUnrealizedPnl(Position position) {

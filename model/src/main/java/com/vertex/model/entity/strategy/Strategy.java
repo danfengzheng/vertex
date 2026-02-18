@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.vertex.common.core.base.BaseEntity;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.trading.ExecutionMode;
+import com.vertex.model.entity.trading.PositionSizing;
 import com.vertex.model.entity.trading.TradeMode;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -60,8 +61,17 @@ public class Strategy extends BaseEntity {
     /** 关联交易账户ID */
     private Long accountId;
 
-    /** 每次交易数量 */
+    /** 仓位计算模式 FIXED/PERCENT */
+    private PositionSizing positionSizing;
+
+    /** 每次交易数量（FIXED 模式） */
     private BigDecimal tradeQuantity;
+
+    /** 仓位比例 0-1（PERCENT 模式，默认 1.0 = 全仓） */
+    private BigDecimal positionRatio;
+
+    /** 模拟初始资金（PERCENT + PAPER 模式） */
+    private BigDecimal initialCapital;
 
     /** 止损百分比 */
     private BigDecimal stopLossPct;

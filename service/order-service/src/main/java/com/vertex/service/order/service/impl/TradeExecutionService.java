@@ -71,12 +71,13 @@ public class TradeExecutionService {
 
         OrderSide side = signal.getSignalType() == SignalType.BUY ? OrderSide.BUY : OrderSide.SELL;
 
-        // 确定下单数量：卖出时使用持仓数量（避免因手续费扣减导致余额不足），买入时使用策略配置
+        // 确定下单数量
         BigDecimal quantity;
         if (side == OrderSide.SELL && openPosition != null) {
+            // 卖出时使用持仓数量（避免因手续费扣减导致余额不足）
             quantity = openPosition.getQuantity();
         } else {
-            quantity = strategy.getTradeQuantity();
+            quantity = calculateBuyQuantity(strategy, signal);
         }
 
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
@@ -191,6 +192,116 @@ public class TradeExecutionService {
             orderMapper.updateById(order);
             log.error("Trade execution failed for order {}: {}", order.getId(), e.getMessage(), e);
         }
+    }
+
+    /**
+     * 计算买入数量
+     * <p>
+     * FIXED 模式：使用策略配置的固定数量 tradeQuantity
+     * PERCENT 模式：按资金比例动态计算
+     *   - PAPER 模式：使用模拟资金 (initialCapital + 已实现盈亏)
+     *   - LIVE 模式：查询交易所实际 USDT 余额
+     * </p>
+     */
+    private BigDecimal calculateBuyQuantity(Strategy strategy, Signal signal) {
+        if (strategy.getPositionSizing() != PositionSizing.PERCENT) {
+            // FIXED 模式或未设置：使用固定数量
+            return strategy.getTradeQuantity();
+        }
+
+        // PERCENT 模式：需要获取可用资金和当前价格
+        BigDecimal currentPrice = paperTradingService.getCurrentPrice(
+                strategy.getExchange(), strategy.getSymbol());
+        if (currentPrice == null || currentPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("[PositionSizing] No price data for {} {}, falling back to tradeQuantity",
+                    strategy.getExchange(), strategy.getSymbol());
+            return strategy.getTradeQuantity();
+        }
+
+        BigDecimal positionRatio = strategy.getPositionRatio() != null
+                ? strategy.getPositionRatio() : BigDecimal.ONE;
+
+        BigDecimal availableCapital;
+        if (strategy.getExecutionMode() == ExecutionMode.LIVE) {
+            // 实盘：查询交易所 USDT 余额
+            availableCapital = getAvailableCapitalLive(strategy);
+        } else {
+            // 模拟：计算虚拟可用资金
+            availableCapital = getAvailableCapitalPaper(strategy);
+        }
+
+        if (availableCapital == null || availableCapital.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("[PositionSizing] No available capital for strategy [{}], falling back to tradeQuantity",
+                    strategy.getName());
+            return strategy.getTradeQuantity();
+        }
+
+        // 下单金额 = 可用资金 * 仓位比例
+        BigDecimal tradeAmount = availableCapital.multiply(positionRatio);
+
+        // 扣除预估手续费后买入
+        BigDecimal feeRate = strategy.getFeeRate() != null ? strategy.getFeeRate() : BigDecimal.ZERO;
+        BigDecimal netAmount = tradeAmount.multiply(BigDecimal.ONE.subtract(feeRate));
+
+        // 数量 = 净金额 / 当前价格
+        BigDecimal quantity = netAmount.divide(currentPrice, 8, RoundingMode.DOWN);
+
+        log.info("[PositionSizing] PERCENT mode: capital={}, ratio={}, tradeAmount={}, price={}, qty={}",
+                availableCapital, positionRatio, tradeAmount, currentPrice, quantity);
+        return quantity;
+    }
+
+    /**
+     * 获取实盘可用资金（查询交易所 USDT 余额）
+     */
+    private BigDecimal getAvailableCapitalLive(Strategy strategy) {
+        if (strategy.getAccountId() == null) {
+            return null;
+        }
+        // 从交易对中提取计价资产（通常是 USDT）
+        String quoteAsset = extractQuoteAsset(strategy.getSymbol());
+        return accountService.getAvailableBalance(strategy.getAccountId(), quoteAsset);
+    }
+
+    /**
+     * 获取模拟可用资金（初始资金 + 已关闭仓位的已实现盈亏 - 当前持仓占用资金）
+     */
+    private BigDecimal getAvailableCapitalPaper(Strategy strategy) {
+        BigDecimal initialCapital = strategy.getInitialCapital() != null
+                ? strategy.getInitialCapital() : new BigDecimal("10000");
+
+        // 累计已实现盈亏：从所有已关闭仓位汇总
+        BigDecimal totalRealizedPnl = positionManagementService.getTotalRealizedPnl(
+                strategy.getId(), strategy.getAccountId());
+
+        // 当前持仓占用资金：entryPrice * quantity
+        BigDecimal occupiedCapital = positionManagementService.getOccupiedCapital(
+                strategy.getId(), strategy.getAccountId());
+
+        BigDecimal available = initialCapital.add(totalRealizedPnl).subtract(occupiedCapital);
+        log.debug("[PositionSizing] Paper capital: initial={}, pnl={}, occupied={}, available={}",
+                initialCapital, totalRealizedPnl, occupiedCapital, available);
+        return available;
+    }
+
+    /**
+     * 从交易对中提取计价资产（如 BTC-USDT → USDT, ETHUSDT → USDT）
+     */
+    private String extractQuoteAsset(String symbol) {
+        if (symbol == null) return "USDT";
+        // 支持 BTC-USDT 和 BTCUSDT 两种格式
+        int idx = symbol.indexOf('-');
+        if (idx > 0) {
+            return symbol.substring(idx + 1).toUpperCase();
+        }
+        // 尝试常见后缀
+        String upper = symbol.toUpperCase();
+        for (String quote : new String[]{"USDT", "BUSD", "USDC", "BTC", "ETH", "BNB"}) {
+            if (upper.endsWith(quote)) {
+                return quote;
+            }
+        }
+        return "USDT";
     }
 
     /**

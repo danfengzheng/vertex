@@ -53,6 +53,9 @@ export type TradeMode = 'AUTO' | 'MANUAL';
 /** 执行模式 */
 export type ExecutionMode = 'LIVE' | 'PAPER';
 
+/** 仓位计算模式 */
+export type PositionSizing = 'FIXED' | 'PERCENT';
+
 /** 策略 VO */
 export interface StrategyVO {
   id: string;
@@ -71,8 +74,14 @@ export interface StrategyVO {
   executionMode?: ExecutionMode;
   /** 交易所账户ID */
   accountId?: string;
-  /** 每次交易数量 */
+  /** 仓位计算模式 */
+  positionSizing?: PositionSizing;
+  /** 每次交易数量（FIXED模式） */
   tradeQuantity?: number;
+  /** 仓位比例 0-1（PERCENT模式） */
+  positionRatio?: number;
+  /** 模拟初始资金（PERCENT+PAPER模式） */
+  initialCapital?: number;
   /** 止损百分比 */
   stopLossPct?: number;
   /** 止盈百分比 */
@@ -112,7 +121,10 @@ export interface StrategyCreateDTO {
   tradeMode?: TradeMode;
   executionMode?: ExecutionMode;
   accountId?: string;
+  positionSizing?: PositionSizing;
   tradeQuantity?: number;
+  positionRatio?: number;
+  initialCapital?: number;
   stopLossPct?: number;
   takeProfitPct?: number;
   feeRate?: number;
@@ -131,7 +143,10 @@ export interface StrategyUpdateDTO {
   tradeMode?: TradeMode;
   executionMode?: ExecutionMode;
   accountId?: string;
+  positionSizing?: PositionSizing;
   tradeQuantity?: number;
+  positionRatio?: number;
+  initialCapital?: number;
   stopLossPct?: number;
   takeProfitPct?: number;
   feeRate?: number;
