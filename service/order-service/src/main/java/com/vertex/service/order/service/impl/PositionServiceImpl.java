@@ -116,6 +116,8 @@ public class PositionServiceImpl implements IPositionService {
                 .realizedPnl(position.getRealizedPnl())
                 .stopLoss(position.getStopLoss())
                 .takeProfit(position.getTakeProfit())
+                .closePrice(position.getClosePrice())
+                .closedAt(position.getClosedAt())
                 .status(position.getStatus())
                 .tradeMode(position.getTradeMode())
                 .createTime(position.getCreateTime())

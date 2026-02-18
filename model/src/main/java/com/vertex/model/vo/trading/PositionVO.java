@@ -36,6 +36,8 @@ public class PositionVO implements Serializable {
     private BigDecimal realizedPnl;
     private BigDecimal stopLoss;
     private BigDecimal takeProfit;
+    private BigDecimal closePrice;
+    private LocalDateTime closedAt;
     private PositionStatus status;
     private ExecutionMode tradeMode;
     private LocalDateTime createTime;
