@@ -16,6 +16,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -82,6 +83,25 @@ public class PositionServiceImpl implements IPositionService {
     }
 
     private PositionVO toVO(Position position) {
+        // 活跃持仓实时刷新当前价格和未实现盈亏
+        BigDecimal currentPrice = position.getCurrentPrice();
+        BigDecimal unrealizedPnl = position.getUnrealizedPnl();
+
+        if (position.getStatus() == PositionStatus.OPEN) {
+            BigDecimal latestPrice = paperTradingService.getCurrentPrice(
+                    position.getExchange(), position.getSymbol());
+            if (latestPrice != null) {
+                currentPrice = latestPrice;
+                if (position.getEntryPrice() != null
+                        && position.getQuantity() != null
+                        && position.getQuantity().compareTo(BigDecimal.ZERO) > 0) {
+                    unrealizedPnl = latestPrice.subtract(position.getEntryPrice())
+                            .multiply(position.getQuantity())
+                            .setScale(10, RoundingMode.HALF_UP);
+                }
+            }
+        }
+
         return PositionVO.builder()
                 .id(position.getId())
                 .strategyId(position.getStrategyId())
@@ -91,8 +111,8 @@ public class PositionServiceImpl implements IPositionService {
                 .side(position.getSide())
                 .quantity(position.getQuantity())
                 .entryPrice(position.getEntryPrice())
-                .currentPrice(position.getCurrentPrice())
-                .unrealizedPnl(position.getUnrealizedPnl())
+                .currentPrice(currentPrice)
+                .unrealizedPnl(unrealizedPnl)
                 .realizedPnl(position.getRealizedPnl())
                 .stopLoss(position.getStopLoss())
                 .takeProfit(position.getTakeProfit())
