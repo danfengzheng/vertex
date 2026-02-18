@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Table, Button, Space, message, Tag, Select, Popconfirm } from 'antd';
 import { ReloadOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import dayjs from 'dayjs';
 import {
   positionApi,
   PositionVO,
@@ -151,6 +152,13 @@ export const PositionMonitor = () => {
       ),
     },
     {
+      title: t('common.createTime'),
+      dataIndex: 'createTime',
+      key: 'createTime',
+      width: 180,
+      render: (val: string) => val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-',
+    },
+    {
       title: t('common.operation'),
       key: 'action',
       width: 120,
@@ -196,7 +204,7 @@ export const PositionMonitor = () => {
         dataSource={positions}
         loading={loading}
         rowKey="id"
-        scroll={{ x: 1400 }}
+        scroll={{ x: 1600 }}
         pagination={{
           current: query.pageNum,
           pageSize: query.pageSize,
