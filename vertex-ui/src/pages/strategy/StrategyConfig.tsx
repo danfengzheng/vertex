@@ -350,6 +350,7 @@ export const StrategyConfig = () => {
 
   // 自动交易
   const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
+  const [positionSizingMode, setPositionSizingMode] = useState<string>('FIXED');
   const [accounts, setAccounts] = useState<ExchangeAccountVO[]>([]);
 
   // 回测
@@ -394,9 +395,10 @@ export const StrategyConfig = () => {
     setEditingId(null);
     setEditingRecord(null);
     form.resetFields();
-    form.setFieldsValue({ indicatorConfigs: [{}], autoTrade: 0 });
+    form.setFieldsValue({ indicatorConfigs: [{}], autoTrade: 0, positionSizing: 'FIXED' });
     setIndicatorTypes([undefined]);
     setAutoTradeEnabled(false);
+    setPositionSizingMode('FIXED');
     setModalVisible(true);
   };
 
@@ -422,6 +424,7 @@ export const StrategyConfig = () => {
     });
     setIndicatorTypes(record.indicatorConfigs.map((c) => c.indicatorType));
     setAutoTradeEnabled(record.autoTrade === 1);
+    setPositionSizingMode(record.positionSizing || 'FIXED');
     setModalVisible(true);
   };
 
@@ -796,13 +799,47 @@ export const StrategyConfig = () => {
 
               <Space style={{ width: '100%' }} size="large" wrap>
                 <Form.Item
-                  name="tradeQuantity"
-                  label={t('text.trading.tradeQuantity')}
-                  rules={[{ required: true, message: t('text.trading.tradeQuantityPlaceholder') }]}
+                  name="positionSizing"
+                  label={t('text.trading.positionSizing')}
+                  initialValue="FIXED"
                 >
-                  <InputNumber min={0} step={0.001} style={{ width: 160 }} placeholder="0.001" />
+                  <Select style={{ width: 160 }} onChange={(val) => setPositionSizingMode(val)}>
+                    <Select.Option value="FIXED">{t('text.trading.positionSizingFixed')}</Select.Option>
+                    <Select.Option value="PERCENT">{t('text.trading.positionSizingPercent')}</Select.Option>
+                  </Select>
                 </Form.Item>
 
+                {positionSizingMode === 'FIXED' ? (
+                  <Form.Item
+                    name="tradeQuantity"
+                    label={t('text.trading.tradeQuantity')}
+                    rules={[{ required: positionSizingMode === 'FIXED', message: t('text.trading.tradeQuantityPlaceholder') }]}
+                  >
+                    <InputNumber min={0} step={0.001} style={{ width: 160 }} placeholder="0.001" />
+                  </Form.Item>
+                ) : (
+                  <>
+                    <Form.Item
+                      name="positionRatio"
+                      label={t('text.trading.positionRatio')}
+                      tooltip={t('text.trading.positionRatioTip')}
+                      initialValue={1.0}
+                    >
+                      <InputNumber min={0.01} max={1} step={0.1} style={{ width: 160 }} addonAfter="x" />
+                    </Form.Item>
+                    <Form.Item
+                      name="initialCapital"
+                      label={t('text.trading.initialCapital')}
+                      tooltip={t('text.trading.initialCapitalTip')}
+                      initialValue={10000}
+                    >
+                      <InputNumber min={0} step={100} style={{ width: 160 }} addonAfter="USDT" />
+                    </Form.Item>
+                  </>
+                )}
+              </Space>
+
+              <Space style={{ width: '100%' }} size="large" wrap>
                 <Form.Item
                   name="stopLossPct"
                   label={t('text.trading.stopLoss')}

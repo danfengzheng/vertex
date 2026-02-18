@@ -3,7 +3,9 @@ package com.vertex.service.strategy.controller;
 import com.vertex.web.response.Result;
 import com.vertex.model.dto.strategy.BacktestConfigDTO;
 import com.vertex.model.vo.strategy.BacktestResultVO;
+import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.service.strategy.backtest.BacktestService;
+import com.vertex.service.strategy.mapper.StrategyMapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ import java.math.BigDecimal;
 public class BacktestController {
 
     private final BacktestService backtestService;
+    private final StrategyMapper strategyMapper;
 
     @PostMapping("/run")
     @Operation(summary = "执行策略回测")
@@ -41,13 +44,24 @@ public class BacktestController {
         long endTime = System.currentTimeMillis();
         long startTime = endTime - (long) days * 24 * 60 * 60 * 1000;
 
+        // 从策略配置读取默认值，参数传入的值优先
+        Strategy strategy = strategyMapper.selectById(strategyId);
+        BigDecimal defaultFeeRate = new BigDecimal("0.001");
+        BigDecimal defaultRatio = BigDecimal.ONE;
+        BigDecimal defaultCapital = new BigDecimal("10000");
+        if (strategy != null) {
+            if (strategy.getFeeRate() != null) defaultFeeRate = strategy.getFeeRate();
+            if (strategy.getPositionRatio() != null) defaultRatio = strategy.getPositionRatio();
+            if (strategy.getInitialCapital() != null) defaultCapital = strategy.getInitialCapital();
+        }
+
         BacktestConfigDTO config = new BacktestConfigDTO();
         config.setStrategyId(strategyId);
         config.setStartTime(startTime);
         config.setEndTime(endTime);
-        config.setInitialCapital(initialCapital != null ? initialCapital : new BigDecimal("10000"));
-        config.setPositionRatio(positionRatio != null ? positionRatio : BigDecimal.ONE);
-        config.setFeeRate(feeRate != null ? feeRate : new BigDecimal("0.001"));
+        config.setInitialCapital(initialCapital != null ? initialCapital : defaultCapital);
+        config.setPositionRatio(positionRatio != null ? positionRatio : defaultRatio);
+        config.setFeeRate(feeRate != null ? feeRate : defaultFeeRate);
 
         return Result.success(backtestService.runBacktest(config));
     }

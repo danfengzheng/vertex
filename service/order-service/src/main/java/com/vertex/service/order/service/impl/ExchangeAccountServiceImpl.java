@@ -11,10 +11,13 @@ import com.vertex.model.entity.trading.ExchangeAccount;
 import com.vertex.model.vo.trading.ExchangeAccountVO;
 import com.vertex.service.order.client.BinanceTradeClient;
 import com.vertex.service.order.mapper.ExchangeAccountMapper;
+import com.alibaba.fastjson2.JSONArray;
+import com.alibaba.fastjson2.JSONObject;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -138,6 +141,34 @@ public class ExchangeAccountServiceImpl implements IExchangeAccountService {
                 cryptoService.decrypt(account.getApiKey()),
                 cryptoService.decrypt(account.getApiSecret())
         };
+    }
+
+    /**
+     * 查询指定账户中某资产的可用余额
+     *
+     * @param accountId 交易所账户ID
+     * @param asset     资产名称（如 "USDT"）
+     * @return 可用余额，查询失败返回 null
+     */
+    public BigDecimal getAvailableBalance(Long accountId, String asset) {
+        try {
+            String[] credentials = getDecryptedCredentials(accountId);
+            JSONObject account = binanceTradeClient.getAccount(credentials[0], credentials[1]);
+            JSONArray balances = account.getJSONArray("balances");
+            if (balances != null) {
+                for (int i = 0; i < balances.size(); i++) {
+                    JSONObject balance = balances.getJSONObject(i);
+                    if (asset.equalsIgnoreCase(balance.getString("asset"))) {
+                        return balance.getBigDecimal("free");
+                    }
+                }
+            }
+            return BigDecimal.ZERO;
+        } catch (Exception e) {
+            log.warn("Failed to query balance for account {}, asset {}: {}",
+                    accountId, asset, e.getMessage());
+            return null;
+        }
     }
 
     private ExchangeAccountVO toVO(ExchangeAccount account) {
