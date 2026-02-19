@@ -193,10 +193,11 @@ public class OkxWsDataSource extends ExchangeWebSocketClient implements QuoteDat
     }
 
     @Override
-    protected void onConnected() {
-        super.onConnected();
+    protected void onConnectionReady() {
+        super.onConnectionReady();
         connected = true;
         log.info("[OKX] WebSocket data source connected");
+        resubscribeAll();
     }
 
     @Override
@@ -204,6 +205,16 @@ public class OkxWsDataSource extends ExchangeWebSocketClient implements QuoteDat
         super.onConnectionLost();
         connected = false;
         log.warn("[OKX] WebSocket data source connection lost");
+    }
+
+    /** 重连后重新发送订阅，否则交易所不会推送数据 */
+    private void resubscribeAll() {
+        for (String topic : topicIntervalMap.keySet()) {
+            sendMessage(buildSubscribeMessage(topic, null));
+        }
+        if (!topicIntervalMap.isEmpty()) {
+            log.info("[OKX] Resubscribed {} topic(s) after connection ready", topicIntervalMap.size());
+        }
     }
 
     // ==================== 辅助方法 ====================

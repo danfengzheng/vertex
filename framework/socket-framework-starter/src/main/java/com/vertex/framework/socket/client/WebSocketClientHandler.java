@@ -1,6 +1,5 @@
 package com.vertex.framework.socket.client;
 
-import com.vertex.framework.socket.core.SocketMessage;
 import com.vertex.framework.socket.core.SocketSession;
 import io.netty.channel.*;
 import io.netty.handler.codec.http.FullHttpResponse;
@@ -53,6 +52,9 @@ public class WebSocketClientHandler extends SimpleChannelInboundHandler<Object> 
                 SocketSession.bindToChannel(ch, session);
 
                 handshakeFuture.setSuccess();
+                if (messageListener != null) {
+                    messageListener.onConnected(session);
+                }
             } catch (WebSocketHandshakeException e) {
                 log.error("WebSocket handshake failed", e);
                 handshakeFuture.setFailure(e);
@@ -105,6 +107,9 @@ public class WebSocketClientHandler extends SimpleChannelInboundHandler<Object> 
      */
     public interface WebSocketMessageListener {
         void onMessage(SocketSession session, String message);
+
+        /** 连接/重连建立且握手完成后回调，用于重新发送订阅 */
+        default void onConnected(SocketSession session) {}
 
         default void onDisconnected(SocketSession session) {}
 

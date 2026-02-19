@@ -193,7 +193,8 @@ public class StrategyServiceImpl implements IStrategyService {
             // 2. 收集策略所有用到的周期（含指标自定义周期）
             Set<KLineInterval> allIntervals = collectAllIntervals(strategy);
 
-            // 3. 逐一检查并订阅
+            // 3. 逐一检查并订阅（日 K 以下由数据源合并为 trade，≥1D 按周期订阅 kline）
+            // 策略侧保持「按区间订阅」调用即可；<1D 的 K 线由聚合器 flush 后经 KLineEvent 驱动策略
             for (KLineInterval iv : allIntervals) {
                 boolean alreadySubscribed = ds.getSubscriptions().stream()
                         .anyMatch(sub -> strategy.getSymbol().equals(sub.get("symbol"))

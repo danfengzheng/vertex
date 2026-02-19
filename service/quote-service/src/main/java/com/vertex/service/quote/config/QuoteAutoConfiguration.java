@@ -10,6 +10,7 @@ import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.quote.source.rest.BinanceRestClient;
 import com.vertex.service.quote.source.rest.KLineRestClient;
 import com.vertex.service.quote.source.rest.OkxRestClient;
+import com.vertex.service.quote.aggregator.InMemoryKLineAggregator;
 import com.vertex.service.quote.source.ws.BinanceWsDataSource;
 import com.vertex.service.quote.source.ws.OkxWsDataSource;
 import com.vertex.service.quote.store.KLineStore;
@@ -74,7 +75,8 @@ public class QuoteAutoConfiguration {
     public QuoteDataSource binanceWsDataSource(QuoteProperties properties,
                                                List<KLineConverter> converters,
                                                KLineStore klineStore,
-                                               CompositeNotifier notifier) {
+                                               CompositeNotifier notifier,
+                                               InMemoryKLineAggregator aggregator) {
         KLineConverter converter = findConverter(converters, "binance");
         QuoteProperties.Exchange.ExchangeItem binanceConfig = properties.getExchange().getBinance();
 
@@ -88,7 +90,7 @@ public class QuoteAutoConfiguration {
                 .autoReconnect(true)
                 .build();
 
-        return new BinanceWsDataSource(exchangeConfig, converter, klineStore, notifier);
+        return new BinanceWsDataSource(exchangeConfig, converter, klineStore, notifier, aggregator);
     }
 
     @Bean

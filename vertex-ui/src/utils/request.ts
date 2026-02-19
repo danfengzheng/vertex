@@ -7,7 +7,7 @@ import i18n from '../i18n';
 // 创建 axios 实例
 const service: AxiosInstance = axios.create({
   baseURL: env.API_BASE_URL + env.API_PREFIX,
-  timeout: 10000,
+  timeout: 60000, // 60s
   headers: {
     'Content-Type': 'application/json',
   },

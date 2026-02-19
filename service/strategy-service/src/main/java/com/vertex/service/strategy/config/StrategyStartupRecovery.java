@@ -118,7 +118,8 @@ public class StrategyStartupRecovery {
                 .map(sub -> sub.get("symbol") + ":" + sub.get("interval"))
                 .collect(Collectors.toSet());
 
-        // 3. 遍历策略的所有指标周期，构建完整的订阅列表
+        // 3. 遍历策略的所有指标周期，构建完整的订阅列表（按 symbol+interval 调用即可）
+        // 数据源侧：日 K 以下合并为 trade 流（每 symbol 一条），≥1D 才按周期订阅 kline
         Set<String> toSubscribe = new LinkedHashSet<>();
         for (Strategy strategy : strategies) {
             Set<KLineInterval> allIntervals = collectAllIntervals(strategy);

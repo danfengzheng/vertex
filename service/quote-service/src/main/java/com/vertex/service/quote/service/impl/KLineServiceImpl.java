@@ -8,19 +8,21 @@ import com.vertex.model.dto.quote.KLineQueryDTO;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.vo.quote.KLineVO;
+import com.vertex.service.quote.aggregator.InMemoryKLineAggregator;
 import com.vertex.service.quote.notify.CompositeNotifier;
 import com.vertex.service.quote.store.KLineStore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
  * K线数据服务实现
  * <p>
- * 串联 存储层 和 通知层，提供统一的 K线数据 CRUD 和通知分发。
+ * 读路径：内存（日 K 以下聚合器）→ RocksDB → 缺数仍由现有 backfill/StrategyDataWarmup 补。
  */
 @Slf4j
 @Service
@@ -29,29 +31,46 @@ public class KLineServiceImpl implements IKLineService {
 
     private final KLineStore klineStore;
     private final CompositeNotifier notifier;
+    private final InMemoryKLineAggregator aggregator;
 
     @Override
     public List<KLineVO> query(KLineQueryDTO query) {
         int limit = query.getLimit() != null ? query.getLimit() : 500;
+        String exchange = query.getExchange();
+        String symbol = query.getSymbol();
+        KLineInterval interval = query.getInterval();
 
-        // 降序查询：直接从存储层取最新数据
         List<KLine> klines = klineStore.query(
-                query.getExchange(),
-                query.getSymbol(),
-                query.getInterval(),
-                query.getStartTime(),
-                query.getEndTime(),
-                limit,
-                false  // ascending=false，新→旧
-        );
+                exchange, symbol, interval,
+                query.getStartTime(), query.getEndTime(),
+                limit, false);
 
-        return klines.stream()
-                .map(this::toVO)
-                .collect(Collectors.toList());
+        if (aggregator != null && InMemoryKLineAggregator.isIntraday(interval)) {
+            KLine memLatest = aggregator.getLatest(exchange, symbol, interval);
+            if (memLatest != null && (klines.isEmpty() || klines.get(0).getOpenTime() < memLatest.getOpenTime())) {
+                List<KLine> merged = new ArrayList<>(limit);
+                merged.add(memLatest);
+                for (KLine k : klines) {
+                    if (merged.size() >= limit) break;
+                    if (!k.getOpenTime().equals(memLatest.getOpenTime())) {
+                        merged.add(k);
+                    }
+                }
+                klines = merged;
+            }
+        }
+
+        return klines.stream().map(this::toVO).collect(Collectors.toList());
     }
 
     @Override
     public KLineVO getLatest(String symbol, String exchange, KLineInterval interval) {
+        if (aggregator != null && InMemoryKLineAggregator.isIntraday(interval)) {
+            KLine mem = aggregator.getLatest(exchange, symbol, interval);
+            if (mem != null) {
+                return toVO(mem);
+            }
+        }
         KLine kline = klineStore.getLatest(exchange, symbol, interval);
         if (kline == null) {
             throw new BizException(GlobalError.KLINE_NOT_FOUND);

@@ -59,6 +59,11 @@ public abstract class ExchangeWebSocketClient {
             }
 
             @Override
+            public void onConnected(SocketSession session) {
+                onConnectionReady();
+            }
+
+            @Override
             public void onDisconnected(SocketSession session) {
                 onConnectionLost();
             }
@@ -70,7 +75,7 @@ public abstract class ExchangeWebSocketClient {
         });
 
         webSocketClient.connect();
-        onConnected();
+        // onConnected 由握手完成后 listener.onConnected -> onConnectionReady() 触发
     }
 
     /**
@@ -165,6 +170,11 @@ public abstract class ExchangeWebSocketClient {
     protected abstract HeartbeatStrategy createHeartbeatStrategy();
 
     // ==================== 生命周期回调（子类可覆写） ====================
+
+    /** 连接或重连建立且握手完成后调用，子类可在此重新发送订阅 */
+    protected void onConnectionReady() {
+        onConnected();
+    }
 
     protected void onConnected() {
         log.info("[{}] Connected to exchange", exchangeConfig.getExchangeType().getCode());
