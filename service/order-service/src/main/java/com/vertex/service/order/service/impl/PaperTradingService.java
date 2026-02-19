@@ -81,8 +81,13 @@ public class PaperTradingService {
             }
             fillPrice = order.getPrice();
         } else {
-            // MARKET 订单：以当前价成交
-            fillPrice = currentPrice;
+            // MARKET 订单：使用信号价格成交（与回测一致，回测使用K线close价）
+            // order.getPrice() 存放的是信号触发时的K线收盘价
+            if (order.getPrice() != null && order.getPrice().compareTo(BigDecimal.ZERO) > 0) {
+                fillPrice = order.getPrice();
+            } else {
+                fillPrice = currentPrice;
+            }
         }
 
         order.setFilledPrice(fillPrice);
