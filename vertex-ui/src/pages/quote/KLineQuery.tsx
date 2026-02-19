@@ -7,7 +7,6 @@ import {
   klineApi,
   KLineVO,
   KLineQueryDTO,
-  KLineInterval,
   KLINE_INTERVAL_LABELS,
 } from '../../api/quote';
 

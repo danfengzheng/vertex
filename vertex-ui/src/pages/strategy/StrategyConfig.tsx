@@ -52,7 +52,7 @@ const IndicatorParamsFields = ({
         <Form.Item
           name={[...prefix, 'params', 'period']}
           label={t('text.strategy.period')}
-          initialValue={type === 'RSI' ? 14 : 20}
+          initialValue={20}
           rules={[{ required: true }]}
         >
           <InputNumber min={2} max={500} style={{ width: 120 }} />
@@ -342,7 +342,7 @@ export const StrategyConfig = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingRecord, setEditingRecord] = useState<StrategyVO | null>(null);
+  const [, setEditingRecord] = useState<StrategyVO | null>(null);
   const [form] = Form.useForm();
 
   // 指标配置联动

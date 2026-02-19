@@ -98,8 +98,8 @@ export const useTradeWebSocket = ({
       onDisconnect: () => {
         connectedRef.current = false;
       },
-      onStompError: (frame) => {
-        console.error('Trade STOMP error:', frame.headers['message']);
+      onStompError: (frame: { headers?: Record<string, string> }) => {
+        console.error('Trade STOMP error:', frame.headers?.['message']);
         connectedRef.current = false;
       },
     });
