@@ -191,7 +191,8 @@ public class PositionManagementService {
     public Position findOpenPosition(Long strategyId, Long accountId, String exchange, String symbol) {
         LambdaQueryWrapper<Position> wrapper = new LambdaQueryWrapper<Position>()
                 .eq(Position::getStrategyId, strategyId)
-                .eq(Position::getAccountId, accountId)
+                .eq(accountId != null, Position::getAccountId, accountId)
+                .isNull(accountId == null, Position::getAccountId)
                 .eq(Position::getExchange, exchange)
                 .eq(Position::getSymbol, symbol)
                 .eq(Position::getStatus, PositionStatus.OPEN)
