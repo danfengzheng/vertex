@@ -28,6 +28,13 @@
     "total": "Total {{total}}"
   },
   "text": {
+    "auth": {
+      "login": "Login",
+      "loginTitle": "Login",
+      "loginSuccess": "Login successful",
+      "usernameRequired": "Please enter username",
+      "passwordRequired": "Please enter password"
+    },
     "system": {
       "title": "System",
       "user": "Users",
@@ -45,9 +52,12 @@
       "gender": "Gender",
       "accountType": "Account Type",
       "password": "Password",
+      "passwordOptional": "Leave blank to keep unchanged",
       "profile": "Profile",
       "logout": "Logout",
       "admin": "Admin",
+      "locked": "Locked",
+      "unfreeze": "Unfreeze",
       "gender.unknown": "Unknown",
       "gender.male": "Male",
       "gender.female": "Female",
@@ -317,7 +327,8 @@
       "nickname": "Enter nickname",
       "phone": "Enter phone",
       "email": "Enter email",
-      "password": "Enter password"
+      "password": "Enter password",
+      "passwordOptional": "Leave blank to keep unchanged"
     },
     "menu": {
       "parentId": "Select parent menu",
@@ -356,7 +367,8 @@
   "message": {
     "user": {
       "loadFailed": "Load failed",
-      "deleteConfirm": "Delete this user?"
+      "deleteConfirm": "Delete this user?",
+      "unfreezeSuccess": "Account unfrozen"
     },
     "menu": {
       "loadFailed": "Load failed",

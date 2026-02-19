@@ -55,4 +55,11 @@ public class UserController {
         userService.delete(id);
         return Result.success();
     }
+
+    @Operation(summary = "解冻账户")
+    @PutMapping("/{id}/unfreeze")
+    public Result<Void> unfreeze(@PathVariable Long id) {
+        userService.unfreeze(id);
+        return Result.success();
+    }
 }

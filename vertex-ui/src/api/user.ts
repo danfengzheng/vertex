@@ -15,6 +15,8 @@ export interface UserVO {
   gender: number;
   accountType: number;
   status: number;
+  /** 是否已冻结（连续登录失败 5 次） */
+  locked?: boolean;
   createTime: string;
 }
 
@@ -73,6 +75,11 @@ export const userApi = {
 
   /** 删除用户 */
   delete: (id: string): Promise<ApiResponse<void>> => {
-    return request.delete(`/user/${id}`);
+    return request.delete(`/system/user/${id}`);
+  },
+
+  /** 解冻账户（连续密码错误 5 次冻结后由管理员解冻） */
+  unfreeze: (id: string): Promise<ApiResponse<void>> => {
+    return request.put(`/system/user/${id}/unfreeze`);
   },
 };

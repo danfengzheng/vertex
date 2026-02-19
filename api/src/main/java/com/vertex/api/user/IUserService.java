@@ -49,4 +49,23 @@ public interface IUserService {
      * 根据用户名查询
      */
     UserVO getByUsername(String username);
+
+    /**
+     * 校验用户名与密码（用于登录）
+     *
+     * @return true 校验通过，false 用户不存在或密码错误
+     */
+    boolean validatePassword(String username, String rawPassword);
+
+    /** 是否已冻结（连续登录失败 5 次） */
+    boolean isLocked(String username);
+
+    /** 记录登录失败，达到 5 次则冻结账户 */
+    void recordLoginFailure(String username);
+
+    /** 登录成功时清除失败次数与冻结状态 */
+    void clearLoginFailure(String username);
+
+    /** 解冻账户（后台操作） */
+    void unfreeze(Long id);
 }

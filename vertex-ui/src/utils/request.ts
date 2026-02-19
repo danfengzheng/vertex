@@ -19,8 +19,9 @@ service.interceptors.request.use(
     // 从 localStorage 获取 token
     const token = localStorage.getItem('token');
     if (token && config.headers) {
-      // 使用配置的 token 前缀和请求头
-      config.headers[env.TOKEN_HEADER] = env.TOKEN_PREFIX + token;
+      // 确保 "Bearer" 与 token 之间有一个空格，否则后端无法解析
+      const prefix = env.TOKEN_PREFIX.endsWith(' ') ? env.TOKEN_PREFIX : env.TOKEN_PREFIX + ' ';
+      config.headers[env.TOKEN_HEADER] = prefix + token;
     }
     return config;
   },
@@ -30,29 +31,41 @@ service.interceptors.request.use(
   }
 );
 
+// 是否为登录接口（登录接口返回 401 时不跳转，仅提示错误）
+const isLoginRequest = (url: string | undefined) =>
+  url != null && (url.includes('/auth/login') || url.endsWith('/auth/login'));
+
 // 响应拦截器
 service.interceptors.response.use(
   (response: AxiosResponse) => {
     const res = response.data;
-    
+
     // 如果返回的状态码不是 200，则判断为错误
     if (res.code !== 200) {
       message.error(res.message || i18n.t('message.common.requestFailed'));
-      
-      // 401: 未授权，跳转到登录页
-      if (res.code === 401) {
+
+      // 401：未授权时跳转登录页（排除登录接口本身，避免登录失败时整页重载）
+      if (res.code === 401 && !isLoginRequest(response.config?.url)) {
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         window.location.href = '/login';
       }
-      
+
       return Promise.reject(new Error(res.message || i18n.t('message.common.requestFailed')));
     }
-    
+
     return res;
   },
   (error) => {
-    console.error('Response error:', error);
-    message.error(error.message || i18n.t('message.common.networkError'));
+    const status = error.response?.status;
+    const url = error.config?.url;
+    if (status === 401 && !isLoginRequest(url)) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+      return Promise.reject(error);
+    }
+    message.error(error.response?.data?.message || error.message || i18n.t('message.common.networkError'));
     return Promise.reject(error);
   }
 );

@@ -19,5 +19,7 @@ public class UserVO {
     private Integer gender;
     private Integer accountType;
     private Integer status;
+    /** 是否已冻结 */
+    private Boolean locked;
     private LocalDateTime createTime;
 }

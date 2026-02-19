@@ -19,6 +19,17 @@ dependencies {
     // Redis
     implementation libs.spring.boot.starter.data.redis
 
+    // 密码加密
+    implementation libs.bcrypt
+
     // 测试
     testImplementation libs.spring.boot.starter.test
+}
+
+// 生成初始化管理员 SQL 脚本（密码 1qaz@WSX，BCrypt 加密）
+tasks.register('initAdminUserScript', JavaExec) {
+    group = 'vertex'
+    description = '生成初始化管理员用户 SQL（密码 1qaz@WSX），输出到控制台'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.vertex.service.system.script.InitAdminUserScript'
 }

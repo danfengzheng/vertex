@@ -54,4 +54,10 @@ public class User extends BaseEntity {
 
     /** 状态 0-禁用 1-正常 */
     private Integer status;
+
+    /** 是否已冻结（连续登录失败 5 次后冻结，需管理员解冻） */
+    private Boolean locked;
+
+    /** 连续登录失败次数 */
+    private Integer loginFailCount;
 }

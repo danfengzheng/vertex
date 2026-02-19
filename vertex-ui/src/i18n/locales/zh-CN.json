@@ -28,6 +28,13 @@
     "total": "共 {{total}} 条"
   },
   "text": {
+    "auth": {
+      "login": "登录",
+      "loginTitle": "登录",
+      "loginSuccess": "登录成功",
+      "usernameRequired": "请输入用户名",
+      "passwordRequired": "请输入密码"
+    },
     "system": {
       "title": "系统管理",
       "user": "用户管理",
@@ -45,9 +52,12 @@
       "gender": "性别",
       "accountType": "账户类型",
       "password": "密码",
+      "passwordOptional": "留空则不修改",
       "profile": "个人中心",
       "logout": "退出登录",
       "admin": "管理员",
+      "locked": "已冻结",
+      "unfreeze": "解冻",
       "gender.unknown": "未知",
       "gender.male": "男",
       "gender.female": "女",
@@ -356,7 +366,8 @@
   "message": {
     "user": {
       "loadFailed": "加载用户列表失败",
-      "deleteConfirm": "确定要删除该用户吗？"
+      "deleteConfirm": "确定要删除该用户吗？",
+      "unfreezeSuccess": "账户已解冻"
     },
     "menu": {
       "loadFailed": "加载菜单列表失败",

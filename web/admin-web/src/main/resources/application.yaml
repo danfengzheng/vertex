@@ -4,19 +4,8 @@ server:
 spring:
   application:
     name: vertex
-
-  # 数据源
-  datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/vertex?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
-    username: root
-    password: root
-#    password: root123
-    druid:
-      initial-size: 5
-      min-idle: 5
-      max-active: 20
-
+  profiles:
+    active: dev
   # Redis
   data:
     redis:
@@ -61,6 +50,11 @@ vertex:
     prefix: "Bearer "
     # Token请求头，默认为 "Authorization"
     header: "Authorization"
+  jwt:
+    # JWT 签名密钥（生产环境请使用环境变量 VERTEX_JWT_SECRET）
+    secret: ${VERTEX_JWT_SECRET:vertex-admin-secret-key-change-in-production}
+    # 过期时间（秒），默认 24 小时
+    expiration-seconds: ${VERTEX_JWT_EXPIRATION:86400}
   crypto:
 #    key: ${VERTEX_CRYPTO_KEY:"pl8LbcpdRsc5AbYphlxM9inSFbhajqJ+oHLUJbJFSP0="}
     key: pl8LbcpdRsc5AbYphlxM9inSFbhajqJ+oHLUJbJFSP0=

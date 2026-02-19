@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Layout, Menu, Avatar, Dropdown, Space, theme } from 'antd';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -28,11 +28,7 @@ import type { MenuProps } from 'antd';
 
 const { Header, Sider, Content } = Layout;
 
-interface MainLayoutProps {
-  children: React.ReactNode;
-}
-
-export const MainLayout = ({ children }: MainLayoutProps) => {
+export const MainLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -278,7 +274,7 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
             borderRadius: borderRadiusLG,
           }}
         >
-          {children}
+          <Outlet />
         </Content>
       </Layout>
     </Layout>

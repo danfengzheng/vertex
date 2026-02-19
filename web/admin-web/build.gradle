@@ -18,6 +18,10 @@ dependencies {
     // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
 
+    // Spring Security + JWT
+    implementation libs.spring.boot.starter.security
+    implementation libs.bundles.jwt
+
     // WebSocket (STOMP)
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
 

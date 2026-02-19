@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Space, message, Modal, Form, Input, Select } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Button, Space, message, Modal, Form, Input, Select, Tag, Popconfirm } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, LockOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { userApi, UserVO, UserQueryDTO, UserCreateDTO, UserUpdateDTO } from '../../api/user';
 import type { ApiResponse, PageResult } from '../../types/api';
@@ -73,8 +73,15 @@ export const UserManagement = () => {
       if (editingUser) {
         const updateData: UserUpdateDTO = {
           id: editingUser.id,
-          ...values,
+          username: values.username,
+          nickname: values.nickname,
+          phone: values.phone,
+          email: values.email,
+          accountType: values.accountType,
         };
+        if (values.password && values.password.trim()) {
+          updateData.password = values.password.trim();
+        }
         await userApi.update(updateData);
         message.success(t('message.common.updateSuccess'));
       } else {
@@ -86,6 +93,16 @@ export const UserManagement = () => {
       loadUsers();
     } catch (error) {
       console.error('Submit error:', error);
+    }
+  };
+
+  const handleUnfreeze = async (id: string) => {
+    try {
+      await userApi.unfreeze(id);
+      message.success(t('message.user.unfreezeSuccess'));
+      loadUsers();
+    } catch (error) {
+      message.error(t('message.common.requestFailed'));
     }
   };
 
@@ -123,13 +140,30 @@ export const UserManagement = () => {
       render: (status: number) => (status === 1 ? t('common.normal') : t('common.disabled')),
     },
     {
+      title: t('text.user.locked'),
+      dataIndex: 'locked',
+      key: 'locked',
+      width: 100,
+      render: (locked: boolean) =>
+        locked ? <Tag color="error" icon={<LockOutlined />}>{t('text.user.locked')}</Tag> : '-',
+    },
+    {
       title: t('common.operation'),
       key: 'action',
+      width: 220,
       render: (_: any, record: UserVO) => (
         <Space>
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             {t('common.edit')}
           </Button>
+          {record.locked && (
+            <Popconfirm
+              title={t('text.user.unfreeze') + '?'}
+              onConfirm={() => handleUnfreeze(record.id)}
+            >
+              <Button type="link">{t('text.user.unfreeze')}</Button>
+            </Popconfirm>
+          )}
           <Button type="link" danger icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>
             {t('common.delete')}
           </Button>
@@ -171,13 +205,17 @@ export const UserManagement = () => {
       >
         <Form form={form} layout="vertical">
           <Form.Item name="username" label={t('text.user.username')} rules={[{ required: true }]}>
-            <Input placeholder={t('placeholder.user.username')} />
+            <Input placeholder={t('placeholder.user.username')} disabled={!!editingUser} />
           </Form.Item>
-          {!editingUser && (
-            <Form.Item name="password" label={t('text.user.password')} rules={[{ required: true }]}>
-              <Input.Password placeholder={t('placeholder.user.password')} />
-            </Form.Item>
-          )}
+          <Form.Item
+            name="password"
+            label={t('text.user.password')}
+            rules={editingUser ? [] : [{ required: true, message: t('placeholder.user.password') }]}
+          >
+            <Input.Password
+              placeholder={editingUser ? t('text.user.passwordOptional') : t('placeholder.user.password')}
+            />
+          </Form.Item>
           <Form.Item name="nickname" label={t('text.user.nickname')}>
             <Input placeholder={t('placeholder.user.nickname')} />
           </Form.Item>

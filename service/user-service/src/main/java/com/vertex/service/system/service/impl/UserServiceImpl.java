@@ -1,5 +1,6 @@
 package com.vertex.service.system.service.impl;
 
+import at.favre.lib.crypto.bcrypt.BCrypt;
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -16,6 +17,7 @@ import com.vertex.service.system.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 /**
  * 用户服务实现
@@ -66,7 +68,9 @@ public class UserServiceImpl implements IUserService {
         }
 
         User user = BeanUtil.copyProperties(dto, User.class);
-        // TODO: 密码加密
+        user.setPassword(hashPassword(dto.getPassword()));
+        user.setLocked(false);
+        user.setLoginFailCount(0);
         userMapper.insert(user);
         return user.getId();
     }
@@ -80,6 +84,9 @@ public class UserServiceImpl implements IUserService {
         }
 
         BeanUtil.copyProperties(dto, user);
+        if (StringUtils.hasText(dto.getPassword())) {
+            user.setPassword(hashPassword(dto.getPassword()));
+        }
         userMapper.updateById(user);
     }
 
@@ -99,5 +106,77 @@ public class UserServiceImpl implements IUserService {
             return null;
         }
         return BeanUtil.copyProperties(user, UserVO.class);
+    }
+
+    @Override
+    public boolean validatePassword(String username, String rawPassword) {
+        User user = userMapper.selectOne(
+                new LambdaQueryWrapper<User>()
+                        .eq(User::getUsername, username)
+        );
+        if (user == null || !StringUtils.hasText(user.getPassword())) {
+            return false;
+        }
+        return BCrypt.verifyer().verify(rawPassword.toCharArray(), user.getPassword()).verified;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean isLocked(String username) {
+        User user = userMapper.selectOne(
+                new LambdaQueryWrapper<User>()
+                        .eq(User::getUsername, username)
+        );
+        return user != null && Boolean.TRUE.equals(user.getLocked());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void recordLoginFailure(String username) {
+        User user = userMapper.selectOne(
+                new LambdaQueryWrapper<User>()
+                        .eq(User::getUsername, username)
+        );
+        if (user == null) {
+            return;
+        }
+        int count = user.getLoginFailCount() == null ? 0 : user.getLoginFailCount();
+        count++;
+        user.setLoginFailCount(count);
+        if (count >= 5) {
+            user.setLocked(true);
+        }
+        userMapper.updateById(user);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void clearLoginFailure(String username) {
+        User user = userMapper.selectOne(
+                new LambdaQueryWrapper<User>()
+                        .eq(User::getUsername, username)
+        );
+        if (user == null) {
+            return;
+        }
+        user.setLoginFailCount(0);
+        user.setLocked(false);
+        userMapper.updateById(user);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unfreeze(Long id) {
+        User user = userMapper.selectById(id);
+        if (user == null) {
+            throw new BizException(GlobalError.USER_NOT_EXIST);
+        }
+        user.setLocked(false);
+        user.setLoginFailCount(0);
+        userMapper.updateById(user);
+    }
+
+    private static String hashPassword(String rawPassword) {
+        return BCrypt.with(BCrypt.Version.VERSION_2A).hashToString(10, rawPassword.toCharArray());
     }
 }
