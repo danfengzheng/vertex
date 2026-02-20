@@ -11,12 +11,12 @@ import com.vertex.model.vo.quote.KLineVO;
 import com.vertex.service.quote.aggregator.InMemoryKLineAggregator;
 import com.vertex.service.quote.notify.CompositeNotifier;
 import com.vertex.service.quote.store.KLineStore;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -26,12 +26,19 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class KLineServiceImpl implements IKLineService {
 
     private final KLineStore klineStore;
     private final CompositeNotifier notifier;
     private final InMemoryKLineAggregator aggregator;
+
+    public KLineServiceImpl(KLineStore klineStore,
+                            CompositeNotifier notifier,
+                            Optional<InMemoryKLineAggregator> aggregator) {
+        this.klineStore = klineStore;
+        this.notifier = notifier;
+        this.aggregator = aggregator != null ? aggregator.orElse(null) : null;
+    }
 
     @Override
     public List<KLineVO> query(KLineQueryDTO query) {

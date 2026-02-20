@@ -5,6 +5,7 @@ import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.service.quote.notify.CompositeNotifier;
 import com.vertex.service.quote.store.KLineStore;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -20,6 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(prefix = "vertex.quote.subscription", name = "mode", havingValue = "trade", matchIfMissing = true)
 public class InMemoryKLineAggregator {
 
     private static final long INTRADAY_THRESHOLD_MS = 86_400_000L; // 1d

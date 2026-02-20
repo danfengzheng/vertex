@@ -58,6 +58,10 @@ vertex:
   crypto:
 #    key: ${VERTEX_CRYPTO_KEY:"pl8LbcpdRsc5AbYphlxM9inSFbhajqJ+oHLUJbJFSP0="}
     key: pl8LbcpdRsc5AbYphlxM9inSFbhajqJ+oHLUJbJFSP0=
+  quote:
+    subscription:
+      # kline=仅订阅K线流（与回测/信号一致）  trade=日K以下trade流+内存聚合（默认）
+      mode: ${VERTEX_QUOTE_SUBSCRIPTION_MODE:trade}
   strategy:
     enabled: true
     rocksdb:

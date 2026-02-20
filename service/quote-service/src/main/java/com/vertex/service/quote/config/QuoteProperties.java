@@ -19,6 +19,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *       rocketmq:
  *         enabled: false
  *         topic: KLINE_UPDATE
+ *     subscription:
+ *       mode: trade   # kline=仅订阅K线流  trade=日K以下订阅trade流并内存聚合
  *     exchange:
  *       binance:
  *         enabled: true
@@ -40,6 +42,9 @@ public class QuoteProperties {
     /** 通知配置 */
     private Notify notify = new Notify();
 
+    /** 订阅模式：kline=仅订阅K线流，trade=日K以下用 trade 流+内存聚合（默认） */
+    private Subscription subscription = new Subscription();
+
     /** 交易所配置 */
     private Exchange exchange = new Exchange();
 
@@ -49,6 +54,15 @@ public class QuoteProperties {
     public static class RocksDB {
         /** 数据存储目录 */
         private String dataDir = "./data/rocksdb/quote";
+    }
+
+    @Data
+    public static class Subscription {
+        /**
+         * 订阅模式：kline=所有周期仅订阅 K 线流（与回测/信号一致）；
+         * trade=日 K 以下订阅 trade 流并由内存聚合（默认）。
+         */
+        private String mode = "trade";
     }
 
     @Data

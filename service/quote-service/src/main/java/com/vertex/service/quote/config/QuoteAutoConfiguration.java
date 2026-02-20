@@ -25,6 +25,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -76,7 +77,7 @@ public class QuoteAutoConfiguration {
                                                List<KLineConverter> converters,
                                                KLineStore klineStore,
                                                CompositeNotifier notifier,
-                                               InMemoryKLineAggregator aggregator) {
+                                               Optional<InMemoryKLineAggregator> aggregator) {
         KLineConverter converter = findConverter(converters, "binance");
         QuoteProperties.Exchange.ExchangeItem binanceConfig = properties.getExchange().getBinance();
 
@@ -90,7 +91,7 @@ public class QuoteAutoConfiguration {
                 .autoReconnect(true)
                 .build();
 
-        return new BinanceWsDataSource(exchangeConfig, converter, klineStore, notifier, aggregator);
+        return new BinanceWsDataSource(exchangeConfig, converter, klineStore, notifier, aggregator.orElse(null));
     }
 
     @Bean
