@@ -31,4 +31,11 @@ public interface IKLineService {
      * 批量保存K线（存储 + 通知）
      */
     void saveBatch(List<KLine> klines);
+
+    /**
+     * 仅写入当前不存在的K线（REST 回填只补缺，不覆盖已有 trade 聚合数据）；会对实际写入的条数发通知
+     *
+     * @return 实际写入的条数
+     */
+    int saveBatchFillingGapsOnly(List<KLine> klines);
 }

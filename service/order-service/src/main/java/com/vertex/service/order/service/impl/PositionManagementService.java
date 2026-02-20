@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 /**
@@ -106,7 +107,7 @@ public class PositionManagementService {
             existing.setUnrealizedPnl(BigDecimal.ZERO);
             existing.setCurrentPrice(order.getFilledPrice());
             existing.setClosePrice(order.getFilledPrice());
-            existing.setClosedAt(LocalDateTime.now());
+            existing.setClosedAt(LocalDateTime.now(ZoneOffset.UTC));
             existing.setStatus(PositionStatus.CLOSED);
 
             positionMapper.updateById(existing);
@@ -135,7 +136,7 @@ public class PositionManagementService {
         position.setQuantity(BigDecimal.ZERO);
         position.setCurrentPrice(closePrice);
         position.setClosePrice(closePrice);
-        position.setClosedAt(LocalDateTime.now());
+        position.setClosedAt(LocalDateTime.now(ZoneOffset.UTC));
         position.setRealizedPnl(position.getRealizedPnl().add(pnl));
         position.setUnrealizedPnl(BigDecimal.ZERO);
         position.setStatus(PositionStatus.CLOSED);

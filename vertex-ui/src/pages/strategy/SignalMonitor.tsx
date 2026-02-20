@@ -98,14 +98,14 @@ const QuickBacktestResult = ({
       dataIndex: 'entryPrice',
       key: 'entryPrice',
       width: 130,
-      render: (v: string) => parseFloat(v).toFixed(2),
+      render: (v: string) => (v != null && v !== '') ? Number(v).toFixed(6) : '-',
     },
     {
       title: t('text.strategy.exitPrice'),
       dataIndex: 'exitPrice',
       key: 'exitPrice',
       width: 130,
-      render: (v: string) => parseFloat(v).toFixed(2),
+      render: (v: string) => (v != null && v !== '') ? Number(v).toFixed(6) : '-',
     },
     {
       title: t('text.strategy.quantity'),

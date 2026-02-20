@@ -96,6 +96,19 @@ public class KLineServiceImpl implements IKLineService {
         log.debug("Saved and notified batch KLine, size: {}", klines.size());
     }
 
+    @Override
+    public int saveBatchFillingGapsOnly(List<KLine> klines) {
+        if (klines == null || klines.isEmpty()) {
+            return 0;
+        }
+        List<KLine> saved = klineStore.saveBatchFillingGapsOnly(klines);
+        if (!saved.isEmpty()) {
+            notifier.notifyKLineBatch(saved);
+            log.debug("Saved gaps only, inserted: {}, skipped: {}", saved.size(), klines.size() - saved.size());
+        }
+        return saved.size();
+    }
+
     /**
      * KLine → KLineVO 转换
      */

@@ -186,10 +186,10 @@ public class QuoteSourceController {
                     query.getSymbol(), interval,
                     query.getStartTime(), query.getEndTime(),
                     Math.min(limit, batchLimit));
-            if (!klines.isEmpty()) {
-                klineService.saveBatch(klines);
+            if (klines.isEmpty()) {
+                return 0;
             }
-            return klines.size();
+            return klineService.saveBatchFillingGapsOnly(klines);
         }
 
         long startTime = query.getStartTime();
@@ -238,8 +238,7 @@ public class QuoteSourceController {
             List<KLine> batch = client.fetchKLines(symbol, interval, cursor, windowEnd, batchLimit);
 
             if (!batch.isEmpty()) {
-                klineService.saveBatch(batch);
-                totalCount += batch.size();
+                totalCount += klineService.saveBatchFillingGapsOnly(batch);
                 long lastCloseTime = batch.get(batch.size() - 1).getCloseTime();
                 cursor = lastCloseTime + 1;
             } else {

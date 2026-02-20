@@ -6,6 +6,7 @@ import org.apache.ibatis.reflection.MetaObject;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 /**
  * MyBatis-Plus 自动填充处理器
@@ -14,6 +15,7 @@ import java.time.LocalDateTime;
  * {@code @TableField(fill = FieldFill.INSERT)} 和
  * {@code @TableField(fill = FieldFill.INSERT_UPDATE)} 注解，
  * 在 insert / update 时自动填充 createTime、updateTime 等字段。
+ * 统一使用 UTC 存储，前端按浏览器时区展示。
  * </p>
  */
 @Slf4j
@@ -22,14 +24,13 @@ public class MyBatisMetaObjectHandler implements MetaObjectHandler {
 
     @Override
     public void insertFill(MetaObject metaObject) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         this.strictInsertFill(metaObject, "createTime", LocalDateTime.class, now);
         this.strictInsertFill(metaObject, "updateTime", LocalDateTime.class, now);
     }
 
     @Override
     public void updateFill(MetaObject metaObject) {
-        // 使用 setFieldValByName 强制更新，即使字段已有值也覆盖为最新时间
-        this.setFieldValByName("updateTime", LocalDateTime.now(), metaObject);
+        this.setFieldValByName("updateTime", LocalDateTime.now(ZoneOffset.UTC), metaObject);
     }
 }

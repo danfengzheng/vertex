@@ -139,9 +139,9 @@ public class StrategyDataWarmupService {
                     break;
                 }
 
-                // 存入 RocksDB（saveBatch 内部会处理去重/覆盖）
-                klineStore.saveBatch(klines);
-                totalFetched += klines.size();
+                // 只写入缺失的 bar，不覆盖已有（trade 聚合数据优先）
+                List<KLine> inserted = klineStore.saveBatchFillingGapsOnly(klines);
+                totalFetched += inserted.size();
                 remaining -= klines.size();
 
                 // 更新游标：取最早一条的 openTime - 1 作为下一批的 endTime
@@ -157,7 +157,7 @@ public class StrategyDataWarmupService {
                 }
             }
 
-            log.info("[DataWarmup] Strategy '{}' backfill completed: {} K-lines fetched for {}:{} on {}.",
+            log.info("[DataWarmup] Strategy '{}' backfill completed: {} K-lines inserted (gaps only) for {}:{} on {}.",
                     strategy.getName(), totalFetched,
                     strategy.getSymbol(), interval.getCode(),
                     strategy.getExchange());

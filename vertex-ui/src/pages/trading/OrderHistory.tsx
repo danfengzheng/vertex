@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import dayjs from 'dayjs';
 import { Table, Button, Space, message, Tag, Select, Popconfirm } from 'antd';
+import { formatServerTime } from '../../utils/date';
 import {
   ReloadOutlined,
   CheckOutlined,
@@ -152,14 +152,14 @@ export const OrderHistory = () => {
       dataIndex: 'createTime',
       key: 'createTime',
       width: 170,
-      render: (val: string) => val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-',
+      render: (val: string) => formatServerTime(val),
     },
     {
       title: t('common.updateTime'),
       dataIndex: 'updateTime',
       key: 'updateTime',
       width: 170,
-      render: (val: string) => val ? dayjs(val).format('YYYY-MM-DD HH:mm:ss') : '-',
+      render: (val: string) => formatServerTime(val),
     },
     {
       title: t('common.operation'),

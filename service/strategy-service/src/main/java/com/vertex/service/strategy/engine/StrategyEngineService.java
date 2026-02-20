@@ -10,7 +10,6 @@ import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.strategy.Signal;
 import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
-import com.vertex.model.vo.strategy.SignalVO;
 import com.vertex.service.quote.store.KLineStore;
 import com.vertex.service.strategy.config.StrategyProperties;
 import com.vertex.service.strategy.indicator.IndicatorRegistry;
@@ -57,9 +56,6 @@ public class StrategyEngineService {
 
     /** 节流：记录每个策略的上次执行时间戳（毫秒） */
     private final ConcurrentHashMap<Long, Long> lastEvalTimeMap = new ConcurrentHashMap<>();
-
-    /** 去重：缓存每个策略的上一次信号快照 */
-    private final ConcurrentHashMap<Long, SignalSnapshot> lastSignalMap = new ConcurrentHashMap<>();
 
     /**
      * 处理K线更新事件
@@ -153,8 +149,8 @@ public class StrategyEngineService {
                 }
 
                 // 降序查询结果翻转为升序（时间从早到晚）
-                klines = new ArrayList<>(klines);
-                Collections.reverse(klines);
+                // klines = new ArrayList<>(klines);
+                // Collections.reverse(klines);
 
                 if (klines.size() < required) {
                     log.debug("Insufficient data for interval {} in strategy '{}' ({}/{})",
@@ -181,13 +177,7 @@ public class StrategyEngineService {
             return;
         }
 
-        // 去重：与上一次信号比较，如果 signalType 和 signalStrength 未变化则跳过
-        if (isDuplicateSignal(strategy.getId(), signal)) {
-            log.debug("Strategy [{}] signal unchanged ({}, strength: {}), skipping persistence and push",
-                    strategy.getName(), signal.getSignalType(), signal.getSignalStrength());
-            return;
-        }
-
+        // 只要触发买卖信号就入库，与回测逐 bar 一致，便于对比
         // 双写：MySQL + RocksDB
         signalMapper.insert(signal);
         try {
@@ -245,7 +235,7 @@ public class StrategyEngineService {
         return intervals;
     }
 
-    // ─── 节流 & 去重 ─────────────────────────────────────────────
+    // ─── 节流 ─────────────────────────────────────────────────────
 
     /**
      * 检查策略是否在节流冷却期内
@@ -266,22 +256,5 @@ public class StrategyEngineService {
         }
         lastEvalTimeMap.put(strategyId, now);
         return false;
-    }
-
-    /**
-     * 检查信号是否与上一次相同（去重）
-     * <p>
-     * 比较 signalType 和 signalStrength。若相同返回 true（应跳过）。
-     * 若不同，更新缓存并返回 false（新信号，需要持久化和推送）。
-     * </p>
-     */
-    private boolean isDuplicateSignal(Long strategyId, Signal signal) {
-        SignalSnapshot current = new SignalSnapshot(signal.getSignalType(), signal.getSignalStrength());
-        SignalSnapshot previous = lastSignalMap.put(strategyId, current);
-        return current.equals(previous);
-    }
-
-    /** 轻量信号快照，用于去重比较 */
-    private record SignalSnapshot(SignalType signalType, int signalStrength) {
     }
 }

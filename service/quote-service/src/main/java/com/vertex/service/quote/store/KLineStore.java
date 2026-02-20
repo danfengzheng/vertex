@@ -21,6 +21,14 @@ public interface KLineStore {
     void saveBatch(List<KLine> klines);
 
     /**
+     * 仅写入当前不存在的K线（用于 REST 回填补缺，不覆盖已有 trade 聚合数据）
+     *
+     * @param klines 待写入的K线列表（同一 exchange/symbol/interval）
+     * @return 实际写入的K线列表（缺失部分）
+     */
+    List<KLine> saveBatchFillingGapsOnly(List<KLine> klines);
+
+    /**
      * 范围查询K线
      *
      * @param exchange  交易所

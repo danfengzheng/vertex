@@ -9,7 +9,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.rocksdb.RocksDBException;
 
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -51,6 +50,27 @@ public class RocksDBKLineStore implements KLineStore {
             log.error("Failed to save KLine batch, size: {}", klines.size(), e);
             throw new BizException(GlobalError.KLINE_STORE_ERROR);
         }
+    }
+
+    @Override
+    public List<KLine> saveBatchFillingGapsOnly(List<KLine> klines) {
+        if (klines == null || klines.isEmpty()) {
+            return Collections.emptyList();
+        }
+        KLine first = klines.get(0);
+        String exchange = first.getExchange();
+        String symbol = first.getSymbol();
+        KLineInterval interval = first.getInterval();
+        long minOpen = klines.stream().mapToLong(KLine::getOpenTime).min().orElse(0);
+        long maxOpen = klines.stream().mapToLong(KLine::getOpenTime).max().orElse(0);
+        List<KLine> existing = query(exchange, symbol, interval, minOpen, maxOpen, Integer.MAX_VALUE, true);
+        Set<Long> existingOpenTimes = existing.stream().map(KLine::getOpenTime).collect(Collectors.toSet());
+        List<KLine> toWrite = klines.stream().filter(k -> !existingOpenTimes.contains(k.getOpenTime())).collect(Collectors.toList());
+        if (toWrite.isEmpty()) {
+            return Collections.emptyList();
+        }
+        saveBatch(toWrite);
+        return toWrite;
     }
 
     @Override
