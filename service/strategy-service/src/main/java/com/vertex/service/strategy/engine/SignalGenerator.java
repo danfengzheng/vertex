@@ -1,14 +1,13 @@
 package com.vertex.service.strategy.engine;
 
+import com.vertex.model.dto.strategy.StrategyIndicatorConfig;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.strategy.Signal;
 import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
-import com.vertex.model.dto.strategy.StrategyIndicatorConfig;
 import com.vertex.service.strategy.indicator.IndicatorRegistry;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

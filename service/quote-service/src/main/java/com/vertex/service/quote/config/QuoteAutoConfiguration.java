@@ -11,6 +11,7 @@ import com.vertex.service.quote.source.rest.BinanceRestClient;
 import com.vertex.service.quote.source.rest.KLineRestClient;
 import com.vertex.service.quote.source.rest.OkxRestClient;
 import com.vertex.service.quote.aggregator.InMemoryKLineAggregator;
+import com.vertex.service.quote.handler.KLineFlushOnNextHandler;
 import com.vertex.service.quote.source.ws.BinanceWsDataSource;
 import com.vertex.service.quote.source.ws.OkxWsDataSource;
 import com.vertex.service.quote.store.KLineStore;
@@ -77,6 +78,7 @@ public class QuoteAutoConfiguration {
                                                List<KLineConverter> converters,
                                                KLineStore klineStore,
                                                CompositeNotifier notifier,
+                                               KLineFlushOnNextHandler klineFlushOnNextHandler,
                                                Optional<InMemoryKLineAggregator> aggregator) {
         KLineConverter converter = findConverter(converters, "binance");
         QuoteProperties.Exchange.ExchangeItem binanceConfig = properties.getExchange().getBinance();
@@ -91,7 +93,7 @@ public class QuoteAutoConfiguration {
                 .autoReconnect(true)
                 .build();
 
-        return new BinanceWsDataSource(exchangeConfig, converter, klineStore, notifier, aggregator.orElse(null));
+        return new BinanceWsDataSource(exchangeConfig, converter, klineStore, notifier, klineFlushOnNextHandler, aggregator.orElse(null));
     }
 
     @Bean
@@ -111,7 +113,8 @@ public class QuoteAutoConfiguration {
     public QuoteDataSource okxWsDataSource(QuoteProperties properties,
                                            List<KLineConverter> converters,
                                            KLineStore klineStore,
-                                           CompositeNotifier notifier) {
+                                           CompositeNotifier notifier,
+                                           KLineFlushOnNextHandler klineFlushOnNextHandler) {
         KLineConverter converter = findConverter(converters, "okx");
         QuoteProperties.Exchange.ExchangeItem okxConfig = properties.getExchange().getOkx();
 
@@ -126,7 +129,7 @@ public class QuoteAutoConfiguration {
                 .autoReconnect(true)
                 .build();
 
-        return new OkxWsDataSource(exchangeConfig, converter, klineStore, notifier);
+        return new OkxWsDataSource(exchangeConfig, converter, klineStore, notifier, klineFlushOnNextHandler);
     }
 
     @Bean

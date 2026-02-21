@@ -12,6 +12,7 @@ import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.service.quote.aggregator.InMemoryKLineAggregator;
 import com.vertex.service.quote.converter.KLineConverter;
+import com.vertex.service.quote.handler.KLineFlushOnNextHandler;
 import com.vertex.service.quote.notify.CompositeNotifier;
 import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.quote.store.KLineStore;
@@ -40,6 +41,7 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
     private final KLineConverter klineConverter;
     private final KLineStore klineStore;
     private final CompositeNotifier notifier;
+    private final KLineFlushOnNextHandler klineFlushOnNextHandler;
     /** 可选：注入后日 K 以下用 trade 流 + 内存聚合 */
     private final InMemoryKLineAggregator aggregator;
 
@@ -55,19 +57,22 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
     public BinanceWsDataSource(ExchangeConfig config,
                                KLineConverter klineConverter,
                                KLineStore klineStore,
-                               CompositeNotifier notifier) {
-        this(config, klineConverter, klineStore, notifier, null);
+                               CompositeNotifier notifier,
+                               KLineFlushOnNextHandler klineFlushOnNextHandler) {
+        this(config, klineConverter, klineStore, notifier, klineFlushOnNextHandler, null);
     }
 
     public BinanceWsDataSource(ExchangeConfig config,
                                KLineConverter klineConverter,
                                KLineStore klineStore,
                                CompositeNotifier notifier,
+                               KLineFlushOnNextHandler klineFlushOnNextHandler,
                                InMemoryKLineAggregator aggregator) {
         super(config);
         this.klineConverter = klineConverter;
         this.klineStore = klineStore;
         this.notifier = notifier;
+        this.klineFlushOnNextHandler = klineFlushOnNextHandler;
         this.aggregator = aggregator;
     }
 
@@ -155,8 +160,7 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
             try {
                 KLine kline = klineConverter.convert(symbol, interval, payload);
                 if (kline != null) {
-                    klineStore.save(kline);
-                    notifier.notifyKLine(kline);
+                    klineFlushOnNextHandler.submit(kline);
                 }
             } catch (Exception e) {
                 log.error("[Binance] Error processing KLine for {}:{}", symbol, interval.getCode(), e);

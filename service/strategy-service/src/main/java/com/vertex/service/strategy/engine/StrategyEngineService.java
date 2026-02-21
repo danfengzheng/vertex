@@ -149,8 +149,8 @@ public class StrategyEngineService {
                 }
 
                 // 降序查询结果翻转为升序（时间从早到晚）
-                // klines = new ArrayList<>(klines);
-                // Collections.reverse(klines);
+                 klines = new ArrayList<>(klines);
+                 Collections.reverse(klines);
 
                 if (klines.size() < required) {
                     log.debug("Insufficient data for interval {} in strategy '{}' ({}/{})",

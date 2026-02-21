@@ -10,6 +10,7 @@ import com.vertex.framework.socket.heartbeat.HeartbeatStrategy;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.service.quote.converter.KLineConverter;
+import com.vertex.service.quote.handler.KLineFlushOnNextHandler;
 import com.vertex.service.quote.notify.CompositeNotifier;
 import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.quote.store.KLineStore;
@@ -37,6 +38,7 @@ public class OkxWsDataSource extends ExchangeWebSocketClient implements QuoteDat
     private final KLineConverter klineConverter;
     private final KLineStore klineStore;
     private final CompositeNotifier notifier;
+    private final KLineFlushOnNextHandler klineFlushOnNextHandler;
 
     /** 记录已订阅的主题及其 interval 映射 */
     private final Map<String, KLineInterval> topicIntervalMap = new ConcurrentHashMap<>();
@@ -48,11 +50,13 @@ public class OkxWsDataSource extends ExchangeWebSocketClient implements QuoteDat
     public OkxWsDataSource(ExchangeConfig config,
                            KLineConverter klineConverter,
                            KLineStore klineStore,
-                           CompositeNotifier notifier) {
+                           CompositeNotifier notifier,
+                           KLineFlushOnNextHandler klineFlushOnNextHandler) {
         super(config);
         this.klineConverter = klineConverter;
         this.klineStore = klineStore;
         this.notifier = notifier;
+        this.klineFlushOnNextHandler = klineFlushOnNextHandler;
     }
 
     @Override
@@ -84,13 +88,12 @@ public class OkxWsDataSource extends ExchangeWebSocketClient implements QuoteDat
         topicIntervalMap.put(topic, interval);
         topicSymbolMap.put(topic, symbol);
 
-        // 注册订阅监听，回调中完成转换→存储→通知
+        // 注册订阅监听，转换后经 FlushOnNext 入库（下一 openTime 出现时上一根以 closed 入库）
         super.subscribe(topic, (t, payload) -> {
             try {
                 KLine kline = klineConverter.convert(symbol, interval, payload);
                 if (kline != null) {
-                    klineStore.save(kline);
-                    notifier.notifyKLine(kline);
+                    klineFlushOnNextHandler.submit(kline);
                 }
             } catch (Exception e) {
                 log.error("[OKX] Error processing KLine for {}:{}", symbol, interval.getCode(), e);
