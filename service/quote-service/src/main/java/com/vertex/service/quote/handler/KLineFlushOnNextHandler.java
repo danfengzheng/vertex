@@ -17,7 +17,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * 只要出现下一时间点的数据即认为上一根已收盘。
  * </p>
  * <p>
- * 仅在被 flush 的「上一根」时发事件，当前条只入库不通知，避免同一根 K 线因多次 WS 更新触发多次策略、产生重复信号。
+ * 通知规则（保证每根 bar 只通知一次、且不遗漏）：
+ * 1）当前条：若交易所带 closed=true，则入库后立即通知（避免因下一根未到而永远漏发）；
+ * 2）flush 上一根时：仅当上一根此前未带 closed 时才通知（由本逻辑设为 closed 时通知），避免与 1）重复。
  * </p>
  */
 @Slf4j
@@ -32,7 +34,7 @@ public class KLineFlushOnNextHandler {
     private final ConcurrentHashMap<String, KLine> lastByKey = new ConcurrentHashMap<>();
 
     /**
-     * 提交一条 K 线：若 openTime 与上一根不同，先将上一根以 closed=true 入库并通知；当前条只入库，不通知（等下一根到来时再以 closed 通知）。
+     * 提交一条 K 线：若 openTime 与上一根不同，先将上一根以 closed=true 入库，仅当其此前未 closed 时通知；当前条入库，若带 closed=true 则通知。
      *
      * @param kline 当前收到的 K 线（可为交易所的 closed 或未 closed）
      */
@@ -44,15 +46,20 @@ public class KLineFlushOnNextHandler {
         KLine previous = lastByKey.put(key, kline);
 
         if (previous != null && !previous.getOpenTime().equals(kline.getOpenTime())) {
+            boolean wasAlreadyClosed = Boolean.TRUE.equals(previous.getClosed());
             previous.setClosed(true);
             klineStore.save(previous);
-            notifier.notifyKLine(previous);
-            log.debug("[KLineFlushOnNext] Flushed previous bar as closed: {} {} {} openTime={}",
-                    kline.getExchange(), kline.getSymbol(), kline.getInterval().getCode(), previous.getOpenTime());
+            if (!wasAlreadyClosed) {
+                notifier.notifyKLine(previous);
+                log.debug("[KLineFlushOnNext] Flushed previous bar as closed: {} {} {} openTime={}",
+                        kline.getExchange(), kline.getSymbol(), kline.getInterval().getCode(), previous.getOpenTime());
+            }
         }
 
         klineStore.save(kline);
-        // 当前条只入库，不通知：避免同一根 K 线因 WS 多次推送触发多次策略、产生重复信号；该根会在「下一根」到来时以 closed 被 flush 并通知
+        if (Boolean.TRUE.equals(kline.getClosed())) {
+            notifier.notifyKLine(kline);
+        }
     }
 
     private static String key(String exchange, String symbol, KLineInterval interval) {

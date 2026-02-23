@@ -41,6 +41,7 @@ CREATE TABLE `stg_signal` (
     `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted` TINYINT DEFAULT 0 COMMENT '删除标记',
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_strategy_signal_time_type` (`strategy_id`, `signal_time`, `signal_type`),
     KEY `idx_strategy_id` (`strategy_id`),
     KEY `idx_exchange_symbol` (`exchange`, `symbol`),
     KEY `idx_signal_type` (`signal_type`),

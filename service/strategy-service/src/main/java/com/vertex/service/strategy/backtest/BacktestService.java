@@ -77,7 +77,9 @@ public class BacktestService {
         Map<KLineInterval, List<KLine>> allKlinesByInterval = new HashMap<>();
         int mainRequired = requiredByInterval.getOrDefault(strategy.getInterval(), 50);
         long mainIntervalMillis = strategy.getInterval().getMillis();
-        long mainPrefetchStart = config.getStartTime() - mainIntervalMillis * (mainRequired + 10);
+        int mainWarmup = properties.getEngine().getWarmupMultiplier();
+        // 预取足够的预热K线，确保回测第一根K线就有 required × warmupMultiplier + 10 根历史数据
+        long mainPrefetchStart = config.getStartTime() - mainIntervalMillis * (mainRequired * mainWarmup + 10);
 
         List<KLine> mainKlines = klineStore.query(
                 strategy.getExchange(), strategy.getSymbol(), strategy.getInterval(),
@@ -88,7 +90,7 @@ public class BacktestService {
             if (iv.equals(strategy.getInterval())) continue;
             int req = requiredByInterval.getOrDefault(iv, 50);
             long ivMillis = iv.getMillis();
-            long prefetchStart = config.getStartTime() - ivMillis * (req + 10);
+            long prefetchStart = config.getStartTime() - ivMillis * (req * mainWarmup + 10);
             List<KLine> ivKlines = klineStore.query(
                     strategy.getExchange(), strategy.getSymbol(), iv,
                     prefetchStart, config.getEndTime(), Integer.MAX_VALUE, true);
@@ -103,10 +105,13 @@ public class BacktestService {
                 strategy.getName(), strategy.getExchange(), strategy.getSymbol(),
                 mainKlines.size(), mainRequired + 1);
 
-        if (mainKlines.size() < mainRequired + 1) {
-            log.warn("Backtest [{}] insufficient data: got {} K-lines, need at least {}. "
+        // 最小需要 warmupSize 根预热K线 + 至少1根回测K线
+        int minRequired = Math.min(mainRequired * mainWarmup + 10, properties.getEngine().getMaxKlineHistory()) + 1;
+        if (mainKlines.size() < minRequired) {
+            log.warn("Backtest [{}] insufficient data: got {} K-lines, need at least {} "
+                    + "(required={} × warmup={} + 10 + 1). "
                     + "Please use the backfill feature to fetch historical K-line data first.",
-                    strategy.getName(), mainKlines.size(), mainRequired + 1);
+                    strategy.getName(), mainKlines.size(), minRequired, mainRequired, mainWarmup);
             throw new BizException(GlobalError.BACKTEST_INSUFFICIENT_DATA);
         }
 
@@ -129,6 +134,7 @@ public class BacktestService {
             Map<KLineInterval, Integer> requiredByInterval) {
 
         int maxKlineHistory = properties.getEngine().getMaxKlineHistory();
+        int warmup = properties.getEngine().getWarmupMultiplier();
 
         BigDecimal capital = config.getInitialCapital();
         BigDecimal position = BigDecimal.ZERO;
@@ -145,7 +151,10 @@ public class BacktestService {
         int currentDrawdownDuration = 0;
 
         // 滑动窗口模拟（以策略主周期为时间轴）
-        for (int i = mainRequiredDataPoints; i < klines.size(); i++) {
+        // 起始索引取 warmupSize-1，确保首次评估时就能取到完整的预热窗口
+        int mainWarmupSize0 = Math.min(mainRequiredDataPoints * warmup + 10, maxKlineHistory);
+        int startIdx = Math.max(mainRequiredDataPoints, mainWarmupSize0 - 1);
+        for (int i = startIdx; i < klines.size(); i++) {
             KLine currentKline = klines.get(i);
 
             // 仅处理回测时间范围内的K线
@@ -153,15 +162,16 @@ public class BacktestService {
                 continue;
             }
 
-            // 构建多周期 K 线窗口，与 StrategyEngineService 一致（required + 10）
+            // 构建多周期 K 线窗口，使用 warmupMultiplier 倍数预热，与 StrategyEngineService 一致
+            int mainWarmupSize = Math.min(mainRequiredDataPoints * warmup + 10, maxKlineHistory);
             Map<KLineInterval, List<KLine>> klinesByInterval = new HashMap<>();
-            klinesByInterval.put(strategy.getInterval(), klines.subList(Math.max(0, i - mainRequiredDataPoints - 9), i + 1));
+            klinesByInterval.put(strategy.getInterval(), klines.subList(Math.max(0, i - mainWarmupSize + 1), i + 1));
 
             for (Map.Entry<KLineInterval, List<KLine>> e : allKlinesByInterval.entrySet()) {
                 if (e.getKey().equals(strategy.getInterval())) continue;
                 List<KLine> ivList = e.getValue();
                 int req = requiredByInterval.getOrDefault(e.getKey(), 50);
-                int fetchSize = Math.min(req + 10, maxKlineHistory);
+                int fetchSize = Math.min(req * warmup + 10, maxKlineHistory);
                 List<KLine> window = ivList.stream()
                         .filter(k -> k.getOpenTime() <= currentKline.getOpenTime())
                         .collect(Collectors.collectingAndThen(Collectors.toList(), list -> {

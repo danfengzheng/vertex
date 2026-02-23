@@ -19,6 +19,8 @@ import com.alibaba.fastjson2.JSONArray;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 核心交易执行器
@@ -44,7 +46,21 @@ public class TradeExecutionService {
     private final TradingProperties tradingProperties;
 
     /**
+     * 同一策略的委托必须串行执行，防止并发导致重复开仓（超买）。
+     * Key = strategyId，Value = 该策略专属锁。
+     */
+    private final ConcurrentHashMap<Long, ReentrantLock> strategyLocks = new ConcurrentHashMap<>();
+
+    private ReentrantLock getLockForStrategy(Long strategyId) {
+        return strategyLocks.computeIfAbsent(strategyId, id -> new ReentrantLock(true));
+    }
+
+    /**
      * 信号触发的交易执行入口
+     * <p>
+     * 同一策略串行执行：持仓检查与下单之间持有策略级锁，
+     * 避免同一时刻重复信号并发导致重复开仓（超买）。
+     * </p>
      */
     public void executeSignal(Strategy strategy, Signal signal) {
         // 仅处理 BUY/SELL 信号
@@ -52,6 +68,16 @@ public class TradeExecutionService {
             return;
         }
 
+        ReentrantLock lock = getLockForStrategy(strategy.getId());
+        lock.lock();
+        try {
+            executeSignalInternal(strategy, signal);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void executeSignalInternal(Strategy strategy, Signal signal) {
         // 持仓检查：避免重复开仓或无仓位平仓
         Position openPosition = positionManagementService.findOpenPosition(
                 strategy.getId(), strategy.getAccountId(),

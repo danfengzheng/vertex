@@ -133,7 +133,10 @@ public class StrategyEngineService {
             if (!klinesByInterval.containsKey(effectiveInterval)) {
                 TechnicalIndicator ind = indicatorRegistry.get(config.getIndicatorType());
                 int required = ind.requiredDataPoints(config.getParams());
-                int fetchSize = Math.min(required + 10, properties.getEngine().getMaxKlineHistory());
+                // 使用 warmupMultiplier 倍数多取历史K线，让 EMA/KDJ 等状态型指标充分预热，
+                // 避免因历史锚点不同导致与回测信号不一致
+                int warmup = properties.getEngine().getWarmupMultiplier();
+                int fetchSize = Math.min(required * warmup + 10, properties.getEngine().getMaxKlineHistory());
 
                 // 多取一些以弥补过滤未收盘K线后的数量损失
                 int querySize = properties.getEngine().isOnlyClosedKlines() ? fetchSize + 1 : fetchSize;
@@ -177,7 +180,20 @@ public class StrategyEngineService {
             return;
         }
 
-        // 只要触发买卖信号就入库，与回测逐 bar 一致，便于对比
+        // 幂等检查：同一策略同一K线时间相同信号类型只保存一次，
+        // 防止同一K线收盘事件被多个发布路径触发导致重复写入
+        boolean exists = signalMapper.selectCount(
+                new LambdaQueryWrapper<Signal>()
+                        .eq(Signal::getStrategyId, signal.getStrategyId())
+                        .eq(Signal::getSignalTime, signal.getSignalTime())
+                        .eq(Signal::getSignalType, signal.getSignalType())
+        ) > 0;
+        if (exists) {
+            log.debug("Signal already exists, skip: strategy={} time={} type={}",
+                    strategy.getName(), signal.getSignalTime(), signal.getSignalType());
+            return;
+        }
+
         // 双写：MySQL + RocksDB
         signalMapper.insert(signal);
         try {

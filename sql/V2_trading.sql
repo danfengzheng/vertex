@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS trd_order (
     update_time DATETIME DEFAULT NULL,
     deleted INT NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
+    UNIQUE KEY uk_signal_id (signal_id),
     KEY idx_strategy_id (strategy_id),
     KEY idx_account_id (account_id),
     KEY idx_status (status)

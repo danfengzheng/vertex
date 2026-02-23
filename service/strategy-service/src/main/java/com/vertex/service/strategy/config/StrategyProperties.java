@@ -33,5 +33,11 @@ public class StrategyProperties {
         private boolean onlyClosedKlines = true;
         /** 策略评估最小间隔（毫秒），仅在 onlyClosedKlines=false 时生效，0 表示禁用节流 */
         private long minEvalIntervalMs = 5000;
+        /**
+         * 指标预热倍数：实际查询 required × warmupMultiplier + 10 根K线，
+         * 让 EMA/KDJ 等状态型指标充分预热，与回测历史锚点对齐，减少信号差异。
+         * 默认 3，即查询 3 倍所需K线数量作为预热。
+         */
+        private int warmupMultiplier = 3;
     }
 }
