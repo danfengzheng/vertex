@@ -2,6 +2,7 @@ package com.vertex.model.dto.strategy;
 
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.trading.ExecutionMode;
+import com.vertex.model.entity.trading.PositionSizing;
 import com.vertex.model.entity.trading.TradeMode;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -35,7 +36,13 @@ public class StrategyUpdateDTO {
     private TradeMode tradeMode;
     private ExecutionMode executionMode;
     private Long accountId;
+    /** 仓位计算模式 FIXED/PERCENT */
+    private PositionSizing positionSizing;
     private BigDecimal tradeQuantity;
+    /** 仓位比例 0-1（PERCENT 模式） */
+    private BigDecimal positionRatio;
+    /** 模拟初始资金（PERCENT + PAPER 模式） */
+    private BigDecimal initialCapital;
     private BigDecimal stopLossPct;
     private BigDecimal takeProfitPct;
     private BigDecimal feeRate;

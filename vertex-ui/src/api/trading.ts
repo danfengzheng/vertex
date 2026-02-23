@@ -126,6 +126,40 @@ export interface PositionQueryDTO extends PageQuery {
   tradeMode?: ExecutionMode;
 }
 
+/** 盈亏分析查询参数 */
+export interface PnlAnalysisQueryDTO {
+  tradeMode?: ExecutionMode;
+  strategyId?: string;
+  symbol?: string;
+  accountId?: string;
+  closedAtStart?: string;
+  closedAtEnd?: string;
+}
+
+/** 按策略盈亏项 */
+export interface StrategyPnlItem {
+  strategyId: string | number;
+  strategyName?: string;
+  closedCount: number;
+  realizedPnl: string | number;
+}
+
+/** 按交易对盈亏项 */
+export interface SymbolPnlItem {
+  symbol: string;
+  closedCount: number;
+  realizedPnl: string | number;
+}
+
+/** 盈亏分析结果 */
+export interface PnlAnalysisVO {
+  totalPnl: string | number;
+  paperPnl: string | number;
+  livePnl: string | number;
+  byStrategy: StrategyPnlItem[];
+  bySymbol: SymbolPnlItem[];
+}
+
 // ─── API ─────────────────────────────────────────
 
 /** 交易所账户 API */
@@ -180,4 +214,10 @@ export const positionApi = {
 
   close: (id: string): Promise<ApiResponse<void>> =>
     request.post(`/trade/position/${id}/close`),
+};
+
+/** 盈亏分析 API */
+export const pnlAnalysisApi = {
+  getAnalysis: (params?: PnlAnalysisQueryDTO): Promise<ApiResponse<PnlAnalysisVO>> =>
+    request.get('/trade/pnl-analysis', { params }),
 };

@@ -13,6 +13,7 @@ import { StrategyGuide } from '../pages/guide/StrategyGuide';
 import { ExchangeAccountManagement } from '../pages/trading/ExchangeAccountManagement';
 import { OrderHistory } from '../pages/trading/OrderHistory';
 import { PositionMonitor } from '../pages/trading/PositionMonitor';
+import { PnlAnalysis } from '../pages/trading/PnlAnalysis';
 
 export const AppRouter = () => {
   return (
@@ -37,6 +38,7 @@ export const AppRouter = () => {
         <Route path="trading/accounts" element={<ExchangeAccountManagement />} />
         <Route path="trading/orders" element={<OrderHistory />} />
         <Route path="trading/positions" element={<PositionMonitor />} />
+        <Route path="trading/pnl" element={<PnlAnalysis />} />
         <Route path="guide/strategy" element={<StrategyGuide />} />
       </Route>
     </Routes>

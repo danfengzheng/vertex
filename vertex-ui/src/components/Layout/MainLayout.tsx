@@ -20,6 +20,7 @@ import {
   BankOutlined,
   OrderedListOutlined,
   DashboardOutlined,
+  PieChartOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -140,6 +141,11 @@ export const MainLayout = () => {
           key: '/trading/positions',
           icon: <DashboardOutlined />,
           label: t('text.trading.positionTitle'),
+        },
+        {
+          key: '/trading/pnl',
+          icon: <PieChartOutlined />,
+          label: t('text.trading.pnlAnalysisTitle'),
         },
       ],
     },
