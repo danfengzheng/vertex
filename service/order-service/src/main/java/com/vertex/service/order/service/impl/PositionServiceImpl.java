@@ -31,6 +31,7 @@ public class PositionServiceImpl implements IPositionService {
     private final PositionMapper positionMapper;
     private final PositionManagementService positionManagementService;
     private final PaperTradingService paperTradingService;
+    private final TradeExecutionService tradeExecutionService;
 
     @Override
     public PositionVO getById(Long id) {
@@ -72,14 +73,10 @@ public class PositionServiceImpl implements IPositionService {
             throw new BizException(GlobalError.POSITION_ALREADY_CLOSED);
         }
 
-        // 获取当前价格
-        BigDecimal currentPrice = paperTradingService.getCurrentPrice(
-                position.getExchange(), position.getSymbol());
-        if (currentPrice == null) {
-            throw new BizException(GlobalError.KLINE_NOT_FOUND);
-        }
-
-        positionManagementService.closePosition(position, currentPrice);
+        // 统一走 executeClose：
+        // - LIVE 模式：向交易所提交 MARKET SELL，按实际成交更新本地持仓（含手续费扣减）
+        // - PAPER 模式：直接按当前市价更新本地持仓记录
+        tradeExecutionService.executeClose(position);
     }
 
     private PositionVO toVO(Position position) {

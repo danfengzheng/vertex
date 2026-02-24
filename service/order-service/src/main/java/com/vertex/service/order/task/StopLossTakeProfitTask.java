@@ -4,6 +4,7 @@ import com.vertex.model.entity.trading.Position;
 import com.vertex.model.entity.trading.PositionStatus;
 import com.vertex.service.order.service.impl.PaperTradingService;
 import com.vertex.service.order.service.impl.PositionManagementService;
+import com.vertex.service.order.service.impl.TradeExecutionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -30,6 +31,7 @@ public class StopLossTakeProfitTask {
 
     private final PositionManagementService positionManagementService;
     private final PaperTradingService paperTradingService;
+    private final TradeExecutionService tradeExecutionService;
 
     @Scheduled(fixedDelayString = "${vertex.trading.sl-tp-check-interval:10000}")
     public void checkStopLossTakeProfit() {
@@ -66,7 +68,10 @@ public class StopLossTakeProfitTask {
                     log.info("[SL/TP Task] Stop loss triggered: {} {} currentPrice={} stopLoss={}",
                             position.getExchange(), position.getSymbol(),
                             currentPrice, position.getStopLoss());
-                    positionManagementService.closePosition(position, currentPrice);
+                    // 统一走 executeClose：
+                    // - LIVE 模式：向交易所提交 MARKET SELL，按实际成交更新本地持仓
+                    // - PAPER 模式：直接按当前市价更新本地持仓记录
+                    tradeExecutionService.executeClose(position);
                     triggered = true;
                 }
 
@@ -76,7 +81,7 @@ public class StopLossTakeProfitTask {
                     log.info("[SL/TP Task] Take profit triggered: {} {} currentPrice={} takeProfit={}",
                             position.getExchange(), position.getSymbol(),
                             currentPrice, position.getTakeProfit());
-                    positionManagementService.closePosition(position, currentPrice);
+                    tradeExecutionService.executeClose(position);
                     triggered = true;
                 }
 

@@ -150,6 +150,49 @@ public class TradeExecutionService {
     }
 
     /**
+     * 统一平仓入口（手动平仓 / 止损止盈自动平仓）
+     * <p>
+     * - LIVE 模式：向交易所提交 MARKET SELL 单，根据实际成交数量和价格更新本地持仓，
+     *             手续费（如以计价资产 USDT 收取）已在 executeLive 中从 fills 提取并记录，
+     *             handleSell 会按实际 filledQuantity 减仓，确保本地持仓与交易所完全一致。
+     * - PAPER 模式：直接按当前市价更新本地持仓记录。
+     * </p>
+     */
+    public void executeClose(Position position) {
+        if (position.getTradeMode() == ExecutionMode.PAPER) {
+            // 模拟模式：直接按当前价平仓
+            BigDecimal currentPrice = paperTradingService.getCurrentPrice(
+                    position.getExchange(), position.getSymbol());
+            if (currentPrice == null) {
+                log.warn("[Close] No price data for {} {}, cannot close position {}",
+                        position.getExchange(), position.getSymbol(), position.getId());
+                return;
+            }
+            positionManagementService.closePosition(position, currentPrice);
+            return;
+        }
+
+        // 实盘模式：向交易所提交 MARKET SELL 单
+        // 使用本地持仓数量（开仓时已按实际到账量记录，含手续费扣减）
+        Order order = new Order();
+        order.setStrategyId(position.getStrategyId());
+        order.setAccountId(position.getAccountId());
+        order.setExchange(position.getExchange());
+        order.setSymbol(position.getSymbol());
+        order.setSide(OrderSide.SELL);
+        order.setOrderType(OrderType.MARKET);
+        order.setQuantity(position.getQuantity());
+        order.setTradeMode(ExecutionMode.LIVE);
+        order.setStatus(OrderStatus.SUBMITTED);
+        orderMapper.insert(order);
+
+        log.info("[Close] Submitting live SELL order for position {}: {} {} qty={}",
+                position.getId(), position.getExchange(), position.getSymbol(), position.getQuantity());
+
+        doExecute(order, null);
+    }
+
+    /**
      * 确认 PENDING 订单（MANUAL 模式）
      */
     public void confirmOrder(Long orderId, Strategy strategy) {
