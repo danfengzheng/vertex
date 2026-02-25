@@ -8,6 +8,7 @@ import com.vertex.common.core.exception.BizException;
 import com.vertex.model.dto.trading.ExchangeAccountCreateDTO;
 import com.vertex.model.dto.trading.ExchangeAccountUpdateDTO;
 import com.vertex.model.entity.trading.ExchangeAccount;
+import com.vertex.model.vo.trading.AssetBalanceVO;
 import com.vertex.model.vo.trading.ExchangeAccountVO;
 import com.vertex.service.order.client.BinanceTradeClient;
 import com.vertex.service.order.mapper.ExchangeAccountMapper;
@@ -141,6 +142,38 @@ public class ExchangeAccountServiceImpl implements IExchangeAccountService {
                 cryptoService.decrypt(account.getApiKey()),
                 cryptoService.decrypt(account.getApiSecret())
         };
+    }
+
+    /**
+     * 查询账户全量资产余额，返回所有 free+locked > 0 的资产
+     */
+    @Override
+    public List<AssetBalanceVO> getBalance(Long id) {
+        String[] credentials = getDecryptedCredentials(id);
+        JSONObject account = binanceTradeClient.getAccount(credentials[0], credentials[1]);
+        JSONArray balances = account.getJSONArray("balances");
+        List<AssetBalanceVO> result = new java.util.ArrayList<>();
+        if (balances != null) {
+            for (int i = 0; i < balances.size(); i++) {
+                JSONObject b = balances.getJSONObject(i);
+                BigDecimal free   = b.getBigDecimal("free");
+                BigDecimal locked = b.getBigDecimal("locked");
+                if (free == null) free = BigDecimal.ZERO;
+                if (locked == null) locked = BigDecimal.ZERO;
+                // 只返回持有资产
+                if (free.compareTo(BigDecimal.ZERO) > 0 || locked.compareTo(BigDecimal.ZERO) > 0) {
+                    result.add(AssetBalanceVO.builder()
+                            .asset(b.getString("asset"))
+                            .free(free)
+                            .locked(locked)
+                            .total(free.add(locked))
+                            .build());
+                }
+            }
+        }
+        // 按 total 降序排列，USDT 等主资产排前
+        result.sort((a, b2) -> b2.getTotal().compareTo(a.getTotal()));
+        return result;
     }
 
     /**

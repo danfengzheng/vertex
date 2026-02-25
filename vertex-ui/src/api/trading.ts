@@ -160,6 +160,21 @@ export interface PnlAnalysisVO {
   bySymbol: SymbolPnlItem[];
 }
 
+/** 账户资产余额 VO */
+export interface AssetBalanceVO {
+  asset: string;
+  free: string | number;
+  locked: string | number;
+  total: string | number;
+}
+
+/** 每日盈亏数据点（走势图） */
+export interface DailyPnlVO {
+  date: string;
+  dailyPnl: string | number;
+  cumulativePnl: string | number;
+}
+
 // ─── API ─────────────────────────────────────────
 
 /** 交易所账户 API */
@@ -181,6 +196,9 @@ export const exchangeAccountApi = {
 
   testConnection: (id: string): Promise<ApiResponse<boolean>> =>
     request.post(`/trade/account/${id}/test`),
+
+  getBalance: (id: string): Promise<ApiResponse<AssetBalanceVO[]>> =>
+    request.get(`/trade/account/${id}/balance`),
 };
 
 /** 交易订单 API */
@@ -220,4 +238,7 @@ export const positionApi = {
 export const pnlAnalysisApi = {
   getAnalysis: (params?: PnlAnalysisQueryDTO): Promise<ApiResponse<PnlAnalysisVO>> =>
     request.get('/trade/pnl-analysis', { params }),
+
+  getDailyPnl: (params?: PnlAnalysisQueryDTO): Promise<ApiResponse<DailyPnlVO[]>> =>
+    request.get('/trade/pnl-analysis/daily', { params }),
 };

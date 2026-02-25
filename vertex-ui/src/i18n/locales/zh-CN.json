@@ -330,7 +330,17 @@
       "paper": "模拟",
       "live": "实盘",
       "strategyName": "策略名称",
-      "accountNameLabel": "账户名称"
+      "accountNameLabel": "账户名称",
+      "accountBalance": "实盘账户余额",
+      "selectAccount": "选择账户",
+      "dailyPnlTrend": "每日盈亏走势",
+      "dailyPnl": "日盈亏",
+      "cumulativePnl": "累计盈亏",
+      "asset": "资产",
+      "free": "可用",
+      "locked": "冻结",
+      "total": "总计",
+      "noData": "暂无数据"
     }
   },
   "placeholder": {

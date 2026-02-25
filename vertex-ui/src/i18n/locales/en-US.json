@@ -330,7 +330,17 @@
       "paper": "Paper",
       "live": "Live",
       "strategyName": "Strategy",
-      "accountNameLabel": "Account"
+      "accountNameLabel": "Account",
+      "accountBalance": "Live Account Balance",
+      "selectAccount": "Select Account",
+      "dailyPnlTrend": "Daily P&L Trend",
+      "dailyPnl": "Daily P&L",
+      "cumulativePnl": "Cumulative P&L",
+      "asset": "Asset",
+      "free": "Available",
+      "locked": "Locked",
+      "total": "Total",
+      "noData": "No Data"
     }
   },
   "placeholder": {

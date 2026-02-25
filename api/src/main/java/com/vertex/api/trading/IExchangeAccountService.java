@@ -2,6 +2,7 @@ package com.vertex.api.trading;
 
 import com.vertex.model.dto.trading.ExchangeAccountCreateDTO;
 import com.vertex.model.dto.trading.ExchangeAccountUpdateDTO;
+import com.vertex.model.vo.trading.AssetBalanceVO;
 import com.vertex.model.vo.trading.ExchangeAccountVO;
 
 import java.util.List;
@@ -22,4 +23,9 @@ public interface IExchangeAccountService {
     List<ExchangeAccountVO> list();
 
     boolean testConnection(Long id);
+
+    /**
+     * 查询账户全量资产余额（仅返回 free+locked > 0 的资产）
+     */
+    List<AssetBalanceVO> getBalance(Long id);
 }

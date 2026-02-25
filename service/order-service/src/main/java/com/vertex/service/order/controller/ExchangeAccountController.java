@@ -3,6 +3,7 @@ package com.vertex.service.order.controller;
 import com.vertex.api.trading.IExchangeAccountService;
 import com.vertex.model.dto.trading.ExchangeAccountCreateDTO;
 import com.vertex.model.dto.trading.ExchangeAccountUpdateDTO;
+import com.vertex.model.vo.trading.AssetBalanceVO;
 import com.vertex.model.vo.trading.ExchangeAccountVO;
 import com.vertex.web.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -61,5 +62,11 @@ public class ExchangeAccountController {
     @PostMapping("/{id}/test")
     public Result<Boolean> testConnection(@PathVariable Long id) {
         return Result.success(accountService.testConnection(id));
+    }
+
+    @Operation(summary = "查询账户全量资产余额")
+    @GetMapping("/{id}/balance")
+    public Result<List<AssetBalanceVO>> getBalance(@PathVariable Long id) {
+        return Result.success(accountService.getBalance(id));
     }
 }
