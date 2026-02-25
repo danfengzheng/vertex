@@ -60,7 +60,10 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setTradeMode(dto.getTradeMode());
         strategy.setExecutionMode(dto.getExecutionMode());
         strategy.setAccountId(dto.getAccountId());
+        strategy.setPositionSizing(dto.getPositionSizing());
         strategy.setTradeQuantity(dto.getTradeQuantity());
+        strategy.setPositionRatio(dto.getPositionRatio());
+        strategy.setInitialCapital(dto.getInitialCapital());
         strategy.setStopLossPct(dto.getStopLossPct());
         strategy.setTakeProfitPct(dto.getTakeProfitPct());
         strategy.setFeeRate(dto.getFeeRate());
