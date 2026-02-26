@@ -151,9 +151,16 @@ public class StrategyEngineService {
                             .toList();
                 }
 
+                // K线收盘事件触发时，新K线尚未写入RocksDB，导致过滤掉0根（而非预期的1根），
+                // 实际得到 fetchSize+1 根，与回测的精确 fetchSize 窗口不一致，造成EMA种子偏差。
+                // 此处截断到 fetchSize 根（保留降序头部=最新），与回测滑动窗口对齐。
+                if (klines.size() > fetchSize) {
+                    klines = klines.subList(0, fetchSize);
+                }
+
                 // 降序查询结果翻转为升序（时间从早到晚）
-                 klines = new ArrayList<>(klines);
-                 Collections.reverse(klines);
+                klines = new ArrayList<>(klines);
+                Collections.reverse(klines);
 
                 if (klines.size() < required) {
                     log.debug("Insufficient data for interval {} in strategy '{}' ({}/{})",
