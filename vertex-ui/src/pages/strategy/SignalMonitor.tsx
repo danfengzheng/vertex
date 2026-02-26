@@ -4,7 +4,7 @@ import {
   Progress, Badge, Tooltip, Dropdown, Card, Row, Col, Statistic, Empty,
 } from 'antd';
 import type { Dayjs } from 'dayjs';
-import dayjs from 'dayjs';
+import { formatTimestamp } from '../../utils/date';
 import {
   ReloadOutlined,
   ThunderboltOutlined,
@@ -74,14 +74,14 @@ const QuickBacktestResult = ({
       dataIndex: 'entryTime',
       key: 'entryTime',
       width: 150,
-      render: (v: number | string) => dayjs(Number(v)).format('YYYY-MM-DD HH:mm'),
+      render: (v: number | string) => formatTimestamp(v, 'YYYY-MM-DD HH:mm'),
     },
     {
       title: t('text.strategy.exitTime'),
       dataIndex: 'exitTime',
       key: 'exitTime',
       width: 150,
-      render: (v: number | string) => dayjs(Number(v)).format('YYYY-MM-DD HH:mm'),
+      render: (v: number | string) => formatTimestamp(v, 'YYYY-MM-DD HH:mm'),
     },
     {
       title: t('text.strategy.signalType'),
@@ -158,7 +158,7 @@ const QuickBacktestResult = ({
           <Tag>{t('text.strategy.recentDays').replace('{{days}}', String(days))}</Tag>
           {result.startTime != null && result.endTime != null && (
             <span style={{ fontSize: 12, color: '#999' }}>
-              {dayjs(Number(result.startTime)).format('YYYY-MM-DD HH:mm')} ~ {dayjs(Number(result.endTime)).format('YYYY-MM-DD HH:mm')}
+              {formatTimestamp(result.startTime, 'YYYY-MM-DD HH:mm')} ~ {formatTimestamp(result.endTime, 'YYYY-MM-DD HH:mm')}
             </span>
           )}
         </Space>
@@ -403,7 +403,7 @@ export const SignalMonitor = () => {
       dataIndex: 'signalTime',
       key: 'signalTime',
       width: 180,
-      render: (val: number | string) => dayjs(typeof val === 'string' ? Number(val) : val).format('YYYY-MM-DD HH:mm:ss'),
+      render: (val: number | string) => formatTimestamp(val),
     },
     {
       title: t('text.strategy.name'),
@@ -639,7 +639,7 @@ export const SignalMonitor = () => {
               {detailSignal.price}
             </Descriptions.Item>
             <Descriptions.Item label={t('text.strategy.signalTime')}>
-              {dayjs(typeof detailSignal.signalTime === 'string' ? Number(detailSignal.signalTime) : detailSignal.signalTime).format('YYYY-MM-DD HH:mm:ss')}
+              {formatTimestamp(detailSignal.signalTime)}
             </Descriptions.Item>
             <Descriptions.Item label={t('text.strategy.indicatorValues')} span={2}>
               {detailSignal.indicators && (

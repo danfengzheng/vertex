@@ -7,6 +7,7 @@ import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.service.quote.source.rest.KLineRestClient;
 import com.vertex.service.quote.store.KLineStore;
+import com.vertex.service.strategy.config.StrategyProperties;
 import com.vertex.service.strategy.indicator.IndicatorRegistry;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class StrategyDataWarmupService {
     private final KLineStore klineStore;
     private final IndicatorRegistry indicatorRegistry;
     private final List<KLineRestClient> restClients;
+    private final StrategyProperties properties;
 
     /**
      * 检查并预热策略所需数据（支持多周期）。
@@ -73,11 +75,17 @@ public class StrategyDataWarmupService {
     }
 
     /**
-     * 预热单个周期的K线数据
+     * 预热单个周期的K线数据。
+     * <p>
+     * fetchSize 与 {@link com.vertex.service.strategy.engine.StrategyEngineService} 的查询量对齐：
+     * {@code min(required × warmupMultiplier + 10, maxKlineHistory)}
+     * 确保重启后 EMA/MACD 等状态型指标的冷启动基准与回测完全一致，避免信号时间偏差。
      */
     private int warmupInterval(Strategy strategy, KLineInterval interval, int requiredDataPoints) {
-        // 额外留 10 条冗余
-        int fetchSize = requiredDataPoints + 10;
+        int warmupMultiplier = properties.getEngine().getWarmupMultiplier();
+        int maxKlineHistory  = properties.getEngine().getMaxKlineHistory();
+        // 与 StrategyEngineService 查询量完全对齐
+        int fetchSize = Math.min(requiredDataPoints * warmupMultiplier + 10, maxKlineHistory);
 
         // 查询 RocksDB 中现有数据量
         List<KLine> existingData = klineStore.query(
@@ -91,14 +99,16 @@ public class StrategyDataWarmupService {
 
         int existingCount = existingData.size();
 
-        if (existingCount >= requiredDataPoints) {
+        if (existingCount >= fetchSize) {
             log.info("[DataWarmup] Strategy '{}' interval {} data sufficient: {}/{} K-lines available.",
-                    strategy.getName(), interval.getCode(), existingCount, requiredDataPoints);
+                    strategy.getName(), interval.getCode(), existingCount, fetchSize);
             return 0;
         }
 
-        log.info("[DataWarmup] Strategy '{}' interval {} data insufficient: {}/{}, starting backfill...",
-                strategy.getName(), interval.getCode(), existingCount, requiredDataPoints);
+        log.info("[DataWarmup] Strategy '{}' interval {} data insufficient: {}/{} "
+                        + "(required={} × warmup={} + 10, capped at {}), starting backfill...",
+                strategy.getName(), interval.getCode(), existingCount, fetchSize,
+                requiredDataPoints, warmupMultiplier, maxKlineHistory);
 
         return backfillViaRest(strategy, interval, fetchSize);
     }

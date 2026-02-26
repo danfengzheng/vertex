@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { Table, Button, Form, Select, Input, Space, message, Tag } from 'antd';
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import dayjs from 'dayjs';
 import {
   klineApi,
   KLineVO,
   KLineQueryDTO,
   KLINE_INTERVAL_LABELS,
 } from '../../api/quote';
+import { formatTimestamp } from '../../utils/date';
 
 const INTERVAL_OPTIONS = Object.entries(KLINE_INTERVAL_LABELS).map(([value, label]) => ({
   value,
@@ -61,8 +61,7 @@ export const KLineQuery = () => {
       dataIndex: 'openTime',
       key: 'openTime',
       width: 180,
-      render: (val: number | string) =>
-        val != null ? dayjs(Number(val)).format('YYYY-MM-DD HH:mm:ss') : '-',
+      render: (val: number | string) => formatTimestamp(val),
     },
     {
       title: t('text.quote.open'),
