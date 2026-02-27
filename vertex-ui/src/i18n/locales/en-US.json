@@ -236,6 +236,28 @@
       "indicatorInterval": "Indicator Interval",
       "useDefault": "Use strategy default"
     },
+    "chain": {
+      "title": "Chain Analysis",
+      "tokenListTitle": "New Token Monitor",
+      "alertRuleTitle": "Alert Rules",
+      "chain": "Chain",
+      "symbol": "Symbol",
+      "score": "Score",
+      "subScores": "Dimension Scores",
+      "scoreOnchain": "On-Chain",
+      "scoreMarket": "Market",
+      "scoreTokenomics": "Tokenomics",
+      "scoreNovelty": "Novelty",
+      "priceUsd": "Price (USD)",
+      "liquidityUsd": "Liquidity",
+      "holderCount": "Holders",
+      "deployTime": "Listed At",
+      "minScore": "Min Score",
+      "alertRuleName": "Rule Name",
+      "notifyChannels": "Notify Channels",
+      "conditions": "Conditions",
+      "triggerScan": "Scan Now"
+    },
     "trading": {
       "title": "Trading",
       "accountTitle": "Exchange Accounts",
@@ -445,6 +467,13 @@
       "loadFailed": "Load failed",
       "backtestSuccess": "Backtest completed",
       "backtestFailed": "Backtest failed"
+    },
+    "chain": {
+      "scanSubmitted": "Scan submitted, refresh list in ~30s",
+      "enableSuccess": "Alert rule enabled",
+      "disableSuccess": "Alert rule disabled",
+      "deleteConfirm": "Delete this alert rule?",
+      "loadFailed": "Load failed"
     }
   }
 }

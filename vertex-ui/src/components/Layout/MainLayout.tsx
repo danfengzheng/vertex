@@ -21,6 +21,8 @@ import {
   OrderedListOutlined,
   DashboardOutlined,
   PieChartOutlined,
+  NodeExpandOutlined,
+  BellOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -53,6 +55,9 @@ export const MainLayout = () => {
     }
     if (location.pathname.startsWith('/trading')) {
       return ['trading'];
+    }
+    if (location.pathname.startsWith('/chain')) {
+      return ['chain'];
     }
     return [];
   };
@@ -146,6 +151,23 @@ export const MainLayout = () => {
           key: '/trading/pnl',
           icon: <PieChartOutlined />,
           label: t('text.trading.pnlAnalysisTitle'),
+        },
+      ],
+    },
+    {
+      key: 'chain',
+      icon: <NodeExpandOutlined />,
+      label: t('text.chain.title'),
+      children: [
+        {
+          key: '/chain/tokens',
+          icon: <FundOutlined />,
+          label: t('text.chain.tokenListTitle'),
+        },
+        {
+          key: '/chain/alerts',
+          icon: <BellOutlined />,
+          label: t('text.chain.alertRuleTitle'),
         },
       ],
     },

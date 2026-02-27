@@ -1,0 +1,27 @@
+description = 'chain-analysis-service - 多链新币分析服务'
+
+dependencies {
+    // 内部依赖
+    implementation project(':api')
+    implementation project(':model')
+    implementation project(':common:common-core')
+    implementation project(':common:common-web')
+
+    // Spring Boot
+    implementation libs.spring.boot.starter
+
+    // MyBatis Plus
+    implementation libs.mybatis.plus.boot.starter
+
+    // OkHttp（外部链 REST API）
+    implementation libs.okhttp
+
+    // JSON
+    implementation libs.fastjson2
+
+    // 配置处理
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // 测试
+    testImplementation libs.spring.boot.starter.test
+}

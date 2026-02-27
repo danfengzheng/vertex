@@ -14,6 +14,8 @@ import { ExchangeAccountManagement } from '../pages/trading/ExchangeAccountManag
 import { OrderHistory } from '../pages/trading/OrderHistory';
 import { PositionMonitor } from '../pages/trading/PositionMonitor';
 import { PnlAnalysis } from '../pages/trading/PnlAnalysis';
+import { TokenList } from '../pages/chain/TokenList';
+import { AlertConfig } from '../pages/chain/AlertConfig';
 
 export const AppRouter = () => {
   return (
@@ -40,6 +42,8 @@ export const AppRouter = () => {
         <Route path="trading/positions" element={<PositionMonitor />} />
         <Route path="trading/pnl" element={<PnlAnalysis />} />
         <Route path="guide/strategy" element={<StrategyGuide />} />
+        <Route path="chain/tokens" element={<TokenList />} />
+        <Route path="chain/alerts" element={<AlertConfig />} />
       </Route>
     </Routes>
   );

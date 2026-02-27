@@ -37,6 +37,7 @@ knife4j:
           - com.vertex.service.quote.controller
           - com.vertex.service.strategy.controller
           - com.vertex.service.order.controller
+          - com.vertex.service.chain.controller
 
 # 系统配置
 vertex:
@@ -79,3 +80,25 @@ vertex:
       enabled: true
       bot-token: 8568350639:AAFb2uRyP705t29P53pfGnpspCxNxKagSx0
       chat-id: -1003829666749
+  chain:
+    enabled: true
+    scan-interval-seconds: 300
+    max-jitter-seconds: 600
+    min-score-to-save: 20
+    # https://etherscan.io/ zhaoxu725
+    bnb:
+      enabled: true
+      bscscan-api-key: Z82E7M1QGB9J9R4WFFTRYRUDZN9HUJTRHK
+      scan-window-minutes: 30
+      min-liquidity-usd: 1000
+    # https://dashboard.helius.dev/ zhaoxu
+    solana:
+      enabled: true
+      helius-api-key: f42ba6b9-d647-4305-afdd-cf3a236770cb
+      scan-window-minutes: 30
+      min-liquidity-usd: 500
+    telegram:
+      enabled: true
+      bot-token: ${VERTEX_CHAIN_TG_BOT_TOKEN:8568350639:AAFb2uRyP705t29P53pfGnpspCxNxKagSx0}
+      chat-id: ${VERTEX_CHAIN_TG_CHAT_ID:-1003829666749}
+      api-url: https://api.telegram.org

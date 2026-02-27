@@ -24,6 +24,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 import java.util.List;
 import java.util.Optional;
@@ -61,6 +62,7 @@ public class QuoteAutoConfiguration {
     // ==================== HTTP 客户端 ====================
 
     @Bean
+    @Primary
     @ConditionalOnMissingBean
     public OkHttpClient quoteOkHttpClient() {
         return new OkHttpClient.Builder()

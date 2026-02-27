@@ -236,6 +236,28 @@
       "indicatorInterval": "指标周期",
       "useDefault": "使用策略默认"
     },
+    "chain": {
+      "title": "链上分析",
+      "tokenListTitle": "新币监控",
+      "alertRuleTitle": "告警规则",
+      "chain": "链",
+      "symbol": "符号",
+      "score": "综合评分",
+      "subScores": "维度分",
+      "scoreOnchain": "链上",
+      "scoreMarket": "市场",
+      "scoreTokenomics": "代币经济",
+      "scoreNovelty": "新颖度",
+      "priceUsd": "价格(USD)",
+      "liquidityUsd": "流动性",
+      "holderCount": "持有者",
+      "deployTime": "上线时间",
+      "minScore": "最低评分",
+      "alertRuleName": "规则名称",
+      "notifyChannels": "通知渠道",
+      "conditions": "过滤条件",
+      "triggerScan": "立即扫描"
+    },
     "trading": {
       "title": "交易管理",
       "accountTitle": "交易所账户",
@@ -444,6 +466,13 @@
       "loadFailed": "加载失败",
       "backtestSuccess": "回测完成",
       "backtestFailed": "回测执行失败"
+    },
+    "chain": {
+      "scanSubmitted": "扫描任务已提交，约 30 秒后刷新列表",
+      "enableSuccess": "告警规则已启用",
+      "disableSuccess": "告警规则已禁用",
+      "deleteConfirm": "确定要删除该告警规则吗？",
+      "loadFailed": "加载失败"
     }
   }
 }
