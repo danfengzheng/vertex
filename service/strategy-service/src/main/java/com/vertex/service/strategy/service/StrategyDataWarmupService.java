@@ -5,6 +5,7 @@ import com.vertex.model.dto.strategy.StrategyIndicatorConfig;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.strategy.Strategy;
+import com.vertex.service.quote.service.QuoteBackfillService;
 import com.vertex.service.quote.source.rest.KLineRestClient;
 import com.vertex.service.quote.store.KLineStore;
 import com.vertex.service.strategy.config.StrategyProperties;
@@ -33,6 +34,7 @@ public class StrategyDataWarmupService {
     private final IndicatorRegistry indicatorRegistry;
     private final List<KLineRestClient> restClients;
     private final StrategyProperties properties;
+    private final QuoteBackfillService quoteBackfillService;
 
     /**
      * 检查并预热策略所需数据（支持多周期）。
@@ -100,8 +102,18 @@ public class StrategyDataWarmupService {
         int existingCount = existingData.size();
 
         if (existingCount >= fetchSize) {
-            log.info("[DataWarmup] Strategy '{}' interval {} data sufficient: {}/{} K-lines available.",
+            log.info("[DataWarmup] Strategy '{}' interval {} data sufficient: {}/{} K-lines available, filling any gaps in range.",
                     strategy.getName(), interval.getCode(), existingCount, fetchSize);
+            long minOpen = existingData.stream().mapToLong(KLine::getOpenTime).min().orElse(0L);
+            long maxOpen = existingData.stream().mapToLong(KLine::getOpenTime).max().orElse(0L);
+            if (minOpen < maxOpen) {
+                int filled = quoteBackfillService.fillGapsInRange(
+                        strategy.getExchange(), strategy.getSymbol(), interval, minOpen, maxOpen);
+                if (filled > 0) {
+                    log.info("[DataWarmup] Strategy '{}' interval {} filled {} gap bars.", strategy.getName(), interval.getCode(), filled);
+                }
+                return filled;
+            }
             return 0;
         }
 

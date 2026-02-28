@@ -106,6 +106,7 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
             subscribeTrade(symbol, interval);
             return;
         }
+        log.info("订阅Socket Kline {} , {}",symbol,interval.getCode());
         subscribeKline(symbol, interval);
     }
 

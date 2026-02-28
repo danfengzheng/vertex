@@ -62,7 +62,7 @@ vertex:
   quote:
     subscription:
       # kline=仅订阅K线流（与回测/信号一致）  trade=日K以下trade流+内存聚合（默认）
-      mode: ${VERTEX_QUOTE_SUBSCRIPTION_MODE:trade}
+      mode: ${VERTEX_QUOTE_SUBSCRIPTION_MODE:kline}
   strategy:
     enabled: true
     rocksdb:

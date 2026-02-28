@@ -72,6 +72,16 @@ public class StrategyEngineService {
             }
         }
 
+        // 提取触发本次评估的最新 K线 openTime，作为查询窗口的上界。
+        // 由于 StrategyEventListener 使用 @Async，事件可能在积压后延迟处理，
+        // 此时 RocksDB 中已写入多根更新的已收盘K线。若不锁定上界，
+        // 策略引擎会取"当前最新"K线而非"触发事件时的最新"K线，
+        // 导致窗口向后漂移（例如 01:00 触发的事件在 01:45 才处理，窗口错位到 01:45）。
+        final long triggeringKlineTime = klines.stream()
+                .mapToLong(KLine::getOpenTime)
+                .max()
+                .orElse(0L);
+
         // 查找所有匹配 exchange + symbol 的已启用策略（不限 interval）
         LambdaQueryWrapper<Strategy> wrapper = new LambdaQueryWrapper<Strategy>()
                 .eq(Strategy::getExchange, exchange)
@@ -95,7 +105,7 @@ public class StrategyEngineService {
                         log.debug("Strategy [{}] throttled, skipping evaluation", strategy.getName());
                         continue;
                     }
-                    runStrategy(strategy);
+                    runStrategy(strategy, triggeringKlineTime);
                 }
             } catch (Exception e) {
                 log.error("Strategy [{}] execution failed: {}", strategy.getName(), e.getMessage(), e);
@@ -104,20 +114,24 @@ public class StrategyEngineService {
     }
 
     /**
-     * 手动触发策略执行
+     * 手动触发策略执行（使用当前最新K线，不限窗口上界）
      */
     public void runStrategyNow(Long strategyId) {
         Strategy strategy = strategyMapper.selectById(strategyId);
         if (strategy == null) {
             throw new BizException(GlobalError.STRATEGY_NOT_FOUND);
         }
-        runStrategy(strategy);
+        runStrategy(strategy, null);
     }
 
     /**
      * 执行单个策略（支持多周期K线）
+     *
+     * @param triggeringKlineTime 触发本次评估的K线 openTime（毫秒）；
+     *                            null 表示手动触发，使用当前最新K线。
+     *                            设置此值可防止 @Async 延迟导致的窗口漂移。
      */
-    private void runStrategy(Strategy strategy) {
+    private void runStrategy(Strategy strategy, Long triggeringKlineTime) {
         List<StrategyIndicatorConfig> configs = parseConfigs(strategy);
         if (configs == null || configs.isEmpty()) {
             log.warn("Strategy [{}] has no indicator configs", strategy.getName());
@@ -150,11 +164,14 @@ public class StrategyEngineService {
                 int warmup = properties.getEngine().getWarmupMultiplier();
                 int fetchSize = Math.min(required * warmup + 10, properties.getEngine().getMaxKlineHistory());
 
-                // 多取一些以弥补过滤未收盘K线后的数量损失
+                // 以触发事件的K线 openTime 为查询上界（endTime），锁定窗口右端。
+                // 这样无论 @Async 线程何时处理事件，都能保证窗口结束于正确的K线，
+                // 与回测的滑动窗口完全对齐，消除信号时间漂移。
+                // triggeringKlineTime=null（手动触发）时不限上界，取当前最新数据。
                 int querySize = properties.getEngine().isOnlyClosedKlines() ? fetchSize + 1 : fetchSize;
                 List<KLine> klines = klineStore.query(
                         strategy.getExchange(), strategy.getSymbol(),
-                        effectiveInterval, null, null, querySize, false);
+                        effectiveInterval, null, triggeringKlineTime, querySize, false);
 
                 // 过滤未收盘K线，确保指标计算只使用已收盘数据（与回测一致）
                 if (properties.getEngine().isOnlyClosedKlines()) {
@@ -163,9 +180,7 @@ public class StrategyEngineService {
                             .toList();
                 }
 
-                // K线收盘事件触发时，新K线尚未写入RocksDB，导致过滤掉0根（而非预期的1根），
-                // 实际得到 fetchSize+1 根，与回测的精确 fetchSize 窗口不一致，造成EMA种子偏差。
-                // 此处截断到 fetchSize 根（保留降序头部=最新），与回测滑动窗口对齐。
+                // 截断到 fetchSize 根（保留降序头部=最新），与回测滑动窗口对齐。
                 if (klines.size() > fetchSize) {
                     klines = klines.subList(0, fetchSize);
                 }

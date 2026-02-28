@@ -8,9 +8,9 @@ import com.vertex.model.dto.quote.SubscribeRequestDTO;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.vo.quote.DataSourceStatusVO;
+import com.vertex.service.quote.service.QuoteBackfillService;
 import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.quote.source.rest.KLineRestClient;
-import com.vertex.service.quote.store.KLineStore;
 import com.vertex.web.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -45,7 +45,7 @@ public class QuoteSourceController {
     private final List<QuoteDataSource> dataSources;
     private final List<KLineRestClient> restClients;
     private final IKLineService klineService;
-    private final KLineStore klineStore;
+    private final QuoteBackfillService quoteBackfillService;
 
     /** 异步补全任务线程池 */
     private final ExecutorService backfillExecutor = Executors.newFixedThreadPool(2);
@@ -174,12 +174,11 @@ public class QuoteSourceController {
     // ==================== 补全逻辑 ====================
 
     /**
-     * 单个周期的智能补全
+     * 单个周期补全：无时间范围时单次拉取最近 N 条；有范围时按缺口（首/中/尾）逐段回填。
      */
     private int backfillSingleInterval(KLineRestClient client, KLineQueryDTO query, KLineInterval interval) {
         int batchLimit = "okx".equalsIgnoreCase(query.getExchange()) ? 300 : 1000;
 
-        // 无时间段时走单次查询
         if (query.getStartTime() == null || query.getEndTime() == null) {
             int limit = query.getLimit() != null ? query.getLimit() : 500;
             List<KLine> klines = client.fetchKLines(
@@ -192,79 +191,9 @@ public class QuoteSourceController {
             return klineService.saveBatchFillingGapsOnly(klines);
         }
 
-        long startTime = query.getStartTime();
-        long endTime = query.getEndTime();
-
-        // 查询数据库已有数据（升序，用于计算连续区间）
-        List<KLine> existingData = klineStore.query(
+        return quoteBackfillService.fillGapsInRange(
                 query.getExchange(), query.getSymbol(), interval,
-                startTime, endTime, Integer.MAX_VALUE, true);
-
-        int continuousCount = countContinuous(existingData, interval);
-
-        if (continuousCount >= 100 && !existingData.isEmpty()) {
-            log.info("[Backfill] Smart mode: found {} continuous records, filling gaps only", continuousCount);
-            int count = 0;
-
-            long existingStart = existingData.get(0).getOpenTime();
-            if (existingStart > startTime) {
-                count += fetchAndSave(client, query.getSymbol(), query.getExchange(), interval,
-                        startTime, existingStart - 1, batchLimit);
-            }
-
-            long existingEnd = existingData.get(existingData.size() - 1).getCloseTime();
-            if (existingEnd < endTime) {
-                count += fetchAndSave(client, query.getSymbol(), query.getExchange(), interval,
-                        existingEnd + 1, endTime, batchLimit);
-            }
-
-            return count;
-        }
-
-        log.info("[Backfill] Full mode: continuous={}, fetching entire range", continuousCount);
-        return fetchAndSave(client, query.getSymbol(), query.getExchange(), interval,
-                startTime, endTime, batchLimit);
-    }
-
-    private int fetchAndSave(KLineRestClient client, String symbol, String exchange,
-                             KLineInterval interval, long startTime, long endTime, int batchLimit) {
-        long intervalMillis = interval.getMillis();
-        long windowMillis = intervalMillis * batchLimit;
-        long cursor = startTime;
-        int totalCount = 0;
-
-        while (cursor < endTime) {
-            long windowEnd = Math.min(cursor + windowMillis, endTime);
-            List<KLine> batch = client.fetchKLines(symbol, interval, cursor, windowEnd, batchLimit);
-
-            if (!batch.isEmpty()) {
-                totalCount += klineService.saveBatchFillingGapsOnly(batch);
-                long lastCloseTime = batch.get(batch.size() - 1).getCloseTime();
-                cursor = lastCloseTime + 1;
-            } else {
-                cursor = windowEnd + 1;
-            }
-        }
-        return totalCount;
-    }
-
-    private int countContinuous(List<KLine> data, KLineInterval interval) {
-        if (data == null || data.size() < 2) {
-            return data == null ? 0 : data.size();
-        }
-        long millis = interval.getMillis();
-        int maxContinuous = 1;
-        int current = 1;
-        for (int i = 1; i < data.size(); i++) {
-            long gap = data.get(i).getOpenTime() - data.get(i - 1).getOpenTime();
-            if (gap == millis) {
-                current++;
-                maxContinuous = Math.max(maxContinuous, current);
-            } else {
-                current = 1;
-            }
-        }
-        return maxContinuous;
+                query.getStartTime(), query.getEndTime());
     }
 
     // ==================== 辅助方法 ====================

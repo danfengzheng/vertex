@@ -48,7 +48,22 @@ public class QuoteProperties {
     /** 交易所配置 */
     private Exchange exchange = new Exchange();
 
+    /** K 线缺口检查（定时检查最近 N 天并可选自动补全） */
+    private KlineCheck klineCheck = new KlineCheck();
+
     // ==================== 内部类 ====================
+
+    @Data
+    public static class KlineCheck {
+        /** 是否启用定时检查 */
+        private boolean enabled = true;
+        /** 检查间隔（毫秒），默认 30 分钟 */
+        private long intervalMs = 30 * 60 * 1000L;
+        /** 检查最近几天 */
+        private int lookbackDays = 7;
+        /** 发现缺口时是否自动 REST 回填 */
+        private boolean autoBackfill = false;
+    }
 
     @Data
     public static class RocksDB {
