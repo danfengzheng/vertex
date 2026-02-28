@@ -36,4 +36,9 @@ public class ChainTokenDetailVO extends ChainTokenVO {
     private Integer contractVerified;
     private Integer txCount1h;
     private Integer lpAddCount;
+
+    // 一级市场专属
+    private BigDecimal bondingCurveProgress;
+    private Integer replyCount;
+    private String launchpadName;
 }

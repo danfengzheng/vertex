@@ -383,6 +383,41 @@ const TokenDetail = ({ data }: { data: ChainTokenDetailVO }) => {
         <Col span={6}><Statistic title="代币经济" value={data.scoreTokenomics} suffix="/20" /></Col>
       </Row>
 
+      {/* 一级市场面板（bonding curve 阶段专属） */}
+      {data.bondingCurveProgress != null && (
+        <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 8, padding: '12px 16px' }}>
+          <div style={{ fontWeight: 600, marginBottom: 12, color: '#389e0d' }}>
+            🚀 一级市场（Bonding Curve 阶段）· {data.launchpadName || 'launchpad'}
+          </div>
+          <Row gutter={16} align="middle">
+            <Col span={12}>
+              <div style={{ marginBottom: 4, fontSize: 12, color: '#595959' }}>Bonding Curve 进度</div>
+              <Progress
+                percent={parseFloat(data.bondingCurveProgress)}
+                strokeColor={{ '0%': '#52c41a', '100%': '#faad14' }}
+                format={(pct) => `${pct?.toFixed(1)}%`}
+              />
+              <div style={{ fontSize: 11, color: '#8c8c8c', marginTop: 4 }}>
+                进度越高 → 越接近毕业上 DEX → 价格催化剂
+              </div>
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title="社区讨论数"
+                value={data.replyCount ?? 0}
+                suffix="条"
+              />
+            </Col>
+            <Col span={6}>
+              <Statistic
+                title="市值 USD"
+                value={data.marketCapUsd ? `$${parseFloat(data.marketCapUsd).toLocaleString()}` : '-'}
+              />
+            </Col>
+          </Row>
+        </div>
+      )}
+
       {/* 基础信息 */}
       <Descriptions title="基础信息" bordered size="small" column={2}>
         <Descriptions.Item label="链">{data.chain}</Descriptions.Item>

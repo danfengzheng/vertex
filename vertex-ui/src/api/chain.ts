@@ -53,6 +53,10 @@ export interface ChainTokenDetailVO extends ChainTokenVO {
   contractVerified: number;
   txCount1h: number | null;
   lpAddCount: number | null;
+  // 一级市场专属
+  bondingCurveProgress: string | null;
+  replyCount: number | null;
+  launchpadName: string | null;
 }
 
 /** 告警规则 VO */

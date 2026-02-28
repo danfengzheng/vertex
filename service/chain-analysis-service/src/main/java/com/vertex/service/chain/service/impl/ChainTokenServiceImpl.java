@@ -148,6 +148,10 @@ public class ChainTokenServiceImpl implements IChainTokenService {
             vo.setContractVerified(m.getContractVerified());
             vo.setTxCount1h(m.getTxCount1h());
             vo.setLpAddCount(m.getLpAddCount());
+            // 一级市场专属
+            vo.setBondingCurveProgress(m.getBondingCurveProgress());
+            vo.setReplyCount(m.getReplyCount());
+            vo.setLaunchpadName(m.getLaunchpadName());
         }
         return vo;
     }

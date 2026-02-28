@@ -4,7 +4,6 @@ import com.alibaba.fastjson2.JSONObject;
 import com.vertex.service.chain.config.ChainAnalysisProperties;
 import com.vertex.service.chain.source.ChainDataSource;
 import com.vertex.service.chain.source.NewTokenRawData;
-import com.vertex.service.chain.source.bnb.DexScreenerClient;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -17,37 +16,42 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Solana 链数据源实现
+ * Solana 一级市场数据源
  * <p>
- * 主要数据来源：
+ * 专注于 Pump.fun 上 <b>尚未毕业</b>（{@code complete=false}）的代币，
+ * 即 bonding curve 阶段的一级市场代币：
  * <ul>
- *   <li>Pump.fun — 最新 meme 代币发现（免费，无需 Key）</li>
- *   <li>DexScreener — 已毕业代币的价格、流动性、买卖压力（免费，无需 Key）</li>
- *   <li>Helius RPC — 持有者数量等链上指标（需要 Key，可选）</li>
+ *   <li>代币尚未在 Raydium / Jupiter 等 DEX 上市</li>
+ *   <li>仍在 Pump.fun 内部 bonding curve 上买卖</li>
+ *   <li>当 bonding curve 积累约 85 SOL 后自动毕业 → 转至 DEX（二级市场）</li>
  * </ul>
  * <p>
- * Helius Key 缺失时自动降级，不影响数据采集。
+ * 数据来源：
+ * <ul>
+ *   <li>Pump.fun Frontend API — 代币列表、bonding curve 进度、社区热度（免费，无需 Key）</li>
+ *   <li>Helius RPC — 持有者数量（需 Key，可选，缺失时自动降级）</li>
+ * </ul>
  */
 @Slf4j
 @Component
 @ConditionalOnProperty(prefix = "vertex.chain.solana", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class SolanaChainDataSource implements ChainDataSource {
 
+    // Pump.fun bonding curve 参数（lamports = SOL * 1e9）
+    private static final long INITIAL_VIRTUAL_SOL  = 30_000_000_000L;   // 30 SOL 起始虚拟储备
+    private static final long GRADUATION_VIRTUAL_SOL = 85_000_000_000L; // ~85 SOL 触发毕业
+
     private final ChainAnalysisProperties properties;
     private final HeliusClient heliusClient;
-    private final JupiterClient jupiterClient;
     private final PumpFunClient pumpFunClient;
-    private final DexScreenerClient dexScreenerClient;
 
     public SolanaChainDataSource(
             ChainAnalysisProperties properties,
             @Qualifier("chainOkHttpClient") OkHttpClient httpClient) {
         this.properties = properties;
-        ChainAnalysisProperties.Solana solCfg = properties.getSolana();
-        this.heliusClient = new HeliusClient(httpClient, solCfg.getHeliusRpcUrl(), solCfg.getHeliusApiKey());
-        this.jupiterClient = new JupiterClient(httpClient, solCfg.getJupiterApiUrl());
-        this.pumpFunClient = new PumpFunClient(httpClient, solCfg.getPumpfunApiUrl());
-        this.dexScreenerClient = new DexScreenerClient(httpClient);
+        ChainAnalysisProperties.Solana cfg = properties.getSolana();
+        this.heliusClient = new HeliusClient(httpClient, cfg.getHeliusRpcUrl(), cfg.getHeliusApiKey());
+        this.pumpFunClient = new PumpFunClient(httpClient, cfg.getPumpfunApiUrl());
     }
 
     @Override
@@ -55,50 +59,44 @@ public class SolanaChainDataSource implements ChainDataSource {
         return "SOL";
     }
 
-    /**
-     * Pump.fun 和 DexScreener 均无需 Key，始终可用。
-     * Helius Key 缺失时仅降级（持有者数量缺失），不影响整体可用性。
-     */
     @Override
     public boolean isAvailable() {
-        ChainAnalysisProperties.Solana solCfg = properties.getSolana();
-        boolean hasHeliusKey = solCfg.getHeliusApiKey() != null && !solCfg.getHeliusApiKey().isBlank();
-        if (!hasHeliusKey) {
-            log.debug("[SOL] Helius Key 未配置，持有者数量将不可用（其他数据正常）");
-        }
-        return true; // Pump.fun + DexScreener 无需 Key，始终可用
+        return true; // Pump.fun 无需 Key，始终可用
     }
 
     @Override
     public List<NewTokenRawData> fetchNewTokens(int scanWindowMinutes) {
-        if (!isAvailable()) return Collections.emptyList();
-
         try {
-            long windowMs = (long) scanWindowMinutes * 60 * 1000;
-            long since = System.currentTimeMillis() - windowMs;
-            double minLiquidity = properties.getSolana().getMinLiquidityUsd();
+            long windowMs = (long) scanWindowMinutes * 60_000;
+            long since    = System.currentTimeMillis() - windowMs;
+            double minMarketCapUsd = properties.getSolana().getMinLiquidityUsd(); // 复用配置作为市值下限
 
-            // 1. 从 Pump.fun 获取最新代币
-            List<JSONObject> pumpTokens = pumpFunClient.fetchLatestTokens(50);
-            if (pumpTokens.isEmpty()) {
-                log.debug("[SOL] No new tokens from Pump.fun");
+            // 1. 获取 Pump.fun 最新代币（按创建时间倒序，包含 bonding curve 数据）
+            List<JSONObject> tokens = pumpFunClient.fetchLatestTokens(50);
+            if (tokens.isEmpty()) {
+                log.debug("[SOL] Pump.fun returned no tokens");
                 return Collections.emptyList();
             }
 
             List<NewTokenRawData> result = new ArrayList<>();
-            for (JSONObject token : pumpTokens) {
+            for (JSONObject token : tokens) {
                 try {
-                    // 过滤时间窗口
+                    // 1a. 只处理时间窗口内的代币
                     long createdTs = token.getLongValue("created_timestamp");
-                    if (createdTs < since) continue;
+                    if (createdTs > 0 && createdTs < since) continue;
 
-                    NewTokenRawData data = buildFromPumpFun(token, minLiquidity);
+                    // 1b. 只处理 【未毕业】代币（一级市场）
+                    boolean graduated = Boolean.TRUE.equals(token.getBoolean("complete"));
+                    if (graduated) continue;
+
+                    NewTokenRawData data = buildFromPumpFun(token, minMarketCapUsd);
                     if (data != null) result.add(data);
                 } catch (Exception e) {
                     log.warn("[SOL] Failed to process token {}: {}", token.getString("mint"), e.getMessage());
                 }
             }
-            log.info("[SOL] Fetched {} new tokens (from {} Pump.fun entries)", result.size(), pumpTokens.size());
+            log.info("[SOL] Primary market scan: {} new tokens (non-graduated, from {} pump.fun entries)",
+                    result.size(), tokens.size());
             return result;
         } catch (Exception e) {
             log.error("[SOL] fetchNewTokens error: {}", e.getMessage(), e);
@@ -106,74 +104,36 @@ public class SolanaChainDataSource implements ChainDataSource {
         }
     }
 
-    // ─── 内部处理 ──────────────────────────────────────────
+    // ─── 内部构建 ──────────────────────────────────────────
 
-    private NewTokenRawData buildFromPumpFun(JSONObject token, double minLiquidity) {
+    private NewTokenRawData buildFromPumpFun(JSONObject token, double minMarketCapUsd) {
         String mintAddress = token.getString("mint");
         if (mintAddress == null) return null;
 
-        boolean graduated = Boolean.TRUE.equals(token.getBoolean("complete"));
-        BigDecimal usdMarketCap = token.getBigDecimal("usd_market_cap");
+        // 市值过滤（代替 minLiquidity，bonding curve 阶段无 DEX 流动性）
+        double usdMcRaw = token.getDoubleValue("usd_market_cap");
+        if (usdMcRaw < minMarketCapUsd) return null;
+        BigDecimal usdMarketCap = BigDecimal.valueOf(usdMcRaw);
 
-        // ── 1. 价格和流动性：优先 DexScreener（毕业后才有真实 DEX pair）──────
-        BigDecimal priceUsd = null;
-        BigDecimal liquidityUsd = null;
-        BigDecimal volume24h = null;
-        BigDecimal priceChange1h = null;
-        BigDecimal priceChange24h = null;
-        BigDecimal buyPressure = BigDecimal.valueOf(0.6);
-        String pairAddress = null;
-        int txCount1hDex = 0;
+        // ── Bonding curve 进度 ──────────────────────────────
+        double bondingPct = calcBondingCurveProgress(token);
 
-        if (graduated) {
-            // 毕业后有 Raydium pair，从 DexScreener 获取精确市场数据
-            List<JSONObject> pairs = dexScreenerClient.fetchTokenPairs("solana", mintAddress);
-            if (!pairs.isEmpty()) {
-                JSONObject bestPair = selectBestPair(pairs);
-                if (bestPair != null) {
-                    priceUsd = parseBigDecimal(bestPair.getString("priceUsd"));
-                    pairAddress = bestPair.getString("pairAddress");
-                    JSONObject liq = bestPair.getJSONObject("liquidity");
-                    if (liq != null) liquidityUsd = liq.getBigDecimal("usd");
-                    JSONObject vol = bestPair.getJSONObject("volume");
-                    if (vol != null) volume24h = vol.getBigDecimal("h24");
-                    JSONObject pc = bestPair.getJSONObject("priceChange");
-                    if (pc != null) {
-                        priceChange1h = pc.getBigDecimal("h1");
-                        priceChange24h = pc.getBigDecimal("h24");
-                    }
-                    buyPressure = calcBuyPressure(bestPair);
-                    JSONObject txns = bestPair.getJSONObject("txns");
-                    if (txns != null) {
-                        JSONObject h1 = txns.getJSONObject("h1");
-                        if (h1 != null) txCount1hDex = h1.getIntValue("buys") + h1.getIntValue("sells");
-                    }
-                }
-            }
-        }
+        // ── 社区热度 ───────────────────────────────────────
+        int replyCount = token.getIntValue("reply_count");
 
-        // 回退到 Jupiter 价格
-        if (priceUsd == null) {
-            priceUsd = jupiterClient.getPrice(mintAddress);
-        }
+        // ── 时间 ───────────────────────────────────────────
+        long createdTs  = token.getLongValue("created_timestamp");
+        int ageMinutes  = createdTs > 0 ? (int) ((System.currentTimeMillis() - createdTs) / 60_000) : -1;
 
-        // 估算流动性（未毕业时用市值的 10% 近似）
-        if (liquidityUsd == null && usdMarketCap != null) {
-            liquidityUsd = usdMarketCap.multiply(BigDecimal.valueOf(0.1));
-        }
-        if (liquidityUsd != null && liquidityUsd.doubleValue() < minLiquidity) return null;
-        if (!graduated && (usdMarketCap == null || usdMarketCap.doubleValue() < minLiquidity * 2)) return null;
+        // ── 持有者数（Helius，可选）─────────────────────────
+        boolean hasHelius  = hasHeliusKey();
+        int holderCount    = hasHelius ? heliusClient.getTokenHolderCount(mintAddress) : 0;
+        int decimals       = hasHelius ? heliusClient.getDecimals(mintAddress) : 6;
 
-        // ── 2. 链上指标：Helius（有 Key）或估算 ──────────────────────────────
-        boolean hasHelius = hasHeliusKey();
-        int decimals = hasHelius ? heliusClient.getDecimals(mintAddress) : 9;
-        int holderCount = hasHelius ? heliusClient.getTokenHolderCount(mintAddress) : 0;
-
-        long createdTs = token.getLongValue("created_timestamp");
-        int ageMinutes = createdTs > 0 ? (int) ((System.currentTimeMillis() - createdTs) / 60_000) : -1;
-
-        // 交易数：DexScreener 数据优先，否则从 Pump.fun reply_count 估算
-        int txCount1h = txCount1hDex > 0 ? txCount1hDex : estimateTxCount(token);
+        // ── 价格（pump.fun 内部 bonding curve 价格）──────────
+        // pump.fun 的 `market_cap` 是 SOL 计价，`usd_market_cap` 是 USD 计价
+        // 从市值和总供应量推算价格（近似）
+        BigDecimal priceUsd = estimatePriceFromMarketCap(token);
 
         return NewTokenRawData.builder()
                 .chain("SOL")
@@ -182,63 +142,70 @@ public class SolanaChainDataSource implements ChainDataSource {
                 .name(token.getString("name"))
                 .decimals(decimals)
                 .deployerAddress(token.getString("creator"))
-                .pairAddress(pairAddress)
+                .pairAddress(null)          // 一级市场：无 DEX 交易对
                 .listingTimeMs(createdTs > 0 ? createdTs : null)
+                // ── 链上 ──
                 .holderCount(holderCount > 0 ? holderCount : null)
-                .txCount1h(txCount1h)
-                .lpAddCount(graduated ? 2 : 1)
-                .liquidityLocked(graduated)  // 毕业后 Pump.fun 自动锁定 LP
-                .contractVerified(true)       // Solana SPL Token 无需验证概念
+                .txCount1h(null)            // bonding curve 内部无法直接获取 tx 数
+                .lpAddCount(0)              // 未毕业：尚无 LP
+                .liquidityLocked(false)     // 未毕业：无锁仓
+                .contractVerified(true)     // Solana SPL Token 无需传统审计
+                // ── 市场（bonding curve 阶段无 DEX 数据）──
                 .priceUsd(priceUsd)
                 .marketCapUsd(usdMarketCap)
-                .liquidityUsd(liquidityUsd)
-                .volume24hUsd(volume24h)
-                .priceChange1hPct(priceChange1h)
-                .priceChange24hPct(priceChange24h)
-                .buyPressure1h(buyPressure)
+                .liquidityUsd(null)         // 无 DEX 流动性
+                .volume24hUsd(null)         // 无 DEX 成交量
+                .priceChange1hPct(null)
+                .priceChange24hPct(null)
+                .buyPressure1h(null)
+                // ── 代币经济 ──
                 .top10HolderPct(null)
                 .deployerHoldingPct(null)
-                .lpPoolPct(graduated ? BigDecimal.valueOf(20.0) : BigDecimal.valueOf(5.0))
+                .lpPoolPct(null)
+                // ── 新颖度 ──
                 .ageMinutes(ageMinutes >= 0 ? ageMinutes : null)
                 .pumpFunListed(true)
+                // ── 一级市场专属 ──
+                .bondingCurveProgress(bondingPct)
+                .replyCount(replyCount)
+                .launchpadName("pump.fun")
                 .build();
     }
 
-    /** 从多个 pair 中选流动性最高的 */
-    private JSONObject selectBestPair(List<JSONObject> pairs) {
-        JSONObject best = null;
-        double bestLiq = -1;
-        for (JSONObject p : pairs) {
-            JSONObject liq = p.getJSONObject("liquidity");
-            double liqUsd = liq != null ? liq.getDoubleValue("usd") : 0;
-            if (liqUsd > bestLiq) { bestLiq = liqUsd; best = p; }
-        }
-        return best;
+    /**
+     * 从 virtual_sol_reserves 计算 bonding curve 填充进度（0-100%）。
+     * <p>
+     * Pump.fun bonding curve 参数：
+     * <ul>
+     *   <li>初始虚拟 SOL 储备 ≈ 30 SOL（30_000_000_000 lamports）</li>
+     *   <li>达到 ≈ 85 SOL 时触发毕业</li>
+     * </ul>
+     * 进度越高（接近 100%）表示越快即将毕业上 DEX，机会信号越强。
+     */
+    private double calcBondingCurveProgress(JSONObject token) {
+        // pump.fun API 有时直接返回 bonding_curve_progress 字段（0-100）
+        Double direct = token.getDouble("bonding_curve_progress");
+        if (direct != null && direct > 0) return Math.min(direct, 100.0);
+
+        // 否则从 virtual_sol_reserves 计算
+        long virtualSol = token.getLongValue("virtual_sol_reserves");
+        if (virtualSol <= INITIAL_VIRTUAL_SOL) return 0.0;
+        double pct = (double)(virtualSol - INITIAL_VIRTUAL_SOL)
+                   / (GRADUATION_VIRTUAL_SOL - INITIAL_VIRTUAL_SOL) * 100.0;
+        return Math.min(Math.max(pct, 0.0), 100.0);
     }
 
-    private BigDecimal calcBuyPressure(JSONObject pair) {
+    /** 从市值 ÷ 总供应量估算单价（pump.fun 总发行量约为 1,000,000,000） */
+    private BigDecimal estimatePriceFromMarketCap(JSONObject token) {
         try {
-            JSONObject txns = pair.getJSONObject("txns");
-            if (txns == null) return BigDecimal.valueOf(0.6);
-            JSONObject h1 = txns.getJSONObject("h1");
-            if (h1 == null) return BigDecimal.valueOf(0.6);
-            double buys = h1.getDoubleValue("buys");
-            double sells = h1.getDoubleValue("sells");
-            double total = buys + sells;
-            return total > 0 ? BigDecimal.valueOf(buys / total) : BigDecimal.valueOf(0.5);
+            double usdMc = token.getDoubleValue("usd_market_cap");
+            if (usdMc <= 0) return null;
+            // pump.fun 代币总供应量固定约 1B（1_000_000_000）
+            double totalSupply = 1_000_000_000.0;
+            return BigDecimal.valueOf(usdMc / totalSupply);
         } catch (Exception e) {
-            return BigDecimal.valueOf(0.5);
+            return null;
         }
-    }
-
-    private BigDecimal parseBigDecimal(String val) {
-        if (val == null || val.isBlank()) return null;
-        try { return new BigDecimal(val); } catch (Exception e) { return null; }
-    }
-
-    private int estimateTxCount(JSONObject token) {
-        int replies = token.getIntValue("reply_count");
-        return Math.max(replies * 5, 10);
     }
 
     private boolean hasHeliusKey() {

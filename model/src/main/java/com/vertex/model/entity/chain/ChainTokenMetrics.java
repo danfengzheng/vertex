@@ -80,4 +80,14 @@ public class ChainTokenMetrics extends BaseEntity {
 
     /** 是否在 Pump.fun 上市：0/1 */
     private Integer pumpFunListed;
+
+    // ─── 一级市场专属指标 ─────────────────────────
+    /** Bonding curve 填充进度（0-100%）；null 表示已上 DEX（二级市场） */
+    private BigDecimal bondingCurveProgress;
+
+    /** 社区讨论数（Pump.fun reply_count / Four.meme commentCount） */
+    private Integer replyCount;
+
+    /** 发射台名称：pump.fun / four.meme / null=已上DEX */
+    private String launchpadName;
 }

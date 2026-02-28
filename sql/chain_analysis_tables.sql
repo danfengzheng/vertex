@@ -119,3 +119,18 @@ CREATE TABLE `chn_alert_rule` (
     KEY `idx_enabled` (`enabled`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='链上告警规则';
+
+-- -----------------------------------------------------------
+-- 一级市场扩展字段（ALTER）
+-- 执行条件：chain_analysis_tables.sql 已初始化后追加执行
+-- -----------------------------------------------------------
+ALTER TABLE `chn_token_metrics`
+    ADD COLUMN IF NOT EXISTS `bonding_curve_progress` DECIMAL(10,4) DEFAULT NULL
+        COMMENT 'Bonding curve填充进度 0-100%，NULL表示已上DEX（二级市场）'
+        AFTER `pump_fun_listed`,
+    ADD COLUMN IF NOT EXISTS `reply_count` INT DEFAULT NULL
+        COMMENT '社区讨论数（Pump.fun reply_count / Four.meme commentCount）'
+        AFTER `bonding_curve_progress`,
+    ADD COLUMN IF NOT EXISTS `launchpad_name` VARCHAR(50) DEFAULT NULL
+        COMMENT '发射台名称：pump.fun / four.meme / null=已上DEX'
+        AFTER `reply_count`;

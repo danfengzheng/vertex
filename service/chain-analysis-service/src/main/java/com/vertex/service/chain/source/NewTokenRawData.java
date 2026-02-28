@@ -74,4 +74,19 @@ public class NewTokenRawData {
     private Integer ageMinutes;
     /** 是否通过 Pump.fun 上市 */
     private Boolean pumpFunListed;
+
+    // ── 一级市场专属指标 ──────────────────────────────────
+    /**
+     * Bonding curve 填充进度（0-100%）。
+     * 非 null 表示代币尚在一级市场（bonding curve 阶段），尚未毕业到 DEX。
+     * null 表示已上 DEX（二级市场），流动性等指标通过 DEX 数据填充。
+     */
+    private Double bondingCurveProgress;
+    /**
+     * 社区讨论数（Pump.fun reply_count / Four.meme comment count）。
+     * 衡量社区活跃度，是一级市场代币的核心热度信号。
+     */
+    private Integer replyCount;
+    /** 平台名称：pump.fun / four.meme / other */
+    private String launchpadName;
 }

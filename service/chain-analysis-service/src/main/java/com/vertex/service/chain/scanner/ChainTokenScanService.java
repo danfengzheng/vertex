@@ -169,6 +169,11 @@ public class ChainTokenScanService {
         m.setLpPoolPct(raw.getLpPoolPct());
         m.setAgeMinutes(raw.getAgeMinutes());
         m.setPumpFunListed(raw.getPumpFunListed() != null && raw.getPumpFunListed() ? 1 : 0);
+        // 一级市场专属字段
+        m.setBondingCurveProgress(raw.getBondingCurveProgress() != null
+                ? BigDecimal.valueOf(raw.getBondingCurveProgress()) : null);
+        m.setReplyCount(raw.getReplyCount());
+        m.setLaunchpadName(raw.getLaunchpadName());
         return m;
     }
 }
