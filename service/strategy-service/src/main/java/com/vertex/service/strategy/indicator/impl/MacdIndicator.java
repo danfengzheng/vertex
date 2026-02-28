@@ -61,11 +61,13 @@ public class MacdIndicator implements TechnicalIndicator {
         double[] signalLine = calculateEma(macdLine, signalPeriod);
 
         // 取最后两个 histogram 值判断交叉
+        // histogram[i] = macdLine[i] - signalLine[i]
+        // signalLine 与 macdLine 等长，有效信号从 signalPeriod-1 开始，
+        // 但判断金叉/死叉只需最后两根，直接用最末两个索引即可。
         int last = signalLine.length - 1;
-        int signalStart = signalPeriod - 1;
-        double currentHistogram = macdLine[signalStart + last] - signalLine[last];
+        double currentHistogram = macdLine[last] - signalLine[last];
         double prevHistogram = last > 0
-                ? macdLine[signalStart + last - 1] - signalLine[last - 1]
+                ? macdLine[last - 1] - signalLine[last - 1]
                 : currentHistogram;
 
         double macdValue = macdLine[macdLine.length - 1];

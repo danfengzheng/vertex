@@ -99,25 +99,36 @@ public class DexScreenerClient {
      * 搜索最新交易对（按链过滤，按创建时间排序）
      * 用于发现刚上线的新币
      *
-     * @param chainId 链标识
-     * @param limit   返回数量
+     * <p>
+     * 实现策略（两步）：
+     * <ol>
+     *   <li>调用 {@code /token-profiles/latest/v1} 获取最近活跃的代币地址列表，按 chainId 过滤</li>
+     *   <li>对每个代币地址调用 {@code /token-pairs/v1/{chainId}/{address}} 获取完整交易对数据</li>
+     * </ol>
+     * <p>
+     * 注意：DexScreener 不提供「按链列出所有新 pair」的单一端点；
+     * {@code /latest/dex/pairs/{chainId}} 格式不存在（会返回 404）。
+     *
+     * @param chainId 链标识（bsc / solana / ethereum）
+     * @param limit   最多返回的交易对数量
      */
     public List<JSONObject> searchNewPairs(String chainId, int limit) {
         try {
-            // 使用 /latest/dex/pairs/{chainId} 接口
-            String url = BASE_URL + "/latest/dex/pairs/" + chainId;
-            JSONObject resp = getJson(url);
-            if (resp == null) return Collections.emptyList();
+            // Step-1：获取该链最新的代币 profile 列表（含 tokenAddress）
+            List<JSONObject> profiles = fetchLatestPairs(chainId, 24);
+            if (profiles.isEmpty()) return Collections.emptyList();
 
-            JSONArray pairs = resp.getJSONArray("pairs");
-            if (pairs == null) return Collections.emptyList();
-
+            // Step-2：逐个查询交易对详情，控制最多查询数量避免超出速率限制（300次/分）
             List<JSONObject> result = new ArrayList<>();
-            int count = Math.min(limit, pairs.size());
-            for (int i = 0; i < count; i++) {
-                result.add(pairs.getJSONObject(i));
+            int maxProfileLookup = Math.min(profiles.size(), 20); // 每次最多查 20 个代币
+            for (int i = 0; i < maxProfileLookup && result.size() < limit; i++) {
+                String tokenAddress = profiles.get(i).getString("tokenAddress");
+                if (tokenAddress == null || tokenAddress.isBlank()) continue;
+                List<JSONObject> pairs = fetchTokenPairs(chainId, tokenAddress);
+                result.addAll(pairs);
             }
-            return result;
+
+            return result.subList(0, Math.min(limit, result.size()));
         } catch (Exception e) {
             log.warn("[DexScreener] searchNewPairs failed for {}: {}", chainId, e.getMessage());
             return Collections.emptyList();

@@ -124,6 +124,18 @@ public class StrategyEngineService {
             return;
         }
 
+        // ── 第一步：预计算每个周期所有指标的最大 requiredDataPoints ──────────────────
+        // 与 BacktestService 保持一致（BacktestService 使用 requiredByInterval.merge(..., Math::max)）。
+        // 若某周期有多个指标（如 RSI+MACD），必须用最大值来确定窗口，否则窗口过小
+        // 导致 EMA 预热不足，与回测的滑动窗口产生偏差，进而出现信号不一致。
+        Map<KLineInterval, Integer> maxRequiredByInterval = new HashMap<>();
+        for (StrategyIndicatorConfig config : configs) {
+            KLineInterval iv = getEffectiveInterval(config, strategy);
+            TechnicalIndicator ind = indicatorRegistry.get(config.getIndicatorType());
+            int req = ind.requiredDataPoints(config.getParams());
+            maxRequiredByInterval.merge(iv, req, Math::max);
+        }
+
         // 按周期分组获取 K线
         Map<KLineInterval, List<KLine>> klinesByInterval = new HashMap<>();
         boolean hasEnoughData = false;
@@ -131,8 +143,8 @@ public class StrategyEngineService {
         for (StrategyIndicatorConfig config : configs) {
             KLineInterval effectiveInterval = getEffectiveInterval(config, strategy);
             if (!klinesByInterval.containsKey(effectiveInterval)) {
-                TechnicalIndicator ind = indicatorRegistry.get(config.getIndicatorType());
-                int required = ind.requiredDataPoints(config.getParams());
+                // 使用该周期所有指标中最大的 required（与回测对齐），而非仅当前指标的 required
+                int required = maxRequiredByInterval.getOrDefault(effectiveInterval, 50);
                 // 使用 warmupMultiplier 倍数多取历史K线，让 EMA/KDJ 等状态型指标充分预热，
                 // 避免因历史锚点不同导致与回测信号不一致
                 int warmup = properties.getEngine().getWarmupMultiplier();
@@ -161,6 +173,15 @@ public class StrategyEngineService {
                 // 降序查询结果翻转为升序（时间从早到晚）
                 klines = new ArrayList<>(klines);
                 Collections.reverse(klines);
+
+                // 调试：记录实盘窗口范围，便于与回测滑动窗口核对
+                if (log.isDebugEnabled() && !klines.isEmpty()) {
+                    log.debug("[Signal] strategy='{}' interval={} window=[{} → {}] size={} fetchSize={}",
+                            strategy.getName(), effectiveInterval.getCode(),
+                            klines.get(0).getOpenTime(),
+                            klines.get(klines.size() - 1).getOpenTime(),
+                            klines.size(), fetchSize);
+                }
 
                 if (klines.size() < required) {
                     log.debug("Insufficient data for interval {} in strategy '{}' ({}/{})",
