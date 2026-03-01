@@ -65,7 +65,13 @@ public class RocksDBKLineStore implements KLineStore {
         long maxOpen = klines.stream().mapToLong(KLine::getOpenTime).max().orElse(0);
         List<KLine> existing = query(exchange, symbol, interval, minOpen, maxOpen, Integer.MAX_VALUE, true);
         Set<Long> existingOpenTimes = existing.stream().map(KLine::getOpenTime).collect(Collectors.toSet());
-        List<KLine> toWrite = klines.stream().filter(k -> !existingOpenTimes.contains(k.getOpenTime())).collect(Collectors.toList());
+        Set<Long> unclosedOpenTimes = existing.stream()
+                .filter(k -> !Boolean.TRUE.equals(k.getClosed()))
+                .map(KLine::getOpenTime)
+                .collect(Collectors.toSet());
+        List<KLine> toWrite = klines.stream()
+                .filter(k -> !existingOpenTimes.contains(k.getOpenTime()) || unclosedOpenTimes.contains(k.getOpenTime()))
+                .collect(Collectors.toList());
         if (toWrite.isEmpty()) {
             return Collections.emptyList();
         }

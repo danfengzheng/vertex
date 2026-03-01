@@ -24,6 +24,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 币安 WebSocket 数据源
@@ -53,6 +58,15 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
     private final Map<String, Set<KLineInterval>> tradeSymbolIntervals = new ConcurrentHashMap<>();
 
     private volatile boolean connected = false;
+
+    /** 防抖：已连接时多次 subscribe 只发一次批量订阅，避免 5 策略×3 标的 连续发 15 条触发限流 */
+    private final ScheduledExecutorService batchSchedule = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "binance-batch-subscribe");
+        t.setDaemon(true);
+        return t;
+    });
+    private final AtomicReference<ScheduledFuture<?>> pendingBatchRef = new AtomicReference<>();
+    private static final long BATCH_DEBOUNCE_MS = 80;
 
     public BinanceWsDataSource(ExchangeConfig config,
                                KLineConverter klineConverter,
@@ -127,18 +141,20 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
         String topic = buildTradeTopic(binanceSymbol);
         tradeSymbolIntervals.computeIfAbsent(symbol, k -> ConcurrentHashMap.newKeySet()).add(interval);
         if (tradeSymbolIntervals.get(symbol).size() == 1) {
-            super.subscribe(topic, (t, payload) -> {
+            getSubscriptionManager().subscribe(topic, null, (t, payload) -> {
                 try {
                     JSONObject j = JSON.parseObject(payload);
                     BigDecimal p = j.getBigDecimal("p");
                     BigDecimal q = j.getBigDecimal("q");
                     long timeMs = j.getLongValue("T");
-                    // 使用订阅时的 symbol，与策略/查询一致，保证写入 RocksDB 的 key 与 warmup/策略查询一致
                     aggregator.onTrade(exchangeCode(), symbol, p, q, timeMs);
                 } catch (Exception e) {
                     log.error("[Binance] Error processing trade for {}: {}", symbol, payload, e);
                 }
             });
+            if (connected) {
+                scheduleBatchSubscribe();
+            }
         }
     }
 
@@ -157,7 +173,7 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
         String topic = buildKlineTopic(symbol, interval);
         topicIntervalMap.put(topic, interval);
         topicSymbolMap.put(topic, symbol);
-        super.subscribe(topic, (t, payload) -> {
+        getSubscriptionManager().subscribe(topic, null, (t, payload) -> {
             try {
                 KLine kline = klineConverter.convert(symbol, interval, payload);
                 if (kline != null) {
@@ -167,6 +183,20 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
                 log.error("[Binance] Error processing KLine for {}:{}", symbol, interval.getCode(), e);
             }
         });
+        if (connected) {
+            scheduleBatchSubscribe();
+        }
+    }
+
+    /** 已连接时新增订阅防抖：多次 subscribe 在 BATCH_DEBOUNCE_MS 内只发一次批量，避免触发限流 */
+    private void scheduleBatchSubscribe() {
+        ScheduledFuture<?> prev = pendingBatchRef.getAndSet(batchSchedule.schedule(() -> {
+            pendingBatchRef.set(null);
+            sendBatchSubscribe();
+        }, BATCH_DEBOUNCE_MS, TimeUnit.MILLISECONDS));
+        if (prev != null) {
+            prev.cancel(false);
+        }
     }
 
     @Override
@@ -291,21 +321,46 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
         log.warn("[Binance] WebSocket data source connection lost");
     }
 
-    /** 重连后按当前订阅列表重新发送 SUBSCRIBE，否则交易所不会推送数据 */
+    /** 重连后按当前订阅列表批量发送 SUBSCRIBE（一次请求多个 stream，避免多条消息触发限流断线） */
     private void resubscribeAll() {
-        int count = 0;
-        for (String topic : topicIntervalMap.keySet()) {
-            sendMessage(buildSubscribeMessage(topic, null));
-            count++;
-        }
+        sendBatchSubscribe();
+    }
+
+    /** 单次请求最多订阅的 stream 数，避免超过交易所限制 */
+    private static final int BATCH_SUBSCRIBE_LIMIT = 200;
+
+    /**
+     * 收集当前所有 topic，按批发送 SUBSCRIBE（params 为数组），只发一条或少量请求。
+     * 币安限制约 5 条/秒，多策略启动时逐条发送易触发限流导致断线。
+     */
+    private void sendBatchSubscribe() {
+        List<String> topics = new ArrayList<>(topicIntervalMap.keySet());
         for (String symbol : tradeSymbolIntervals.keySet()) {
             String topic = buildTradeTopic(symbol.replace("-", "").toLowerCase());
-            sendMessage(buildSubscribeMessage(topic, null));
-            count++;
+            if (!topics.contains(topic)) {
+                topics.add(topic);
+            }
         }
-        if (count > 0) {
-            log.info("[Binance] Resubscribed {} topic(s) after connection ready", count);
+        if (topics.isEmpty()) {
+            return;
         }
+        int batchCount = 0;
+        for (int i = 0; i < topics.size(); i += BATCH_SUBSCRIBE_LIMIT) {
+            int to = Math.min(i + BATCH_SUBSCRIBE_LIMIT, topics.size());
+            List<String> batch = topics.subList(i, to);
+            sendMessage(buildBatchSubscribeMessage(batch));
+            batchCount++;
+        }
+        log.info("[Binance] Batch subscribed {} stream(s) in {} request(s)", topics.size(), batchCount);
+    }
+
+    /** 构建批量订阅消息：params 为 stream 名称数组，单次最多 BATCH_SUBSCRIBE_LIMIT 个 */
+    private String buildBatchSubscribeMessage(List<String> topics) {
+        JSONObject msg = new JSONObject();
+        msg.put("method", "SUBSCRIBE");
+        msg.put("params", topics);
+        msg.put("id", System.currentTimeMillis());
+        return msg.toJSONString();
     }
 
     // ==================== 辅助方法 ====================

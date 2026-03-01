@@ -68,12 +68,20 @@ public class QuoteBackfillService {
             ranges.add(new long[]{lastClose + 1, endTime});
         }
 
+        // 已存在但未收的 K 线也纳入重填：重新拉取后按时间重设 closed，避免补充数据一直显示未收
+        for (KLine k : existing) {
+            if (!Boolean.TRUE.equals(k.getClosed())) {
+                long open = k.getOpenTime();
+                ranges.add(new long[]{open, open + step - 1});
+            }
+        }
+
         int total = 0;
         for (long[] r : ranges) {
             total += fillRange(exchange, symbol, interval, r[0], r[1]);
         }
         if (total > 0) {
-            log.info("[Backfill] fillGapsInRange {} {} {} [{}, {}]: {} bars inserted",
+            log.info("[Backfill] fillGapsInRange {} {} {} [{}, {}]: {} bars written (gaps + unclosed refreshed)",
                     exchange, symbol, interval.getCode(), startTime, endTime, total);
         }
         return total;

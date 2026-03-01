@@ -77,15 +77,15 @@ public class OkxKLineConverter implements KLineConverter {
         }
 
         long openTime = item.getLong(0);
-        // OKX confirm 字段: "1" 表示已完结
-        String confirm = item.size() > 8 ? item.getString(8) : "1";
+        long closeTime = openTime + interval.getMillis();
+        boolean closed = System.currentTimeMillis() >= closeTime;
 
         return KLine.builder()
                 .symbol(symbol)
                 .exchange(exchangeCode())
                 .interval(interval)
                 .openTime(openTime)
-                .closeTime(openTime + interval.getMillis())
+                .closeTime(closeTime)
                 .open(new BigDecimal(item.getString(1)))
                 .high(new BigDecimal(item.getString(2)))
                 .low(new BigDecimal(item.getString(3)))
@@ -93,7 +93,7 @@ public class OkxKLineConverter implements KLineConverter {
                 .volume(new BigDecimal(item.getString(5)))
                 .quoteVolume(item.size() > 7 ? new BigDecimal(item.getString(7)) : BigDecimal.ZERO)
                 .trades(null)
-                .closed("1".equals(confirm))
+                .closed(closed)
                 .build();
     }
 }

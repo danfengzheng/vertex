@@ -79,11 +79,13 @@ public class BinanceKLineConverter implements KLineConverter {
         JSONArray array = JSON.parseArray(rawData);
         List<KLine> result = new ArrayList<>(array.size());
 
+        long now = System.currentTimeMillis();
         for (int i = 0; i < array.size(); i++) {
             JSONArray item = array.getJSONArray(i);
             if (item == null || item.size() < 9) {
                 continue;
             }
+            long closeTime = item.getLong(6);
             result.add(KLine.builder()
                     .symbol(symbol)
                     .exchange(exchangeCode())
@@ -94,10 +96,10 @@ public class BinanceKLineConverter implements KLineConverter {
                     .low(new BigDecimal(item.getString(3)))
                     .close(new BigDecimal(item.getString(4)))
                     .volume(new BigDecimal(item.getString(5)))
-                    .closeTime(item.getLong(6))
+                    .closeTime(closeTime)
                     .quoteVolume(new BigDecimal(item.getString(7)))
                     .trades(item.getInteger(8))
-                    .closed(true)
+                    .closed(now >= closeTime)
                     .build());
         }
         return result;
