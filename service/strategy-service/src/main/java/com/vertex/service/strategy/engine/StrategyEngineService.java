@@ -87,6 +87,7 @@ public class StrategyEngineService {
                 .eq(Strategy::getExchange, exchange)
                 .eq(Strategy::getSymbol, symbol)
                 .eq(Strategy::getEnabled, 1)
+                .eq(Strategy::getInterval,interval)
                 .eq(Strategy::getDeleted, 0);
 
         List<Strategy> strategies = strategyMapper.selectList(wrapper);
