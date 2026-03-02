@@ -76,6 +76,8 @@ vertex:
     binance:
       api-url: https://api.binance.com
       recv-window: 5000
+    slippage:
+      enabled: true
     telegram:
       enabled: true
       bot-token: 8568350639:AAFb2uRyP705t29P53pfGnpspCxNxKagSx0
