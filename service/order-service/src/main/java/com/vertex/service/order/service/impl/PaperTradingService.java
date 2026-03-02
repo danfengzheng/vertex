@@ -42,10 +42,21 @@ public class PaperTradingService {
      * 策略可能只订阅了特定周期（如 15m），因此需要遍历所有周期。
      */
     public BigDecimal getCurrentPrice(String exchange, String symbol) {
+        long now = System.currentTimeMillis();
         for (KLineInterval interval : PRICE_QUERY_INTERVALS) {
             List<KLine> klines = klineStore.query(exchange, symbol, interval, null, null, 1, false);
             if (!klines.isEmpty()) {
-                return klines.get(0).getClose();
+                KLine latest = klines.get(0);
+                // 跳过已过期的 bar（openTime 距今超过 2 个周期），避免订阅模式切换后
+                // RocksDB 中残留的旧 M1 数据被优先命中，导致持仓价格永远冻结
+                if (latest.getOpenTime() != null
+                        && now - latest.getOpenTime() > 2 * interval.getMillis()) {
+                    log.debug("[PriceCache] Skipping stale {} {} {} bar (age={}s)",
+                            exchange, symbol, interval.getCode(),
+                            (now - latest.getOpenTime()) / 1000);
+                    continue;
+                }
+                return latest.getClose();
             }
         }
         log.warn("No price data available for {}:{}", exchange, symbol);
