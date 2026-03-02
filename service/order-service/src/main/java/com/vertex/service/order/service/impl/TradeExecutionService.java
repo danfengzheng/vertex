@@ -279,8 +279,17 @@ public class TradeExecutionService {
         }
 
         // PERCENT 模式：需要获取可用资金和当前价格
-        BigDecimal currentPrice = paperTradingService.getCurrentPrice(
-                strategy.getExchange(), strategy.getSymbol());
+        // 实盘下优先使用信号触发价（K线收盘价）：比缓存价更接近实际执行价，避免因价格偏差导致 -2010
+        BigDecimal currentPrice = null;
+        if (strategy.getExecutionMode() == ExecutionMode.LIVE
+                && signal != null && signal.getPrice() != null
+                && signal.getPrice().compareTo(BigDecimal.ZERO) > 0) {
+            currentPrice = signal.getPrice();
+            log.debug("[PositionSizing] Using signal price {} for LIVE quantity calculation", currentPrice);
+        }
+        if (currentPrice == null) {
+            currentPrice = paperTradingService.getCurrentPrice(strategy.getExchange(), strategy.getSymbol());
+        }
         if (currentPrice == null || currentPrice.compareTo(BigDecimal.ZERO) <= 0) {
             log.warn("[PositionSizing] No price data for {} {}, falling back to tradeQuantity",
                     strategy.getExchange(), strategy.getSymbol());
@@ -300,6 +309,12 @@ public class TradeExecutionService {
         }
 
         if (availableCapital == null || availableCapital.compareTo(BigDecimal.ZERO) <= 0) {
+            if (strategy.getExecutionMode() == ExecutionMode.LIVE) {
+                // 实盘模式：余额查询失败时不能用固定量兜底，否则可能超额下单导致 -2010
+                log.warn("[PositionSizing] Failed to query live balance for strategy [{}], skipping order",
+                        strategy.getName());
+                return null;
+            }
             log.warn("[PositionSizing] No available capital for strategy [{}], falling back to tradeQuantity",
                     strategy.getName());
             return strategy.getTradeQuantity();
@@ -311,6 +326,11 @@ public class TradeExecutionService {
         // 扣除预估手续费后买入
         BigDecimal feeRate = strategy.getFeeRate() != null ? strategy.getFeeRate() : BigDecimal.ZERO;
         BigDecimal netAmount = tradeAmount.multiply(BigDecimal.ONE.subtract(feeRate));
+
+        // 实盘 MARKET 订单：额外预留 0.5% 缓冲，防止价格在计算到执行之间上涨导致 -2010
+        if (strategy.getExecutionMode() == ExecutionMode.LIVE) {
+            netAmount = netAmount.multiply(new BigDecimal("0.995"));
+        }
 
         // 数量 = 净金额 / 当前价格
         BigDecimal quantity = netAmount.divide(currentPrice, 8, RoundingMode.DOWN);
@@ -523,7 +543,17 @@ public class TradeExecutionService {
     private String extractBaseAsset(String symbol) {
         if (symbol == null) return null;
         int idx = symbol.indexOf('-');
-        return idx > 0 ? symbol.substring(0, idx).toUpperCase() : symbol.toUpperCase();
+        if (idx > 0) {
+            return symbol.substring(0, idx).toUpperCase();
+        }
+        // ETHUSDT / BTCUSDT 格式：去掉常见计价资产后缀
+        String upper = symbol.toUpperCase();
+        for (String quote : new String[]{"USDT", "BUSD", "USDC", "BTC", "ETH", "BNB"}) {
+            if (upper.endsWith(quote) && upper.length() > quote.length()) {
+                return upper.substring(0, upper.length() - quote.length());
+            }
+        }
+        return upper;
     }
 
     private void setStopLossTakeProfit(Order order, Strategy strategy) {
