@@ -19,7 +19,8 @@ dependencies {
 
     // RocksDB
     implementation libs.rocksdb
-
+    // OkHttp（交易所 REST API）
+    implementation libs.okhttp
     // JSON
     implementation libs.fastjson2
 

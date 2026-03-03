@@ -7,6 +7,7 @@ import com.vertex.model.dto.system.MenuUpdateDTO;
 import com.vertex.model.vo.system.MenuVO;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * 菜单服务接口
@@ -27,6 +28,11 @@ public interface IMenuService {
      * 查询所有菜单（树形结构）
      */
     List<MenuVO> listTree();
+
+    /**
+     * 根据允许的ID集合查询菜单树（用于角色权限过滤）
+     */
+    List<MenuVO> listTreeByIds(Set<Long> ids);
 
     /**
      * 根据父ID查询子菜单

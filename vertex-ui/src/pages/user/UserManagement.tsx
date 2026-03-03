@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Space, message, Modal, Form, Input, Select, Tag, Popconfirm } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, LockOutlined } from '@ant-design/icons';
+import { Table, Button, Space, message, Modal, Form, Input, Select, Tag, Popconfirm, Checkbox } from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined, LockOutlined, TeamOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { userApi, UserVO, UserQueryDTO, UserCreateDTO, UserUpdateDTO } from '../../api/user';
+import { roleApi, RoleVO } from '../../api/role';
+import { userRoleApi } from '../../api/userRole';
 import type { ApiResponse, PageResult } from '../../types/api';
 
 export const UserManagement = () => {
@@ -15,6 +17,14 @@ export const UserManagement = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<UserVO | null>(null);
   const [form] = Form.useForm();
+
+  // ─── 分配角色弹窗 ────────────────────────────────
+  const [roleModalVisible, setRoleModalVisible] = useState(false);
+  const [assigningUser, setAssigningUser] = useState<UserVO | null>(null);
+  const [allRoles, setAllRoles] = useState<RoleVO[]>([]);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+  const [rolesLoading, setRolesLoading] = useState(false);
+  const [rolesSaving, setRolesSaving] = useState(false);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -96,6 +106,38 @@ export const UserManagement = () => {
     }
   };
 
+  const handleOpenRoleModal = async (user: UserVO) => {
+    setAssigningUser(user);
+    setRoleModalVisible(true);
+    setRolesLoading(true);
+    try {
+      const [rolesRes, assignedRes] = await Promise.all([
+        roleApi.listAll(),
+        userRoleApi.getRoleIdsByUserId(user.id),
+      ]);
+      if (rolesRes.code === 200) setAllRoles(rolesRes.data);
+      if (assignedRes.code === 200) setSelectedRoleIds(assignedRes.data);
+    } catch {
+      message.error('加载角色数据失败');
+    } finally {
+      setRolesLoading(false);
+    }
+  };
+
+  const handleSaveRoles = async () => {
+    if (!assigningUser) return;
+    setRolesSaving(true);
+    try {
+      await userRoleApi.assignRolesToUser(assigningUser.id, selectedRoleIds);
+      message.success('角色分配成功');
+      setRoleModalVisible(false);
+    } catch {
+      message.error('保存失败');
+    } finally {
+      setRolesSaving(false);
+    }
+  };
+
   const handleUnfreeze = async (id: string) => {
     try {
       await userApi.unfreeze(id);
@@ -150,9 +192,12 @@ export const UserManagement = () => {
     {
       title: t('common.operation'),
       key: 'action',
-      width: 220,
+      width: 280,
       render: (_: any, record: UserVO) => (
         <Space>
+          <Button type="link" icon={<TeamOutlined />} onClick={() => handleOpenRoleModal(record)}>
+            分配角色
+          </Button>
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             {t('common.edit')}
           </Button>
@@ -232,6 +277,38 @@ export const UserManagement = () => {
             </Select>
           </Form.Item>
         </Form>
+      </Modal>
+      {/* 分配角色弹窗 */}
+      <Modal
+        title={`分配角色 — ${assigningUser?.username ?? ''}`}
+        open={roleModalVisible}
+        onOk={handleSaveRoles}
+        confirmLoading={rolesSaving}
+        onCancel={() => setRoleModalVisible(false)}
+      >
+        {rolesLoading ? (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>加载中...</div>
+        ) : allRoles.length === 0 ? (
+          <div style={{ color: '#999', textAlign: 'center', padding: '20px 0' }}>
+            暂无可用角色，请先在角色管理中创建角色
+          </div>
+        ) : (
+          <Checkbox.Group
+            value={selectedRoleIds}
+            onChange={(vals) => setSelectedRoleIds(vals as string[])}
+            style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+          >
+            {allRoles.map(role => (
+              <Checkbox key={role.id} value={role.id} disabled={role.status !== 1}>
+                {role.name}
+                {role.description && (
+                  <span style={{ color: '#999', marginLeft: 6, fontSize: 12 }}>({role.description})</span>
+                )}
+                {role.status !== 1 && <span style={{ color: '#f5222d', marginLeft: 6, fontSize: 12 }}>已禁用</span>}
+              </Checkbox>
+            ))}
+          </Checkbox.Group>
+        )}
       </Modal>
     </div>
   );

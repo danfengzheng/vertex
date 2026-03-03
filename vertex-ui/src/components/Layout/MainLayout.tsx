@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Layout, Menu, Avatar, Dropdown, Space, theme } from 'antd';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
+import { authApi } from '../../api/auth';
+import type { MenuVO } from '../../api/menu';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -63,11 +65,37 @@ export const MainLayout = () => {
   };
 
   const [openKeys, setOpenKeys] = useState<string[]>(getOpenKeys());
+  // null = not yet loaded (show all); Set = loaded (filter by allowed paths)
+  const [allowedPaths, setAllowedPaths] = useState<Set<string> | null>(null);
+
+  // 从当前登录用户信息中读取用户名
+  const currentUser = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
+  }, []);
 
   // 当路径变化时，自动展开对应的父菜单
   useEffect(() => {
     setOpenKeys(getOpenKeys());
   }, [location.pathname]);
+
+  // 加载当前用户有权访问的菜单路径
+  useEffect(() => {
+    authApi.getUserMenus().then(res => {
+      if (res.code === 200) {
+        const paths = new Set<string>();
+        const traverse = (nodes: MenuVO[]) => {
+          for (const m of nodes) {
+            if (m.path) paths.add(m.path);
+            if (m.children) traverse(m.children);
+          }
+        };
+        traverse(res.data);
+        setAllowedPaths(paths);
+      }
+    }).catch(() => {
+      // 获取失败时保持 null（展示全部菜单，实际权限由后端把控）
+    });
+  }, []);
 
   // 菜单项配置
   const menuItems: MenuProps['items'] = [
@@ -178,6 +206,24 @@ export const MainLayout = () => {
     },
   ];
 
+  /** 根据允许路径递归过滤菜单项（叶节点按 key 匹配，父节点有子项则保留） */
+  const filterMenuItems = (items: MenuProps['items'], allowed: Set<string>): MenuProps['items'] => {
+    if (!items) return items;
+    return items.reduce<NonNullable<MenuProps['items']>>((acc, item) => {
+      if (!item) return acc;
+      const i = item as any;
+      if (i.children) {
+        const filtered = filterMenuItems(i.children, allowed);
+        if (filtered && filtered.length > 0) acc.push({ ...i, children: filtered });
+      } else if (allowed.has(i.key as string)) {
+        acc.push(i);
+      }
+      return acc;
+    }, []);
+  };
+
+  const displayedMenuItems = allowedPaths ? filterMenuItems(menuItems, allowedPaths) : menuItems;
+
   // 用户下拉菜单
   const userMenuItems: MenuProps['items'] = [
     {
@@ -248,7 +294,7 @@ export const MainLayout = () => {
           selectedKeys={[location.pathname]}
           openKeys={openKeys}
           onOpenChange={setOpenKeys}
-          items={menuItems}
+          items={displayedMenuItems}
           onClick={handleMenuClick}
         />
       </Sider>
@@ -288,7 +334,7 @@ export const MainLayout = () => {
             >
               <Space style={{ cursor: 'pointer' }}>
                 <Avatar icon={<UserOutlined />} />
-                <span>{t('text.user.admin')}</span>
+                <span>{currentUser.nickname || currentUser.username || t('text.user.admin')}</span>
               </Space>
             </Dropdown>
           </Space>

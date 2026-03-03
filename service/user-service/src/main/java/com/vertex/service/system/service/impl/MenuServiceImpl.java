@@ -19,7 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -72,6 +74,21 @@ public class MenuServiceImpl implements IMenuService {
     }
 
     @Override
+    public List<MenuVO> listTreeByIds(Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        List<Menu> allMenus = menuMapper.selectList(
+                new LambdaQueryWrapper<Menu>()
+                        .eq(Menu::getStatus, 1)
+                        .orderByAsc(Menu::getSort)
+        );
+        List<MenuVO> allVOs = BeanUtil.copyToList(allMenus, MenuVO.class);
+        List<MenuVO> fullTree = buildTree(allVOs, 0L);
+        return pruneTree(fullTree, ids);
+    }
+
+    @Override
     public List<MenuVO> listByParentId(Long parentId) {
         List<Menu> menus = menuMapper.selectList(
                 new LambdaQueryWrapper<Menu>()
@@ -120,6 +137,34 @@ public class MenuServiceImpl implements IMenuService {
             throw new BizException("存在子菜单，无法删除");
         }
         menuMapper.deleteById(id);
+    }
+
+    /**
+     * 裁剪树：只保留 allowedIds 中的节点以及含有允许子节点的目录节点
+     */
+    private List<MenuVO> pruneTree(List<MenuVO> nodes, Set<Long> allowedIds) {
+        List<MenuVO> result = new ArrayList<>();
+        for (MenuVO node : nodes) {
+            List<MenuVO> children = node.getChildren();
+            if (children != null && !children.isEmpty()) {
+                // 目录节点：递归裁剪子节点
+                List<MenuVO> prunedChildren = pruneTree(children, allowedIds);
+                if (!prunedChildren.isEmpty()) {
+                    node.setChildren(prunedChildren);
+                    result.add(node);
+                } else if (allowedIds.contains(node.getId())) {
+                    // 目录本身也在权限内（无子节点时保留）
+                    node.setChildren(null);
+                    result.add(node);
+                }
+            } else {
+                // 叶节点：在权限集合内才保留
+                if (allowedIds.contains(node.getId())) {
+                    result.add(node);
+                }
+            }
+        }
+        return result;
     }
 
     /**
