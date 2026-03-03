@@ -1,14 +1,18 @@
 package com.vertex.service.order.notify;
 
+import com.vertex.api.notify.INotifyConfigService;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.entity.trading.Order;
 import com.vertex.model.entity.trading.OrderStatus;
+import com.vertex.model.vo.system.NotifyConfigVO;
 import com.vertex.service.order.config.TradingProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 
@@ -26,6 +30,10 @@ public class TelegramTradeNotifier implements TradeNotifier {
 
     private final OkHttpClient httpClient;
     private final TradingProperties properties;
+
+    /** 用户通知配置服务（可选注入，降级为全局配置） */
+    @Autowired(required = false)
+    private INotifyConfigService notifyConfigService;
 
     private static final MediaType JSON_MEDIA = MediaType.parse("application/json; charset=utf-8");
 
@@ -57,7 +65,7 @@ public class TelegramTradeNotifier implements TradeNotifier {
                 statusLabel
         );
 
-        sendMessage(message);
+        sendMessage(message, order.getCreateBy());
     }
 
     @Override
@@ -95,14 +103,29 @@ public class TelegramTradeNotifier implements TradeNotifier {
         }
         sb.append(String.format("模式: `%s`", order.getTradeMode()));
 
-        sendMessage(sb.toString());
+        sendMessage(sb.toString(), order.getCreateBy());
     }
 
     // ─── 内部方法 ───────────────────────────────────
 
-    private void sendMessage(String text) {
+    /**
+     * 解析通知目标 chat_id：优先使用订单所有者配置，回退到全局配置
+     */
+    private String resolveUserChatId(Long createBy) {
+        if (createBy != null && notifyConfigService != null) {
+            NotifyConfigVO userConfig = notifyConfigService.getByUserId(createBy, "TELEGRAM");
+            if (userConfig != null && userConfig.getEnabled() != null && userConfig.getEnabled() == 1
+                    && StringUtils.hasText(userConfig.getChatId())) {
+                return userConfig.getChatId();
+            }
+        }
+        return properties.getTelegram().getChatId();
+    }
+
+    private void sendMessage(String text, Long createBy) {
         TradingProperties.Telegram config = properties.getTelegram();
-        if (config.getBotToken() == null || config.getChatId() == null) {
+        String chatId = resolveUserChatId(createBy);
+        if (!StringUtils.hasText(config.getBotToken()) || !StringUtils.hasText(chatId)) {
             log.warn("[Telegram] Bot token or chat ID not configured, skipping notification");
             return;
         }
@@ -110,10 +133,9 @@ public class TelegramTradeNotifier implements TradeNotifier {
         String url = String.format("%s/bot%s/sendMessage",
                 config.getApiUrl(), config.getBotToken());
 
-        // 转义 Markdown 特殊字符中可能冲突的部分
         String jsonBody = String.format(
                 "{\"chat_id\":\"%s\",\"text\":\"%s\",\"parse_mode\":\"Markdown\"}",
-                config.getChatId(),
+                chatId,
                 escapeJson(text)
         );
 

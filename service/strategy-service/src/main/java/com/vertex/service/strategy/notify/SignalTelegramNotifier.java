@@ -28,7 +28,7 @@ import java.time.format.DateTimeFormatter;
 @Component
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "vertex.strategy.telegram", name = "enabled", havingValue = "true")
-public class SignalTelegramNotifier {
+public class SignalTelegramNotifier implements SignalNotifier {
 
     private static final MediaType JSON_MEDIA = MediaType.parse("application/json; charset=utf-8");
     private static final DateTimeFormatter TIME_FMT =
@@ -42,6 +42,12 @@ public class SignalTelegramNotifier {
     @Autowired(required = false)
     private INotifyConfigService notifyConfigService;
 
+    @Override
+    public String type() {
+        return "telegram";
+    }
+
+    @Override
     public void notifySignal(Signal signal) {
         String emoji;
         switch (signal.getSignalType()) {

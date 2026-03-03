@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Space, message, Modal, Form, Input, Select, Drawer, Tree, Tag, Popconfirm } from 'antd';
+import { Table, Button, Space, message, Modal, Form, Input, Select, Drawer, Tree, Tag, Popconfirm, Spin } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, MenuOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { roleApi, RoleVO, RoleCreateDTO, RoleUpdateDTO, RoleQueryDTO } from '../../api/role';
@@ -16,18 +16,6 @@ const menuToTreeData = (menus: MenuVO[]): DataNode[] =>
     children: m.children && m.children.length > 0 ? menuToTreeData(m.children) : undefined,
   }));
 
-/** 从 MenuVO 树中递归提取所有 ID */
-const collectAllIds = (menus: MenuVO[]): string[] => {
-  const ids: string[] = [];
-  const traverse = (nodes: MenuVO[]) => {
-    for (const n of nodes) {
-      ids.push(n.id);
-      if (n.children) traverse(n.children);
-    }
-  };
-  traverse(menus);
-  return ids;
-};
 
 export const RoleManagement = () => {
   const { t } = useTranslation();
@@ -257,25 +245,25 @@ export const RoleManagement = () => {
           </Space>
         }
       >
-        <Tree
-          checkable
-          loading={menuLoading}
-          treeData={menuToTreeData(allMenuTree)}
-          checkedKeys={checkedMenuIds}
-          onCheck={(checked) => {
-            // Ant Design Tree onCheck returns string[] | { checked: Key[]; halfChecked: Key[] }
-            const ids = Array.isArray(checked)
-              ? (checked as string[])
-              : (checked.checked as string[]);
-            setCheckedMenuIds(ids);
-          }}
-          defaultExpandAll
-        />
-        {allMenuTree.length === 0 && !menuLoading && (
-          <div style={{ color: '#999', textAlign: 'center', padding: '40px 0' }}>
-            暂无菜单数据，请先在菜单管理中添加菜单
-          </div>
-        )}
+        <Spin spinning={menuLoading}>
+          <Tree
+            checkable
+            treeData={menuToTreeData(allMenuTree)}
+            checkedKeys={checkedMenuIds}
+            onCheck={(checked) => {
+              const ids = Array.isArray(checked)
+                ? (checked as string[])
+                : (checked.checked as string[]);
+              setCheckedMenuIds(ids);
+            }}
+            defaultExpandAll
+          />
+          {allMenuTree.length === 0 && !menuLoading && (
+            <div style={{ color: '#999', textAlign: 'center', padding: '40px 0' }}>
+              暂无菜单数据，请先在菜单管理中添加菜单
+            </div>
+          )}
+        </Spin>
       </Drawer>
     </div>
   );

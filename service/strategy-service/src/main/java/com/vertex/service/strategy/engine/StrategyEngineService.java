@@ -18,7 +18,7 @@ import com.vertex.service.strategy.mapper.SignalMapper;
 import com.vertex.service.strategy.mapper.StrategyMapper;
 import com.vertex.service.strategy.store.SignalStore;
 import com.vertex.api.trading.ITradeExecutionListener;
-import com.vertex.service.strategy.notify.SignalTelegramNotifier;
+import com.vertex.service.strategy.notify.CompositeSignalNotifier;
 import com.vertex.service.strategy.websocket.SignalPushService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,9 +55,8 @@ public class StrategyEngineService {
     @Autowired(required = false)
     private ITradeExecutionListener tradeExecutionListener;
 
-    /** Telegram 信号通知器（可选依赖，vertex.strategy.telegram.enabled=true 时激活） */
-    @Autowired(required = false)
-    private SignalTelegramNotifier signalTelegramNotifier;
+    /** 信号通知器聚合（自动注入所有 SignalNotifier 实现，无实现时为空列表） */
+    private final CompositeSignalNotifier compositeSignalNotifier;
 
     /** 节流：记录每个策略的上次执行时间戳（毫秒） */
     private final ConcurrentHashMap<Long, Long> lastEvalTimeMap = new ConcurrentHashMap<>();
@@ -265,14 +264,8 @@ public class StrategyEngineService {
             }
         }
 
-        // Telegram 信号通知（可选）
-        if (signalTelegramNotifier != null) {
-            try {
-                signalTelegramNotifier.notifySignal(signal);
-            } catch (Exception e) {
-                log.warn("Failed to send signal Telegram notification: {}", e.getMessage());
-            }
-        }
+        // 信号通知（分发到所有已激活渠道，内部异常隔离）
+        compositeSignalNotifier.notifySignal(signal);
 
         log.info("Strategy [{}] generated signal: {} (strength: {}) for {} {}",
                 strategy.getName(), signal.getSignalType(), signal.getSignalStrength(),

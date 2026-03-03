@@ -81,11 +81,20 @@ export const MenuManagement = () => {
     }
   };
 
+  /** 优先用 i18nKey 翻译，无翻译时回退到 name 字段原始值 */
+  const displayName = (menu: MenuVO) => {
+    if (menu.i18nKey) {
+      const translated = t(menu.i18nKey);
+      if (translated !== menu.i18nKey) return translated;
+    }
+    return menu.name;
+  };
+
   const columns = [
     {
       title: t('text.menu.name'),
-      dataIndex: 'name',
       key: 'name',
+      render: (_: any, record: MenuVO) => displayName(record),
     },
     {
       title: t('text.menu.i18nKey'),
