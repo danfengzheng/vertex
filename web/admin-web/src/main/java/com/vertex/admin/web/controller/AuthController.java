@@ -2,13 +2,16 @@ package com.vertex.admin.web.controller;
 
 import com.vertex.admin.web.config.JwtUtil;
 import com.vertex.api.menu.IMenuService;
+import com.vertex.api.notify.INotifyConfigService;
 import com.vertex.api.rolemenu.IRoleMenuService;
 import com.vertex.api.user.IUserService;
 import com.vertex.api.userrole.IUserRoleService;
 import com.vertex.common.core.context.UserContext;
 import com.vertex.model.dto.system.LoginDTO;
+import com.vertex.model.dto.system.NotifyConfigSaveDTO;
 import com.vertex.model.vo.system.LoginVO;
 import com.vertex.model.vo.system.MenuVO;
+import com.vertex.model.vo.system.NotifyConfigVO;
 import com.vertex.model.vo.system.UserVO;
 import com.vertex.web.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,6 +40,7 @@ public class AuthController {
     private final IMenuService menuService;
     private final IUserRoleService userRoleService;
     private final IRoleMenuService roleMenuService;
+    private final INotifyConfigService notifyConfigService;
 
     @Operation(summary = "登录")
     @PostMapping("/login")
@@ -101,5 +105,26 @@ public class AuthController {
         }
 
         return Result.success(menuService.listTreeByIds(menuIds));
+    }
+
+    @Operation(summary = "获取当前用户 Telegram 通知配置")
+    @GetMapping("/notify-config")
+    public Result<NotifyConfigVO> getNotifyConfig() {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            return Result.fail(401, "未登录");
+        }
+        return Result.success(notifyConfigService.getByUserId(userId, "TELEGRAM"));
+    }
+
+    @Operation(summary = "保存当前用户 Telegram 通知配置")
+    @PutMapping("/notify-config")
+    public Result<Void> saveNotifyConfig(@RequestBody NotifyConfigSaveDTO dto) {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            return Result.fail(401, "未登录");
+        }
+        notifyConfigService.save(userId, "TELEGRAM", dto);
+        return Result.success(null);
     }
 }

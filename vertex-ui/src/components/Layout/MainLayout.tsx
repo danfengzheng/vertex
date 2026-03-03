@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Layout, Menu, Avatar, Dropdown, Space, theme } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Space, theme, Modal, Form, Input, Switch, message } from 'antd';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { authApi } from '../../api/auth';
+import { notifyConfigApi, NotifyConfigVO } from '../../api/notifyConfig';
 import type { MenuVO } from '../../api/menu';
 import {
   MenuFoldOutlined,
@@ -72,6 +73,42 @@ export const MainLayout = () => {
   const currentUser = useMemo(() => {
     try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
   }, []);
+
+  // ─── 通知设置弹窗 ────────────────────────────────
+  const [notifyModalVisible, setNotifyModalVisible] = useState(false);
+  const [notifyConfig, setNotifyConfig] = useState<NotifyConfigVO | null>(null);
+  const [notifySaving, setNotifySaving] = useState(false);
+  const [notifyForm] = Form.useForm();
+
+  const handleOpenNotifyModal = async () => {
+    setNotifyModalVisible(true);
+    try {
+      const res = await notifyConfigApi.get();
+      if (res.code === 200) {
+        setNotifyConfig(res.data);
+        notifyForm.setFieldsValue({
+          chatId: res.data.chatId ?? '',
+          enabled: res.data.enabled === 1,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSaveNotifyConfig = async () => {
+    try {
+      const values = await notifyForm.validateFields();
+      setNotifySaving(true);
+      await notifyConfigApi.save({ chatId: values.chatId, enabled: values.enabled ? 1 : 0 });
+      message.success('通知配置已保存');
+      setNotifyModalVisible(false);
+    } catch {
+      // validation or network error
+    } finally {
+      setNotifySaving(false);
+    }
+  };
 
   // 当路径变化时，自动展开对应的父菜单
   useEffect(() => {
@@ -227,14 +264,9 @@ export const MainLayout = () => {
   // 用户下拉菜单
   const userMenuItems: MenuProps['items'] = [
     {
-      key: 'profile',
-      icon: <UserOutlined />,
-      label: t('text.user.profile'),
-    },
-    {
-      key: 'settings',
-      icon: <SettingOutlined />,
-      label: t('text.system.settings'),
+      key: 'notify',
+      icon: <BellOutlined />,
+      label: '通知设置',
     },
     {
       type: 'divider',
@@ -255,6 +287,8 @@ export const MainLayout = () => {
     if (key === 'logout') {
       localStorage.removeItem('token');
       navigate('/login');
+    } else if (key === 'notify') {
+      handleOpenNotifyModal();
     }
   };
 
@@ -351,6 +385,31 @@ export const MainLayout = () => {
           <Outlet />
         </Content>
       </Layout>
+
+      {/* Telegram 通知设置弹窗 */}
+      <Modal
+        title="Telegram 通知设置"
+        open={notifyModalVisible}
+        onOk={handleSaveNotifyConfig}
+        confirmLoading={notifySaving}
+        onCancel={() => setNotifyModalVisible(false)}
+      >
+        <Form form={notifyForm} layout="vertical" style={{ marginTop: 8 }}>
+          <Form.Item
+            name="chatId"
+            label="Chat ID"
+            extra="填写你的 Telegram 个人 Chat ID 或群组 Chat ID（负数）。信号触发时，通知将发送到此 ID。留空则使用系统全局配置。"
+          >
+            <Input placeholder="如：123456789 或 -1001234567890" />
+          </Form.Item>
+          <Form.Item name="enabled" label="启用通知" valuePropName="checked">
+            <Switch checkedChildren="开" unCheckedChildren="关" />
+          </Form.Item>
+        </Form>
+        {notifyConfig === null && (
+          <div style={{ color: '#999', fontSize: 12 }}>加载中...</div>
+        )}
+      </Modal>
     </Layout>
   );
 };

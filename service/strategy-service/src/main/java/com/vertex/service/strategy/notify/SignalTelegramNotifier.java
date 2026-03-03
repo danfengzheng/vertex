@@ -1,13 +1,17 @@
 package com.vertex.service.strategy.notify;
 
+import com.vertex.api.notify.INotifyConfigService;
 import com.vertex.model.entity.strategy.Signal;
+import com.vertex.model.vo.system.NotifyConfigVO;
 import com.vertex.service.strategy.config.StrategyProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.time.ZoneId;
@@ -33,6 +37,10 @@ public class SignalTelegramNotifier {
     private final StrategyProperties properties;
     @Qualifier("chainOkHttpClient")
     private final OkHttpClient httpClient;
+
+    /** 用户通知配置服务（可选注入，未部署 user-service 时降级为全局配置） */
+    @Autowired(required = false)
+    private INotifyConfigService notifyConfigService;
 
     public void notifySignal(Signal signal) {
         String emoji;
@@ -69,12 +77,30 @@ public class SignalTelegramNotifier {
                 signal.getDescription() != null ? signal.getDescription() : ""
         );
 
-        sendMessage(message);
+        // 优先使用信号所有者配置的 chat_id，回退到全局配置
+        String chatId = resolveUserChatId(signal.getCreateBy());
+        sendMessage(message, chatId);
     }
 
-    private void sendMessage(String text) {
+    /**
+     * 解析通知目标 chat_id：
+     * 1. 如果信号有归属用户且该用户配置了 Telegram 通知 → 使用用户自定义 chat_id
+     * 2. 否则回退到全局 application.yaml 中配置的 chat_id
+     */
+    private String resolveUserChatId(Long createBy) {
+        if (createBy != null && notifyConfigService != null) {
+            NotifyConfigVO userConfig = notifyConfigService.getByUserId(createBy, "TELEGRAM");
+            if (userConfig != null && userConfig.getEnabled() != null && userConfig.getEnabled() == 1
+                    && StringUtils.hasText(userConfig.getChatId())) {
+                return userConfig.getChatId();
+            }
+        }
+        return properties.getTelegram().getChatId();
+    }
+
+    private void sendMessage(String text, String chatId) {
         StrategyProperties.Telegram config = properties.getTelegram();
-        if (config.getBotToken() == null || config.getChatId() == null) {
+        if (!StringUtils.hasText(config.getBotToken()) || !StringUtils.hasText(chatId)) {
             log.warn("[Signal Telegram] Bot token or chat ID not configured, skipping notification");
             return;
         }
@@ -82,7 +108,7 @@ public class SignalTelegramNotifier {
         String url = String.format("%s/bot%s/sendMessage", config.getApiUrl(), config.getBotToken());
         String jsonBody = String.format(
                 "{\"chat_id\":\"%s\",\"text\":\"%s\",\"parse_mode\":\"Markdown\"}",
-                config.getChatId(),
+                chatId,
                 escapeJson(text)
         );
 
