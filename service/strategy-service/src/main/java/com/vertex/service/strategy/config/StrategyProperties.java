@@ -19,6 +19,9 @@ public class StrategyProperties {
     /** 引擎配置 */
     private Engine engine = new Engine();
 
+    /** Telegram 信号通知配置 */
+    private Telegram telegram = new Telegram();
+
     @Data
     public static class RocksDB {
         /** 数据目录 */
@@ -39,5 +42,17 @@ public class StrategyProperties {
          * 默认 3，即查询 3 倍所需K线数量作为预热。
          */
         private int warmupMultiplier = 3;
+    }
+
+    @Data
+    public static class Telegram {
+        /** 是否启用 Telegram 信号通知 */
+        private boolean enabled = false;
+        /** Bot Token */
+        private String botToken;
+        /** Chat ID */
+        private String chatId;
+        /** API 地址 */
+        private String apiUrl = "https://api.telegram.org";
     }
 }

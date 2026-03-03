@@ -18,6 +18,7 @@ import com.vertex.service.strategy.mapper.SignalMapper;
 import com.vertex.service.strategy.mapper.StrategyMapper;
 import com.vertex.service.strategy.store.SignalStore;
 import com.vertex.api.trading.ITradeExecutionListener;
+import com.vertex.service.strategy.notify.SignalTelegramNotifier;
 import com.vertex.service.strategy.websocket.SignalPushService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +54,10 @@ public class StrategyEngineService {
     /** 交易执行监听器（可选依赖，trading 未启用时为 null） */
     @Autowired(required = false)
     private ITradeExecutionListener tradeExecutionListener;
+
+    /** Telegram 信号通知器（可选依赖，vertex.strategy.telegram.enabled=true 时激活） */
+    @Autowired(required = false)
+    private SignalTelegramNotifier signalTelegramNotifier;
 
     /** 节流：记录每个策略的上次执行时间戳（毫秒） */
     private final ConcurrentHashMap<Long, Long> lastEvalTimeMap = new ConcurrentHashMap<>();
@@ -238,6 +243,11 @@ public class StrategyEngineService {
             return;
         }
 
+        // 数据权限：信号继承策略的创建者，便于行级数据隔离
+        if (signal.getCreateBy() == null && strategy.getCreateBy() != null) {
+            signal.setCreateBy(strategy.getCreateBy());
+        }
+
         // 双写：MySQL + RocksDB
         signalMapper.insert(signal);
         try {
@@ -252,6 +262,15 @@ public class StrategyEngineService {
                 signalPushService.pushSignal(signal);
             } catch (Exception e) {
                 log.warn("Failed to push signal via WebSocket: {}", e.getMessage());
+            }
+        }
+
+        // Telegram 信号通知（可选）
+        if (signalTelegramNotifier != null) {
+            try {
+                signalTelegramNotifier.notifySignal(signal);
+            } catch (Exception e) {
+                log.warn("Failed to send signal Telegram notification: {}", e.getMessage());
             }
         }
 

@@ -70,6 +70,13 @@ vertex:
     engine:
       max-kline-history: 500
       only-closed-klines: true
+    telegram:
+      enabled: true
+#      bot-token: ${VERTEX_STRATEGY_TG_BOT_TOKEN:8568350639:AAFb2uRyP705t29P53pfGnpspCxNxKagSx0}
+#      chat-id: ${VERTEX_STRATEGY_TG_CHAT_ID:-1003829666749}
+      bot-token: 8568350639:AAFb2uRyP705t29P53pfGnpspCxNxKagSx0
+      chat-id: -1003829666749
+      api-url: https://api.telegram.org
   trading:
     enabled: true
     default-execution-mode: PAPER

@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.TypeReference;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.vertex.api.strategy.ISignalService;
+import com.vertex.common.core.context.UserContext;
 import com.vertex.common.core.exception.BizException;
 import com.vertex.common.core.GlobalError;
 import com.vertex.common.core.page.PageResult;
@@ -33,6 +34,8 @@ public class SignalServiceImpl implements ISignalService {
 
     @Override
     public PageResult<SignalVO> page(SignalQueryDTO query) {
+        boolean isAdmin = UserContext.isAdmin();
+        Long currentUserId = UserContext.getUserId();
         LambdaQueryWrapper<Signal> wrapper = new LambdaQueryWrapper<Signal>()
                 .eq(query.getStrategyId() != null, Signal::getStrategyId, query.getStrategyId())
                 .eq(StringUtils.hasText(query.getExchange()), Signal::getExchange, query.getExchange())
@@ -41,6 +44,7 @@ public class SignalServiceImpl implements ISignalService {
                 .eq(query.getSignalType() != null, Signal::getSignalType, query.getSignalType())
                 .ge(query.getStartTime() != null, Signal::getSignalTime, query.getStartTime())
                 .le(query.getEndTime() != null, Signal::getSignalTime, query.getEndTime())
+                .eq(!isAdmin && currentUserId != null, Signal::getCreateBy, currentUserId)
                 .orderByDesc(Signal::getSignalTime);
 
         Page<Signal> page = signalMapper.selectPage(
@@ -58,6 +62,13 @@ public class SignalServiceImpl implements ISignalService {
         Signal signal = signalMapper.selectById(id);
         if (signal == null) {
             throw new BizException(GlobalError.SIGNAL_NOT_FOUND);
+        }
+        // 数据权限：非管理员只能查看自己的信号
+        if (!UserContext.isAdmin()) {
+            Long currentUserId = UserContext.getUserId();
+            if (currentUserId != null && !currentUserId.equals(signal.getCreateBy())) {
+                throw new BizException(GlobalError.SIGNAL_NOT_FOUND);
+            }
         }
         return toVO(signal);
     }

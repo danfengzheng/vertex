@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.vertex.api.strategy.IStrategyService;
+import com.vertex.common.core.context.UserContext;
 import com.vertex.common.core.exception.BizException;
 import com.vertex.common.core.GlobalError;
 import com.vertex.common.core.page.PageResult;
@@ -128,16 +129,26 @@ public class StrategyServiceImpl implements IStrategyService {
         if (strategy == null) {
             throw new BizException(GlobalError.STRATEGY_NOT_FOUND);
         }
+        // 数据权限：非管理员只能查看自己的策略
+        if (!UserContext.isAdmin()) {
+            Long currentUserId = UserContext.getUserId();
+            if (currentUserId != null && !currentUserId.equals(strategy.getCreateBy())) {
+                throw new BizException(GlobalError.STRATEGY_NOT_FOUND);
+            }
+        }
         return toVO(strategy);
     }
 
     @Override
     public PageResult<StrategyVO> page(StrategyQueryDTO query) {
+        boolean isAdmin = UserContext.isAdmin();
+        Long currentUserId = UserContext.getUserId();
         LambdaQueryWrapper<Strategy> wrapper = new LambdaQueryWrapper<Strategy>()
                 .like(StringUtils.hasText(query.getName()), Strategy::getName, query.getName())
                 .eq(StringUtils.hasText(query.getExchange()), Strategy::getExchange, query.getExchange())
                 .eq(StringUtils.hasText(query.getSymbol()), Strategy::getSymbol, query.getSymbol())
                 .eq(query.getEnabled() != null, Strategy::getEnabled, query.getEnabled())
+                .eq(!isAdmin && currentUserId != null, Strategy::getCreateBy, currentUserId)
                 .orderByDesc(Strategy::getCreateTime);
 
         Page<Strategy> page = strategyMapper.selectPage(

@@ -19,13 +19,14 @@ public class JwtUtil {
 
     private final JwtProperties jwtProperties;
 
-    public String generateToken(String username, Long userId) {
+    public String generateToken(String username, Long userId, Integer accountType) {
         SecretKey key = Keys.hmacShaKeyFor(jwtProperties.getSecret().getBytes(StandardCharsets.UTF_8));
         Date now = new Date();
         Date expiry = new Date(now.getTime() + jwtProperties.getExpirationSeconds() * 1000L);
         return Jwts.builder()
                 .subject(username)
                 .claim("userId", userId)
+                .claim("accountType", accountType)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(key)
@@ -52,6 +53,14 @@ public class JwtUtil {
         }
         if (userId instanceof Long) {
             return (Long) userId;
+        }
+        return null;
+    }
+
+    public Integer getAccountTypeFromToken(String token) {
+        Object accountType = parseToken(token).get("accountType");
+        if (accountType instanceof Integer) {
+            return (Integer) accountType;
         }
         return null;
     }

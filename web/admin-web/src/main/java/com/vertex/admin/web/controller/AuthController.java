@@ -44,7 +44,7 @@ public class AuthController {
             return Result.fail(401, "用户名或密码错误");
         }
         userService.clearLoginFailure(dto.getUsername());
-        String token = jwtUtil.generateToken(user.getUsername(), user.getId());
+        String token = jwtUtil.generateToken(user.getUsername(), user.getId(), user.getAccountType());
         return Result.success(new LoginVO(token, user));
     }
 
