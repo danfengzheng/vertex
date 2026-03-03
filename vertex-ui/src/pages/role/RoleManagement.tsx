@@ -8,13 +8,55 @@ import { menuApi, MenuVO } from '../../api/menu';
 import type { ApiResponse, PageResult } from '../../types/api';
 import type { DataNode } from 'antd/es/tree';
 
+/** 获取菜单显示名称，优先使用i18n翻译 */
+const getDisplayName = (menu: MenuVO, t: (key: string) => string): string => {
+  if (menu.i18nKey) {
+    const translated = t(menu.i18nKey);
+    if (translated !== menu.i18nKey) return translated;
+  }
+  return menu.name;
+};
+
 /** 将 MenuVO[] 树转为 Ant Design Tree DataNode[] */
-const menuToTreeData = (menus: MenuVO[]): DataNode[] =>
+const menuToTreeData = (menus: MenuVO[], t: (key: string) => string): DataNode[] =>
   menus.map(m => ({
     key: m.id,
-    title: m.name,
-    children: m.children && m.children.length > 0 ? menuToTreeData(m.children) : undefined,
+    title: getDisplayName(m, t),
+    children: m.children && m.children.length > 0 ? menuToTreeData(m.children, t) : undefined,
   }));
+
+/** 构建菜单ID和父ID的映射关系 */
+const buildMenuParentMap = (menus: MenuVO[], parentId: string | null = null): Map<string, string | null> => {
+  const map = new Map<string, string | null>();
+  menus.forEach(menu => {
+    map.set(String(menu.id), parentId);
+    if (menu.children && menu.children.length > 0) {
+      const childMap = buildMenuParentMap(menu.children, String(menu.id));
+      childMap.forEach((value, key) => {
+        map.set(key, value);
+      });
+    }
+  });
+  return map;
+};
+
+/** 获取菜单的所有祖先ID（包括所有父菜单）*/
+const getAncestorIds = (menuId: string, parentMap: Map<string, string | null>): string[] => {
+  const ancestors: string[] = [];
+  let currentId: string | null = menuId;
+  
+  while (currentId !== null) {
+    const parentId = parentMap.get(currentId);
+    if (parentId !== null && parentId !== undefined) {
+      ancestors.push(parentId);
+      currentId = parentId;
+    } else {
+      break;
+    }
+  }
+  
+  return ancestors;
+};
 
 
 export const RoleManagement = () => {
@@ -39,6 +81,7 @@ export const RoleManagement = () => {
   const [checkedMenuIds, setCheckedMenuIds] = useState<string[]>([]);
   const [menuLoading, setMenuLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [menuParentMap, setMenuParentMap] = useState<Map<string, string | null>>(new Map());
 
   const loadRoles = async () => {
     setLoading(true);
@@ -118,7 +161,12 @@ export const RoleManagement = () => {
     try {
       // 加载全量菜单树
       const menuRes = await menuApi.listTree();
-      if (menuRes.code === 200) setAllMenuTree(menuRes.data);
+      if (menuRes.code === 200) {
+        setAllMenuTree(menuRes.data);
+        // 构建菜单父级关系映射
+        const parentMap = buildMenuParentMap(menuRes.data);
+        setMenuParentMap(parentMap);
+      }
 
       // 加载角色已分配的菜单 ID
       const assignedRes = await roleMenuApi.getMenuIdsByRoleId(role.id);
@@ -248,13 +296,23 @@ export const RoleManagement = () => {
         <Spin spinning={menuLoading}>
           <Tree
             checkable
-            treeData={menuToTreeData(allMenuTree)}
+            checkStrictly
+            treeData={menuToTreeData(allMenuTree, t)}
             checkedKeys={checkedMenuIds}
             onCheck={(checked) => {
-              const ids = Array.isArray(checked)
-                ? (checked as string[])
-                : (checked.checked as string[]);
-              setCheckedMenuIds(ids);
+              // checkStrictly 下只传回真正勾选的 key，再补全祖先 ID 用于提交和展示
+              const rawChecked = Array.isArray(checked)
+                ? (checked as (string | number)[])
+                : ((checked as { checked: (string | number)[] }).checked ?? []);
+              const ids = rawChecked.map(String);
+
+              const selectedMenuIds = new Set(ids);
+              ids.forEach(menuId => {
+                const ancestorIds = getAncestorIds(menuId, menuParentMap);
+                ancestorIds.forEach(ancestorId => selectedMenuIds.add(ancestorId));
+              });
+
+              setCheckedMenuIds(Array.from(selectedMenuIds));
             }}
             defaultExpandAll
           />

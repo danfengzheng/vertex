@@ -5,4 +5,8 @@
 <!-- namespace 对应 Mapper 接口的全限定名 -->
 <mapper namespace="com.vertex.service.system.mapper.RoleMenuMapper">
 
+    <!-- 物理删除该角色的所有菜单关联（用于重新分配菜单前清空，避免逻辑删除后唯一键冲突） -->
+    <delete id="physicalDeleteByRoleId">
+        DELETE FROM sys_role_menu WHERE role_id = #{roleId}
+    </delete>
 </mapper>

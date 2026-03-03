@@ -4,6 +4,8 @@ import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.vertex.api.role.IRoleService;
+import com.vertex.api.rolemenu.IRoleMenuService;
+import com.vertex.api.userrole.IUserRoleService;
 import com.vertex.common.core.GlobalError;
 import com.vertex.common.core.exception.BizException;
 import com.vertex.common.core.page.PageResult;
@@ -27,6 +29,8 @@ import java.util.List;
 public class RoleServiceImpl implements IRoleService {
 
     private final RoleMapper roleMapper;
+    private final IRoleMenuService roleMenuService;
+    private final IUserRoleService userRoleService;
 
     @Override
     public RoleVO getById(Long id) {
@@ -107,6 +111,19 @@ public class RoleServiceImpl implements IRoleService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void delete(Long id) {
+        // Step 1: 验证角色是否存在
+        Role role = roleMapper.selectById(id);
+        if (role == null) {
+            throw new BizException(GlobalError.NOT_FOUND);
+        }
+
+        // Step 2: 删除用户-角色关联（防止外键约束冲突）
+        userRoleService.deleteByRoleId(id);
+
+        // Step 3: 删除角色-菜单权限关联（防止外键约束冲突）
+        roleMenuService.deleteByRoleId(id);
+
+        // Step 4: 最后删除角色本身
         roleMapper.deleteById(id);
     }
 }
