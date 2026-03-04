@@ -86,7 +86,7 @@ vertex:
     slippage:
       enabled: true
     telegram:
-      enabled: true
+      enabled: false
       bot-token: 8568350639:AAFb2uRyP705t29P53pfGnpspCxNxKagSx0
       chat-id: -1003829666749
   chain:

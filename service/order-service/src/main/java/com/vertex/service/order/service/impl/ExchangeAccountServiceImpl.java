@@ -10,6 +10,7 @@ import com.vertex.model.dto.trading.ExchangeAccountUpdateDTO;
 import com.vertex.model.entity.trading.ExchangeAccount;
 import com.vertex.model.vo.trading.AssetBalanceVO;
 import com.vertex.model.vo.trading.ExchangeAccountVO;
+import com.vertex.common.core.context.UserContext;
 import com.vertex.service.order.client.BinanceTradeClient;
 import com.vertex.service.order.mapper.ExchangeAccountMapper;
 import com.alibaba.fastjson2.JSONArray;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -61,6 +63,9 @@ public class ExchangeAccountServiceImpl implements IExchangeAccountService {
         if (account == null) {
             throw new BizException(GlobalError.ACCOUNT_NOT_FOUND);
         }
+        if (!UserContext.isAdmin() && !Objects.equals(account.getCreateBy(), UserContext.getUserId())) {
+            throw new BizException(GlobalError.FORBIDDEN);
+        }
 
         if (dto.getName() != null) {
             // 检查名称唯一（排除自身）
@@ -90,6 +95,9 @@ public class ExchangeAccountServiceImpl implements IExchangeAccountService {
         if (account == null) {
             throw new BizException(GlobalError.ACCOUNT_NOT_FOUND);
         }
+        if (!UserContext.isAdmin() && !Objects.equals(account.getCreateBy(), UserContext.getUserId())) {
+            throw new BizException(GlobalError.FORBIDDEN);
+        }
         accountMapper.deleteById(id);
     }
 
@@ -99,14 +107,22 @@ public class ExchangeAccountServiceImpl implements IExchangeAccountService {
         if (account == null) {
             throw new BizException(GlobalError.ACCOUNT_NOT_FOUND);
         }
+        if (!UserContext.isAdmin() && !Objects.equals(account.getCreateBy(), UserContext.getUserId())) {
+            throw new BizException(GlobalError.FORBIDDEN);
+        }
         return toVO(account);
     }
 
     @Override
     public List<ExchangeAccountVO> list() {
         LambdaQueryWrapper<ExchangeAccount> wrapper = new LambdaQueryWrapper<ExchangeAccount>()
-                .eq(ExchangeAccount::getDeleted, 0)
-                .orderByDesc(ExchangeAccount::getCreateTime);
+                .eq(ExchangeAccount::getDeleted, 0);
+
+        if (!UserContext.isAdmin()) {
+            wrapper.eq(ExchangeAccount::getCreateBy, UserContext.getUserId());
+        }
+
+        wrapper.orderByDesc(ExchangeAccount::getCreateTime);
         return accountMapper.selectList(wrapper).stream()
                 .map(this::toVO)
                 .collect(Collectors.toList());
@@ -117,6 +133,9 @@ public class ExchangeAccountServiceImpl implements IExchangeAccountService {
         ExchangeAccount account = accountMapper.selectById(id);
         if (account == null) {
             throw new BizException(GlobalError.ACCOUNT_NOT_FOUND);
+        }
+        if (!UserContext.isAdmin() && !Objects.equals(account.getCreateBy(), UserContext.getUserId())) {
+            throw new BizException(GlobalError.FORBIDDEN);
         }
         if (account.getStatus() == 0) {
             throw new BizException(GlobalError.ACCOUNT_DISABLED);
@@ -129,6 +148,7 @@ public class ExchangeAccountServiceImpl implements IExchangeAccountService {
 
     /**
      * 获取解密后的 API 凭据（仅供内部服务调用）
+     * 注意：此方法由 TradeExecutionService 等内部服务调用，不做数据权限校验
      */
     public String[] getDecryptedCredentials(Long accountId) {
         ExchangeAccount account = accountMapper.selectById(accountId);
@@ -145,11 +165,31 @@ public class ExchangeAccountServiceImpl implements IExchangeAccountService {
     }
 
     /**
+     * 获取解密后的 API 凭据（面向用户请求，含数据权限校验）
+     */
+    private String[] getDecryptedCredentialsWithPermissionCheck(Long accountId) {
+        ExchangeAccount account = accountMapper.selectById(accountId);
+        if (account == null) {
+            throw new BizException(GlobalError.ACCOUNT_NOT_FOUND);
+        }
+        if (!UserContext.isAdmin() && !Objects.equals(account.getCreateBy(), UserContext.getUserId())) {
+            throw new BizException(GlobalError.FORBIDDEN);
+        }
+        if (account.getStatus() == 0) {
+            throw new BizException(GlobalError.ACCOUNT_DISABLED);
+        }
+        return new String[]{
+                cryptoService.decrypt(account.getApiKey()),
+                cryptoService.decrypt(account.getApiSecret())
+        };
+    }
+
+    /**
      * 查询账户全量资产余额，返回所有 free+locked > 0 的资产
      */
     @Override
     public List<AssetBalanceVO> getBalance(Long id) {
-        String[] credentials = getDecryptedCredentials(id);
+        String[] credentials = getDecryptedCredentialsWithPermissionCheck(id);
         JSONObject account = binanceTradeClient.getAccount(credentials[0], credentials[1]);
         JSONArray balances = account.getJSONArray("balances");
         List<AssetBalanceVO> result = new java.util.ArrayList<>();

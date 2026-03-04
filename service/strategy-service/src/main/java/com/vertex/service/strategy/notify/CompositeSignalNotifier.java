@@ -1,6 +1,7 @@
 package com.vertex.service.strategy.notify;
 
 import com.vertex.model.entity.strategy.Signal;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -22,6 +23,15 @@ import java.util.List;
 public class CompositeSignalNotifier {
 
     private final List<SignalNotifier> notifiers;
+
+    @PostConstruct
+    public void init() {
+        if (notifiers.isEmpty()) {
+            log.warn("[CompositeSignalNotifier] No signal notifiers registered. Signal TG notifications will be disabled.");
+        } else {
+            log.info("[CompositeSignalNotifier] Active signal notifiers: {}", activeTypes());
+        }
+    }
 
     /**
      * 分发信号通知到所有已激活的通知渠道
