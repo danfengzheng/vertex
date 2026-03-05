@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import com.vertex.common.core.annotation.RequiresPermission;
 
 /**
  * 链上告警规则 CRUD 接口
@@ -25,24 +26,28 @@ public class AlertRuleController {
 
     private final IAlertRuleService alertRuleService;
 
+    @RequiresPermission("chain:alert")
     @Operation(summary = "分页查询告警规则")
     @GetMapping("/page")
     public Result<PageResult<AlertRuleVO>> page(@Validated PageQuery query) {
         return Result.success(alertRuleService.page(query));
     }
 
+    @RequiresPermission("chain:alert")
     @Operation(summary = "查询告警规则详情")
     @GetMapping("/{id}")
     public Result<AlertRuleVO> getById(@PathVariable Long id) {
         return Result.success(alertRuleService.getById(id));
     }
 
+    @RequiresPermission("chain:alert")
     @Operation(summary = "创建告警规则")
     @PostMapping
     public Result<Long> create(@Validated @RequestBody AlertRuleCreateDTO dto) {
         return Result.success(alertRuleService.create(dto));
     }
 
+    @RequiresPermission("chain:alert")
     @Operation(summary = "更新告警规则")
     @PutMapping
     public Result<Void> update(@Validated @RequestBody AlertRuleUpdateDTO dto) {
@@ -50,6 +55,7 @@ public class AlertRuleController {
         return Result.success();
     }
 
+    @RequiresPermission("chain:alert")
     @Operation(summary = "删除告警规则")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
@@ -57,6 +63,7 @@ public class AlertRuleController {
         return Result.success();
     }
 
+    @RequiresPermission("chain:alert")
     @Operation(summary = "启用告警规则")
     @PostMapping("/{id}/enable")
     public Result<Void> enable(@PathVariable Long id) {
@@ -64,6 +71,7 @@ public class AlertRuleController {
         return Result.success();
     }
 
+    @RequiresPermission("chain:alert")
     @Operation(summary = "禁用告警规则")
     @PostMapping("/{id}/disable")
     public Result<Void> disable(@PathVariable Long id) {

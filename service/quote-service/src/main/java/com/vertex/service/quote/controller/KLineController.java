@@ -14,6 +14,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.vertex.common.core.annotation.RequiresPermission;
 
 /**
  * K线数据查询控制器
@@ -27,12 +28,14 @@ public class KLineController {
 
     private final IKLineService klineService;
 
+    @RequiresPermission("quote:kline")
     @Operation(summary = "查询K线数据")
     @GetMapping
     public Result<List<KLineVO>> query(@Validated KLineQueryDTO query) {
         return Result.success(klineService.query(query));
     }
 
+    @RequiresPermission("quote:kline")
     @Operation(summary = "获取最新K线")
     @GetMapping("/latest")
     public Result<KLineVO> latest(@RequestParam @NotBlank(message = "交易对不能为空") String symbol,

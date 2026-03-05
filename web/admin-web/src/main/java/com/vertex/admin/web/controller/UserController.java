@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import com.vertex.common.core.annotation.RequiresPermission;
 
 /**
  * 用户控制器
@@ -24,24 +25,28 @@ public class UserController {
 
     private final IUserService userService;
 
+    @RequiresPermission("system:user")
     @Operation(summary = "根据ID查询用户")
     @GetMapping("/{id}")
     public Result<UserVO> getById(@PathVariable Long id) {
         return Result.success(userService.getById(id));
     }
 
+    @RequiresPermission("system:user")
     @Operation(summary = "分页查询用户")
     @GetMapping("/page")
     public Result<PageResult<UserVO>> page(@Validated UserQueryDTO query) {
         return Result.success(userService.page(query));
     }
 
+    @RequiresPermission("system:user")
     @Operation(summary = "创建用户")
     @PostMapping
     public Result<Long> create(@RequestBody @Validated UserCreateDTO dto) {
         return Result.success(userService.create(dto));
     }
 
+    @RequiresPermission("system:user")
     @Operation(summary = "更新用户")
     @PutMapping
     public Result<Void> update(@RequestBody @Validated UserUpdateDTO dto) {
@@ -49,6 +54,7 @@ public class UserController {
         return Result.success();
     }
 
+    @RequiresPermission("system:user")
     @Operation(summary = "删除用户")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
@@ -56,6 +62,7 @@ public class UserController {
         return Result.success();
     }
 
+    @RequiresPermission("system:user")
     @Operation(summary = "解冻账户")
     @PutMapping("/{id}/unfreeze")
     public Result<Void> unfreeze(@PathVariable Long id) {

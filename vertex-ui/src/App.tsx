@@ -5,6 +5,7 @@ import enUS from 'antd/locale/en_US';
 import { useTranslation } from 'react-i18next';
 import { AppRouter } from './router';
 import { NotificationProvider } from './contexts/NotificationContext';
+import { PermissionProvider } from './contexts/PermissionContext';
 
 function App() {
   const { i18n } = useTranslation();
@@ -16,7 +17,9 @@ function App() {
     <ConfigProvider locale={antdLocale}>
       <BrowserRouter>
         <NotificationProvider>
-          <AppRouter />
+          <PermissionProvider>
+            <AppRouter />
+          </PermissionProvider>
         </NotificationProvider>
       </BrowserRouter>
     </ConfigProvider>

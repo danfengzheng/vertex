@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import com.vertex.common.core.annotation.RequiresPermission;
 
 /**
  * 链上新币列表接口
@@ -24,18 +25,21 @@ public class ChainTokenController {
 
     private final IChainTokenService chainTokenService;
 
+    @RequiresPermission("chain:token")
     @Operation(summary = "分页查询新币列表")
     @GetMapping("/page")
     public Result<PageResult<ChainTokenVO>> page(@Validated ChainTokenQueryDTO query) {
         return Result.success(chainTokenService.page(query));
     }
 
+    @RequiresPermission("chain:token")
     @Operation(summary = "查询新币详情（含最新指标快照）")
     @GetMapping("/{id}")
     public Result<ChainTokenDetailVO> getById(@PathVariable Long id) {
         return Result.success(chainTokenService.getById(id));
     }
 
+    @RequiresPermission("chain:token")
     @Operation(summary = "手动触发扫描（BNB / SOLANA / ALL）")
     @PostMapping("/scan")
     public Result<Void> scan(@RequestParam(defaultValue = "ALL") String chain) {

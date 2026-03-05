@@ -13,6 +13,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import com.vertex.common.core.annotation.RequiresPermission;
 
 /**
  * 策略回测控制器
@@ -27,12 +28,14 @@ public class BacktestController {
     private final BacktestService backtestService;
     private final StrategyMapper strategyMapper;
 
+    @RequiresPermission("strategy:config")
     @PostMapping("/run")
     @Operation(summary = "执行策略回测")
     public Result<BacktestResultVO> runBacktest(@RequestBody @Validated BacktestConfigDTO config) {
         return Result.success(backtestService.runBacktest(config));
     }
 
+    @RequiresPermission("strategy:config")
     @PostMapping("/quick")
     @Operation(summary = "快速回测 - 使用最近N天的数据对策略进行完整回测")
     public Result<BacktestResultVO> quickBacktest(

@@ -2,12 +2,14 @@ package com.vertex.service.system.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.vertex.api.permission.IPermissionService;
 import com.vertex.api.rolemenu.IRoleMenuService;
 import com.vertex.model.dto.system.RoleMenuCreateDTO;
 import com.vertex.model.entity.system.RoleMenu;
 import com.vertex.service.system.mapper.RoleMenuMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,10 @@ import java.util.stream.Collectors;
 public class RoleMenuServiceImpl implements IRoleMenuService {
 
     private final RoleMenuMapper roleMenuMapper;
+
+    /** 菜单变更后失效权限缓存（field 注入避免循环依赖） */
+    @Autowired(required = false)
+    private IPermissionService permissionService;
 
     @Override
     public List<Long> getMenuIdsByRoleId(Long roleId) {
@@ -75,6 +81,11 @@ public class RoleMenuServiceImpl implements IRoleMenuService {
             log.info("菜单权限分配完成: roleId={}, menuCount={}", roleId, uniqueMenuIds.size());
         } else {
             log.info("菜单列表为空，已清空角色 {} 的所有菜单权限", roleId);
+        }
+
+        // 角色菜单变更后，清除所有用户的权限缓存（简单策略：全量失效）
+        if (permissionService != null) {
+            permissionService.invalidateAllCache();
         }
     }
 

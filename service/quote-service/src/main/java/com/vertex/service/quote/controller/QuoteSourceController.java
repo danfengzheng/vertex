@@ -27,6 +27,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import com.vertex.common.core.annotation.RequiresPermission;
 
 /**
  * 行情数据源管理控制器
@@ -53,6 +54,7 @@ public class QuoteSourceController {
     /** 补全任务进度追踪 */
     private final Map<String, BackfillProgress> progressMap = new ConcurrentHashMap<>();
 
+    @RequiresPermission("quote:source")
     @Operation(summary = "查看所有数据源状态")
     @GetMapping("/status")
     public Result<List<DataSourceStatusVO>> status() {
@@ -65,6 +67,7 @@ public class QuoteSourceController {
         return Result.success(statusList);
     }
 
+    @RequiresPermission("quote:source")
     @Operation(summary = "启动数据源")
     @PostMapping("/start")
     public Result<Void> start(@RequestParam @NotBlank(message = "交易所不能为空") String exchange) {
@@ -73,6 +76,7 @@ public class QuoteSourceController {
         return Result.success();
     }
 
+    @RequiresPermission("quote:source")
     @Operation(summary = "停止数据源")
     @PostMapping("/stop")
     public Result<Void> stop(@RequestParam @NotBlank(message = "交易所不能为空") String exchange) {
@@ -81,6 +85,7 @@ public class QuoteSourceController {
         return Result.success();
     }
 
+    @RequiresPermission("quote:source")
     @Operation(summary = "查看指定交易所的活跃订阅列表")
     @GetMapping("/subscriptions")
     public Result<List<Map<String, String>>> subscriptions(
@@ -89,6 +94,7 @@ public class QuoteSourceController {
         return Result.success(ds.getSubscriptions());
     }
 
+    @RequiresPermission("quote:source")
     @Operation(summary = "订阅K线")
     @PostMapping("/subscribe")
     public Result<Void> subscribe(@RequestBody @Validated SubscribeRequestDTO dto) {
@@ -100,6 +106,7 @@ public class QuoteSourceController {
         return Result.success();
     }
 
+    @RequiresPermission("quote:source")
     @Operation(summary = "取消订阅K线")
     @PostMapping("/unsubscribe")
     public Result<Void> unsubscribe(@RequestBody @Validated SubscribeRequestDTO dto) {
@@ -108,6 +115,7 @@ public class QuoteSourceController {
         return Result.success();
     }
 
+    @RequiresPermission("quote:source")
     @Operation(summary = "提交历史K线补全任务（异步）")
     @PostMapping("/backfill")
     public Result<String> backfill(@RequestBody @Validated KLineQueryDTO query) {
@@ -145,6 +153,7 @@ public class QuoteSourceController {
         return Result.success(taskId);
     }
 
+    @RequiresPermission("quote:source")
     @Operation(summary = "查询补全任务进度")
     @GetMapping("/backfill/progress")
     public Result<Map<String, Object>> backfillProgress(@RequestParam String taskId) {

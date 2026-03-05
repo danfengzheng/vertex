@@ -10,6 +10,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import com.vertex.common.core.annotation.RequiresPermission;
 
 /**
  * 角色菜单关联控制器
@@ -22,18 +23,21 @@ public class RoleMenuController {
 
     private final IRoleMenuService roleMenuService;
 
+    @RequiresPermission("system:role")
     @Operation(summary = "根据角色ID查询菜单ID列表")
     @GetMapping("/role/{roleId}")
     public Result<List<Long>> getMenuIdsByRoleId(@PathVariable Long roleId) {
         return Result.success(roleMenuService.getMenuIdsByRoleId(roleId));
     }
 
+    @RequiresPermission("system:role")
     @Operation(summary = "根据菜单ID查询角色ID列表")
     @GetMapping("/menu/{menuId}")
     public Result<List<Long>> getRoleIdsByMenuId(@PathVariable Long menuId) {
         return Result.success(roleMenuService.getRoleIdsByMenuId(menuId));
     }
 
+    @RequiresPermission("system:role")
     @Operation(summary = "为角色分配菜单")
     @PostMapping("/assign")
     public Result<Void> assignMenusToRole(@RequestParam Long roleId, @RequestBody List<Long> menuIds) {
@@ -41,12 +45,14 @@ public class RoleMenuController {
         return Result.success();
     }
 
+    @RequiresPermission("system:role")
     @Operation(summary = "创建角色菜单关联")
     @PostMapping
     public Result<Long> create(@RequestBody @Validated RoleMenuCreateDTO dto) {
         return Result.success(roleMenuService.create(dto));
     }
 
+    @RequiresPermission("system:role")
     @Operation(summary = "删除角色菜单关联")
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {

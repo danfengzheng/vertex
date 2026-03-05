@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { MainLayout } from '../components/Layout/MainLayout';
 import { AuthGuard } from '../components/AuthGuard';
+import { PermissionGuard } from '../components/PermissionGuard';
 import { Login } from '../pages/login/Login';
 import { UserManagement } from '../pages/user/UserManagement';
 import { MenuManagement } from '../pages/menu/MenuManagement';
@@ -30,20 +31,58 @@ export const AppRouter = () => {
         }
       >
         <Route index element={<Navigate to="/guide/strategy" replace />} />
-        <Route path="user" element={<UserManagement />} />
-        <Route path="menu" element={<MenuManagement />} />
-        <Route path="role" element={<RoleManagement />} />
-        <Route path="quote/source" element={<DataSourceManagement />} />
-        <Route path="quote/kline" element={<KLineQuery />} />
-        <Route path="strategy/config" element={<StrategyConfig />} />
-        <Route path="strategy/signals" element={<SignalMonitor />} />
-        <Route path="trading/accounts" element={<ExchangeAccountManagement />} />
-        <Route path="trading/orders" element={<OrderHistory />} />
-        <Route path="trading/positions" element={<PositionMonitor />} />
-        <Route path="trading/pnl" element={<PnlAnalysis />} />
+
+        {/* 系统管理 */}
+        <Route path="user" element={
+          <PermissionGuard path="/user"><UserManagement /></PermissionGuard>
+        } />
+        <Route path="menu" element={
+          <PermissionGuard path="/menu"><MenuManagement /></PermissionGuard>
+        } />
+        <Route path="role" element={
+          <PermissionGuard path="/role"><RoleManagement /></PermissionGuard>
+        } />
+
+        {/* 行情 */}
+        <Route path="quote/source" element={
+          <PermissionGuard path="/quote/source"><DataSourceManagement /></PermissionGuard>
+        } />
+        <Route path="quote/kline" element={
+          <PermissionGuard path="/quote/kline"><KLineQuery /></PermissionGuard>
+        } />
+
+        {/* 策略 */}
+        <Route path="strategy/config" element={
+          <PermissionGuard path="/strategy/config"><StrategyConfig /></PermissionGuard>
+        } />
+        <Route path="strategy/signals" element={
+          <PermissionGuard path="/strategy/signals"><SignalMonitor /></PermissionGuard>
+        } />
+
+        {/* 交易 */}
+        <Route path="trading/accounts" element={
+          <PermissionGuard path="/trading/accounts"><ExchangeAccountManagement /></PermissionGuard>
+        } />
+        <Route path="trading/orders" element={
+          <PermissionGuard path="/trading/orders"><OrderHistory /></PermissionGuard>
+        } />
+        <Route path="trading/positions" element={
+          <PermissionGuard path="/trading/positions"><PositionMonitor /></PermissionGuard>
+        } />
+        <Route path="trading/pnl" element={
+          <PermissionGuard path="/trading/pnl"><PnlAnalysis /></PermissionGuard>
+        } />
+
+        {/* 链上分析 */}
+        <Route path="chain/tokens" element={
+          <PermissionGuard path="/chain/tokens"><TokenList /></PermissionGuard>
+        } />
+        <Route path="chain/alerts" element={
+          <PermissionGuard path="/chain/alerts"><AlertConfig /></PermissionGuard>
+        } />
+
+        {/* 使用指南（无权限码，所有已登录用户可访问） */}
         <Route path="guide/strategy" element={<StrategyGuide />} />
-        <Route path="chain/tokens" element={<TokenList />} />
-        <Route path="chain/alerts" element={<AlertConfig />} />
       </Route>
     </Routes>
   );

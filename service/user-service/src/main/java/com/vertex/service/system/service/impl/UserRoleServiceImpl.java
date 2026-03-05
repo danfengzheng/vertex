@@ -2,11 +2,13 @@ package com.vertex.service.system.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.vertex.api.permission.IPermissionService;
 import com.vertex.api.userrole.IUserRoleService;
 import com.vertex.model.dto.system.UserRoleCreateDTO;
 import com.vertex.model.entity.system.UserRole;
 import com.vertex.service.system.mapper.UserRoleMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +23,10 @@ import java.util.stream.Collectors;
 public class UserRoleServiceImpl implements IUserRoleService {
 
     private final UserRoleMapper userRoleMapper;
+
+    /** 角色变更后失效权限缓存（field 注入避免循环依赖） */
+    @Autowired(required = false)
+    private IPermissionService permissionService;
 
     @Override
     public List<Long> getRoleIdsByUserId(Long userId) {
@@ -58,6 +64,11 @@ public class UserRoleServiceImpl implements IUserRoleService {
                 dto.setRoleId(roleId);
                 create(dto);
             }
+        }
+
+        // 角色变更后失效该用户的权限缓存
+        if (permissionService != null) {
+            permissionService.invalidateCache(userId);
         }
     }
 

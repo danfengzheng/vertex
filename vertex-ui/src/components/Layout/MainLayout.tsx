@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Layout, Menu, Avatar, Dropdown, Space, theme, Modal, Form, Input, Switch, message } from 'antd';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
-import { authApi } from '../../api/auth';
 import { notifyConfigApi, NotifyConfigVO } from '../../api/notifyConfig';
-import type { MenuVO } from '../../api/menu';
+import { usePermission } from '../../contexts/PermissionContext';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -66,8 +65,8 @@ export const MainLayout = () => {
   };
 
   const [openKeys, setOpenKeys] = useState<string[]>(getOpenKeys());
-  // null = not yet loaded (show all); Set = loaded (filter by allowed paths)
-  const [allowedPaths, setAllowedPaths] = useState<Set<string> | null>(null);
+  // 来自 PermissionContext（已在 App 层统一加载）
+  const { allowedPaths } = usePermission();
 
   // 从当前登录用户信息中读取用户名
   const currentUser = useMemo(() => {
@@ -114,25 +113,6 @@ export const MainLayout = () => {
   useEffect(() => {
     setOpenKeys(getOpenKeys());
   }, [location.pathname]);
-
-  // 加载当前用户有权访问的菜单路径
-  useEffect(() => {
-    authApi.getUserMenus().then(res => {
-      if (res.code === 200) {
-        const paths = new Set<string>();
-        const traverse = (nodes: MenuVO[]) => {
-          for (const m of nodes) {
-            if (m.path) paths.add(m.path);
-            if (m.children) traverse(m.children);
-          }
-        };
-        traverse(res.data);
-        setAllowedPaths(paths);
-      }
-    }).catch(() => {
-      // 获取失败时保持 null（展示全部菜单，实际权限由后端把控）
-    });
-  }, []);
 
   // 菜单项配置
   const menuItems: MenuProps['items'] = [

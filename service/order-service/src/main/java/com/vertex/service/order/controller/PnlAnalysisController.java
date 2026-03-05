@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import com.vertex.common.core.annotation.RequiresPermission;
 
 /**
  * 已平仓盈亏分析
@@ -27,12 +28,14 @@ public class PnlAnalysisController {
 
     private final IPnlAnalysisService pnlAnalysisService;
 
+    @RequiresPermission("trade:pnl")
     @Operation(summary = "已平仓盈亏分析")
     @GetMapping
     public Result<PnlAnalysisVO> getPnlAnalysis(@Validated PnlAnalysisQueryDTO query) {
         return Result.success(pnlAnalysisService.getPnlAnalysis(query));
     }
 
+    @RequiresPermission("trade:pnl")
     @Operation(summary = "按日汇总已平仓盈亏（走势图数据）")
     @GetMapping("/daily")
     public Result<List<DailyPnlVO>> getDailyPnl(@Validated PnlAnalysisQueryDTO query) {
