@@ -10,6 +10,7 @@ import com.vertex.model.dto.trading.PositionQueryDTO;
 import com.vertex.model.entity.trading.Position;
 import com.vertex.model.entity.trading.PositionStatus;
 import com.vertex.model.vo.trading.PositionVO;
+import com.vertex.common.core.context.UserContext;
 import com.vertex.service.order.mapper.PositionMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -39,6 +41,9 @@ public class PositionServiceImpl implements IPositionService {
         if (position == null) {
             throw new BizException(GlobalError.POSITION_NOT_FOUND);
         }
+        if (!UserContext.isAdmin() && !Objects.equals(position.getCreateBy(), UserContext.getUserId())) {
+            throw new BizException(GlobalError.FORBIDDEN);
+        }
         return toVO(position);
     }
 
@@ -47,8 +52,13 @@ public class PositionServiceImpl implements IPositionService {
         Page<Position> page = new Page<>(query.getPageNum(), query.getPageSize());
 
         LambdaQueryWrapper<Position> wrapper = new LambdaQueryWrapper<Position>()
-                .eq(Position::getDeleted, 0)
-                .eq(query.getStrategyId() != null, Position::getStrategyId, query.getStrategyId())
+                .eq(Position::getDeleted, 0);
+
+        if (!UserContext.isAdmin()) {
+            wrapper.eq(Position::getCreateBy, UserContext.getUserId());
+        }
+
+        wrapper.eq(query.getStrategyId() != null, Position::getStrategyId, query.getStrategyId())
                 .eq(query.getExchange() != null, Position::getExchange, query.getExchange())
                 .eq(query.getSymbol() != null, Position::getSymbol, query.getSymbol())
                 .eq(query.getStatus() != null, Position::getStatus, query.getStatus())
@@ -68,6 +78,9 @@ public class PositionServiceImpl implements IPositionService {
         Position position = positionMapper.selectById(id);
         if (position == null) {
             throw new BizException(GlobalError.POSITION_NOT_FOUND);
+        }
+        if (!UserContext.isAdmin() && !Objects.equals(position.getCreateBy(), UserContext.getUserId())) {
+            throw new BizException(GlobalError.FORBIDDEN);
         }
         if (position.getStatus() != PositionStatus.OPEN) {
             throw new BizException(GlobalError.POSITION_ALREADY_CLOSED);

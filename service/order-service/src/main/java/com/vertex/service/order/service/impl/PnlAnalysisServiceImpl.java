@@ -2,6 +2,7 @@ package com.vertex.service.order.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.vertex.api.trading.IPnlAnalysisService;
+import com.vertex.common.core.context.UserContext;
 import com.vertex.model.dto.trading.PnlAnalysisQueryDTO;
 import com.vertex.model.entity.trading.ExecutionMode;
 import com.vertex.model.entity.trading.Position;
@@ -39,8 +40,13 @@ public class PnlAnalysisServiceImpl implements IPnlAnalysisService {
     public PnlAnalysisVO getPnlAnalysis(PnlAnalysisQueryDTO query) {
         LambdaQueryWrapper<Position> wrapper = new LambdaQueryWrapper<Position>()
                 .eq(Position::getStatus, PositionStatus.CLOSED)
-                .eq(Position::getDeleted, 0)
-                .eq(query.getTradeMode() != null, Position::getTradeMode, query.getTradeMode())
+                .eq(Position::getDeleted, 0);
+
+        if (!UserContext.isAdmin()) {
+            wrapper.eq(Position::getCreateBy, UserContext.getUserId());
+        }
+
+        wrapper.eq(query.getTradeMode() != null, Position::getTradeMode, query.getTradeMode())
                 .eq(query.getStrategyId() != null, Position::getStrategyId, query.getStrategyId())
                 .eq(query.getSymbol() != null, Position::getSymbol, query.getSymbol())
                 .eq(query.getAccountId() != null, Position::getAccountId, query.getAccountId())
@@ -111,8 +117,13 @@ public class PnlAnalysisServiceImpl implements IPnlAnalysisService {
     public List<DailyPnlVO> getDailyPnl(PnlAnalysisQueryDTO query) {
         LambdaQueryWrapper<Position> wrapper = new LambdaQueryWrapper<Position>()
                 .eq(Position::getStatus, PositionStatus.CLOSED)
-                .eq(Position::getDeleted, 0)
-                .eq(query.getTradeMode() != null, Position::getTradeMode, query.getTradeMode())
+                .eq(Position::getDeleted, 0);
+
+        if (!UserContext.isAdmin()) {
+            wrapper.eq(Position::getCreateBy, UserContext.getUserId());
+        }
+
+        wrapper.eq(query.getTradeMode() != null, Position::getTradeMode, query.getTradeMode())
                 .eq(query.getStrategyId() != null, Position::getStrategyId, query.getStrategyId())
                 .eq(query.getSymbol() != null, Position::getSymbol, query.getSymbol())
                 .eq(query.getAccountId() != null, Position::getAccountId, query.getAccountId())

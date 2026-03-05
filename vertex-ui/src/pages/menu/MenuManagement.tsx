@@ -164,7 +164,7 @@ export const MenuManagement = () => {
             <Select placeholder={t('placeholder.menu.parentId')} allowClear>
               {menus.map(m => (
                 <Select.Option key={m.id} value={m.id}>
-                  {m.name}
+                  {displayName(m)}
                 </Select.Option>
               ))}
             </Select>

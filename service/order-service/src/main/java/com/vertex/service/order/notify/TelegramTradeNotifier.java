@@ -47,21 +47,22 @@ public class TelegramTradeNotifier implements TradeNotifier {
         String statusLabel = order.getStatus() == OrderStatus.PENDING ? "待确认" : "已提交";
         String strategyName = strategy != null ? strategy.getName() : "unknown";
 
+        // 使用 HTML 格式，避免策略名称含特殊字符导致 Telegram Markdown 解析失败
         String message = String.format(
-                "\uD83D\uDCCB *订单创建*\n" +
-                "方向: `%s`\n" +
-                "交易对: `%s`\n" +
-                "交易所: `%s`\n" +
-                "数量: `%s`\n" +
-                "类型: `%s`\n" +
-                "策略: `%s`\n" +
-                "状态: *%s*",
+                "\uD83D\uDCCB <b>订单创建</b>\n" +
+                "方向: <code>%s</code>\n" +
+                "交易对: <code>%s</code>\n" +
+                "交易所: <code>%s</code>\n" +
+                "数量: <code>%s</code>\n" +
+                "类型: <code>%s</code>\n" +
+                "策略: <code>%s</code>\n" +
+                "状态: <b>%s</b>",
                 order.getSide(),
-                order.getSymbol(),
-                order.getExchange(),
+                escapeHtml(order.getSymbol()),
+                escapeHtml(order.getExchange()),
                 formatQuantity(order.getQuantity()),
                 order.getOrderType(),
-                strategyName,
+                escapeHtml(strategyName),
                 statusLabel
         );
 
@@ -84,24 +85,24 @@ public class TelegramTradeNotifier implements TradeNotifier {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("%s *%s*\n", emoji, title));
-        sb.append(String.format("方向: `%s`\n", order.getSide()));
-        sb.append(String.format("交易对: `%s`\n", order.getSymbol()));
-        sb.append(String.format("交易所: `%s`\n", order.getExchange()));
+        sb.append(String.format("%s <b>%s</b>\n", emoji, title));
+        sb.append(String.format("方向: <code>%s</code>\n", order.getSide()));
+        sb.append(String.format("交易对: <code>%s</code>\n", escapeHtml(order.getSymbol())));
+        sb.append(String.format("交易所: <code>%s</code>\n", escapeHtml(order.getExchange())));
 
         if (order.getFilledQuantity() != null && order.getFilledQuantity().compareTo(BigDecimal.ZERO) > 0) {
-            sb.append(String.format("成交数量: `%s`\n", formatQuantity(order.getFilledQuantity())));
+            sb.append(String.format("成交数量: <code>%s</code>\n", formatQuantity(order.getFilledQuantity())));
         }
         if (order.getFilledPrice() != null && order.getFilledPrice().compareTo(BigDecimal.ZERO) > 0) {
-            sb.append(String.format("成交价格: `%s`\n", order.getFilledPrice().stripTrailingZeros().toPlainString()));
+            sb.append(String.format("成交价格: <code>%s</code>\n", order.getFilledPrice().stripTrailingZeros().toPlainString()));
         }
         if (order.getFee() != null && order.getFee().compareTo(BigDecimal.ZERO) > 0) {
-            sb.append(String.format("手续费: `%s`\n", order.getFee().stripTrailingZeros().toPlainString()));
+            sb.append(String.format("手续费: <code>%s</code>\n", order.getFee().stripTrailingZeros().toPlainString()));
         }
         if (order.getErrorMsg() != null && !order.getErrorMsg().isEmpty()) {
-            sb.append(String.format("错误: `%s`\n", order.getErrorMsg()));
+            sb.append(String.format("错误: <code>%s</code>\n", escapeHtml(order.getErrorMsg())));
         }
-        sb.append(String.format("模式: `%s`", order.getTradeMode()));
+        sb.append(String.format("模式: <code>%s</code>", order.getTradeMode()));
 
         sendMessage(sb.toString(), order.getCreateBy());
     }
@@ -126,7 +127,7 @@ public class TelegramTradeNotifier implements TradeNotifier {
         TradingProperties.Telegram config = properties.getTelegram();
         String chatId = resolveUserChatId(createBy);
         if (!StringUtils.hasText(config.getBotToken()) || !StringUtils.hasText(chatId)) {
-            log.warn("[Telegram] Bot token or chat ID not configured, skipping notification");
+            log.warn("[Trade Telegram] Bot token or chat ID not configured, skipping notification");
             return;
         }
 
@@ -134,7 +135,7 @@ public class TelegramTradeNotifier implements TradeNotifier {
                 config.getApiUrl(), config.getBotToken());
 
         String jsonBody = String.format(
-                "{\"chat_id\":\"%s\",\"text\":\"%s\",\"parse_mode\":\"Markdown\"}",
+                "{\"chat_id\":\"%s\",\"text\":\"%s\",\"parse_mode\":\"HTML\"}",
                 chatId,
                 escapeJson(text)
         );
@@ -147,12 +148,12 @@ public class TelegramTradeNotifier implements TradeNotifier {
         try (Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
                 String body = response.body() != null ? response.body().string() : "";
-                log.warn("[Telegram] sendMessage failed, code: {}, body: {}", response.code(), body);
+                log.warn("[Trade Telegram] sendMessage failed, status={}, body={}", response.code(), body);
             } else {
-                log.debug("[Telegram] Message sent successfully");
+                log.debug("[Trade Telegram] Message sent successfully");
             }
         } catch (Exception e) {
-            log.warn("[Telegram] Failed to send message: {}", e.getMessage());
+            log.warn("[Trade Telegram] Failed to send message: {}", e.getMessage());
         }
     }
 
@@ -160,9 +161,19 @@ public class TelegramTradeNotifier implements TradeNotifier {
         return qty != null ? qty.stripTrailingZeros().toPlainString() : "0";
     }
 
+    /** 转义 HTML 特殊字符，防止 Telegram HTML 解析异常 */
+    private String escapeHtml(String text) {
+        if (text == null) return "";
+        return text.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;");
+    }
+
+    /** 转义 JSON 字符串中的特殊字符 */
     private String escapeJson(String text) {
         return text.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
-                .replace("\n", "\\n");
+                .replace("\n", "\\n")
+                .replace("\r", "");
     }
 }

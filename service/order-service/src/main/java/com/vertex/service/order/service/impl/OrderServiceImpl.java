@@ -10,6 +10,7 @@ import com.vertex.model.dto.trading.OrderCreateDTO;
 import com.vertex.model.dto.trading.OrderQueryDTO;
 import com.vertex.model.entity.trading.*;
 import com.vertex.model.vo.trading.OrderVO;
+import com.vertex.common.core.context.UserContext;
 import com.vertex.service.order.mapper.OrderMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -93,6 +95,9 @@ public class OrderServiceImpl implements IOrderService {
         if (order == null) {
             throw new BizException(GlobalError.TRADE_ORDER_NOT_FOUND);
         }
+        if (!UserContext.isAdmin() && !Objects.equals(order.getCreateBy(), UserContext.getUserId())) {
+            throw new BizException(GlobalError.FORBIDDEN);
+        }
         return toVO(order);
     }
 
@@ -101,8 +106,13 @@ public class OrderServiceImpl implements IOrderService {
         Page<Order> page = new Page<>(query.getPageNum(), query.getPageSize());
 
         LambdaQueryWrapper<Order> wrapper = new LambdaQueryWrapper<Order>()
-                .eq(Order::getDeleted, 0)
-                .eq(query.getStrategyId() != null, Order::getStrategyId, query.getStrategyId())
+                .eq(Order::getDeleted, 0);
+
+        if (!UserContext.isAdmin()) {
+            wrapper.eq(Order::getCreateBy, UserContext.getUserId());
+        }
+
+        wrapper.eq(query.getStrategyId() != null, Order::getStrategyId, query.getStrategyId())
                 .eq(query.getExchange() != null, Order::getExchange, query.getExchange())
                 .eq(query.getSymbol() != null, Order::getSymbol, query.getSymbol())
                 .eq(query.getSide() != null, Order::getSide, query.getSide())
