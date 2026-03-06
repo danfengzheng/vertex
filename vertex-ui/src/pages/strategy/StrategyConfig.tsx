@@ -428,6 +428,7 @@ export const StrategyConfig = () => {
       leverage: record.leverage || 1,
       marginType: record.marginType || 'ISOLATED',
       atrStopMultiplier: record.atrStopMultiplier,
+      atrTakeProfitMultiplier: record.atrTakeProfitMultiplier,
     });
     setIndicatorTypes(record.indicatorConfigs.map((c) => c.indicatorType));
     setAutoTradeEnabled(record.autoTrade === 1);
@@ -893,8 +894,17 @@ export const StrategyConfig = () => {
                 <Form.Item
                   name="takeProfitPct"
                   label={t('text.trading.takeProfit')}
+                  tooltip={t('text.trading.takeProfitTip')}
                 >
                   <InputNumber min={0} max={1000} step={0.5} style={{ width: 140 }} addonAfter="%" />
+                </Form.Item>
+
+                <Form.Item
+                  name="atrTakeProfitMultiplier"
+                  label={t('text.trading.atrTakeProfitMultiplier')}
+                  tooltip={t('text.trading.atrTakeProfitMultiplierTip')}
+                >
+                  <InputNumber min={0.1} max={50} step={0.1} style={{ width: 140 }} addonAfter="× ATR" placeholder="3.0" />
                 </Form.Item>
 
                 <Form.Item

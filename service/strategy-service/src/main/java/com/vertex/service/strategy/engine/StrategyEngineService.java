@@ -25,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -263,6 +264,10 @@ public class StrategyEngineService {
         // 跳过 NEUTRAL 信号，不写库不推送
         if (signal.getSignalType() == SignalType.NEUTRAL) {
             return;
+        }
+        if(signal.getPrice().compareTo(BigDecimal.ZERO) == 0){
+            KLine latest = klineStore.getLatest(strategy.getExchange(), strategy.getSymbol(), strategy.getInterval());
+            signal.setPrice(latest.getClose());
         }
 
         // 幂等检查：同一策略同一K线时间相同信号类型只保存一次，

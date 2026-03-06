@@ -94,6 +94,8 @@ export interface StrategyVO {
   marginType?: string;
   /** ATR止损倍数（如 2.0），设置后优先于固定止损百分比 */
   atrStopMultiplier?: number;
+  /** ATR止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
+  atrTakeProfitMultiplier?: number;
   createTime: string;
   updateTime: string;
 }
@@ -138,6 +140,8 @@ export interface StrategyCreateDTO {
   marginType?: string;
   /** ATR止损倍数（如 2.0），设置后优先于固定止损百分比 */
   atrStopMultiplier?: number;
+  /** ATR止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
+  atrTakeProfitMultiplier?: number;
 }
 
 /** 策略更新参数 */
@@ -164,6 +168,8 @@ export interface StrategyUpdateDTO {
   marginType?: string;
   /** ATR止损倍数（如 2.0），设置后优先于固定止损百分比 */
   atrStopMultiplier?: number;
+  /** ATR止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
+  atrTakeProfitMultiplier?: number;
 }
 
 /** 策略查询参数 */

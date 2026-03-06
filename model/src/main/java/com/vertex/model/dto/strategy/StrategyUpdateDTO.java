@@ -49,7 +49,9 @@ public class StrategyUpdateDTO {
     /** 保证金模式 ISOLATED/CROSS */
     private MarginType marginType;
 
-    // ─── 止损配置（可选） ───────────────────────────
+    // ─── 止损止盈配置（可选） ─────────────────────────
     /** ATR 止损倍数（如 2.0），设置后优先于固定止损百分比 */
     private BigDecimal atrStopMultiplier;
+    /** ATR 止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
+    private BigDecimal atrTakeProfitMultiplier;
 }

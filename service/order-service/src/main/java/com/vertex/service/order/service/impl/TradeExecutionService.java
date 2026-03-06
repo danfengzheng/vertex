@@ -213,6 +213,22 @@ public class TradeExecutionService {
         OrderSide closeSide = (isFutures && position.getSide() == PositionSide.SHORT)
                 ? OrderSide.BUY : OrderSide.SELL;
 
+        // 现货平仓：对仓位数量做防御性步长对齐，避免因历史数据精度偏差导致 Binance
+        // 截断后留下无法再次平仓的微小残余仓位；合约由 Binance 自行对齐，无需处理。
+        BigDecimal closeQty = position.getQuantity();
+        if (!isFutures) {
+            try {
+                BigDecimal stepSize = binanceTradeClient.getStepSize(position.getSymbol());
+                if (stepSize != null && stepSize.compareTo(BigDecimal.ZERO) > 0) {
+                    BigDecimal steps = closeQty.divide(stepSize, 0, RoundingMode.DOWN);
+                    closeQty = steps.multiply(stepSize).stripTrailingZeros();
+                }
+            } catch (Exception e) {
+                log.warn("[Close] Failed to align close qty for {}: {}, using original qty={}",
+                        position.getSymbol(), e.getMessage(), closeQty);
+            }
+        }
+
         Order order = new Order();
         order.setStrategyId(position.getStrategyId());
         order.setAccountId(position.getAccountId());
@@ -220,7 +236,7 @@ public class TradeExecutionService {
         order.setSymbol(position.getSymbol());
         order.setSide(closeSide);
         order.setOrderType(OrderType.MARKET);
-        order.setQuantity(position.getQuantity());
+        order.setQuantity(closeQty);
         order.setTradeMode(ExecutionMode.LIVE);
         order.setMarketType(marketType);
         order.setReduceOnly(isFutures);
@@ -229,7 +245,7 @@ public class TradeExecutionService {
 
         log.info("[Close] Submitting live {} order for position {}: {} {} qty={} reduceOnly={}",
                 closeSide, position.getId(), position.getExchange(), position.getSymbol(),
-                position.getQuantity(), order.isReduceOnly());
+                closeQty, order.isReduceOnly());
 
         doExecute(order, null);
     }
@@ -661,17 +677,19 @@ public class TradeExecutionService {
      * 设置持仓的止损 / 止盈价格。
      * <p>
      * 止损优先级：ATR倍数止损 > 固定百分比止损 > 无止损
-     * 止盈始终使用固定百分比（相对于开仓价）
+     * 止盈优先级：ATR倍数止盈 > 固定百分比止盈 > 无止盈
      * 同时支持 LONG 和 SHORT 持仓方向。
      * </p>
      */
     private void setStopLossTakeProfit(Order order, Strategy strategy) {
-        boolean hasAtrStop = strategy.getAtrStopMultiplier() != null
+        boolean hasAtrStop   = strategy.getAtrStopMultiplier() != null
                 && strategy.getAtrStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
-        boolean hasPctStop = strategy.getStopLossPct() != null;
-        boolean hasTakeProfit = strategy.getTakeProfitPct() != null;
+        boolean hasPctStop   = strategy.getStopLossPct() != null;
+        boolean hasAtrTp     = strategy.getAtrTakeProfitMultiplier() != null
+                && strategy.getAtrTakeProfitMultiplier().compareTo(BigDecimal.ZERO) > 0;
+        boolean hasPctTp     = strategy.getTakeProfitPct() != null;
 
-        if (!hasAtrStop && !hasPctStop && !hasTakeProfit) {
+        if (!hasAtrStop && !hasPctStop && !hasAtrTp && !hasPctTp) {
             return;
         }
 
@@ -683,23 +701,48 @@ public class TradeExecutionService {
         boolean isShort = position.getSide() == PositionSide.SHORT;
 
         // ── 止损：ATR优先，降级为固定百分比 ──────────────────
-        if (hasAtrStop) {
+        if (hasAtrStop || hasAtrTp) {
+            // 止损和止盈任一需要 ATR 时，统一查询一次
             BigDecimal atrValue = computeAtr(
                     strategy.getExchange(), strategy.getSymbol(), strategy.getInterval(), 14);
-            if (atrValue != null && atrValue.compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal atrOffset = atrValue.multiply(strategy.getAtrStopMultiplier());
-                BigDecimal stopLoss = isShort
-                        ? entryPrice.add(atrOffset)          // SHORT：止损在入场价上方
-                        : entryPrice.subtract(atrOffset);    // LONG ：止损在入场价下方
-                position.setStopLoss(stopLoss.setScale(8, RoundingMode.HALF_UP));
-                log.info("[ATR Stop] strategy={} side={} entryPrice={} atr={} multiplier={} stopLoss={}",
-                        strategy.getName(), position.getSide(), entryPrice,
-                        atrValue, strategy.getAtrStopMultiplier(), position.getStopLoss());
-            } else {
-                log.warn("[ATR Stop] Cannot compute ATR for {} {}, stop-loss not set",
-                        strategy.getExchange(), strategy.getSymbol());
+
+            if (hasAtrStop) {
+                if (atrValue != null && atrValue.compareTo(BigDecimal.ZERO) > 0) {
+                    BigDecimal atrOffset = atrValue.multiply(strategy.getAtrStopMultiplier());
+                    BigDecimal stopLoss = isShort
+                            ? entryPrice.add(atrOffset)          // SHORT：止损在入场价上方
+                            : entryPrice.subtract(atrOffset);    // LONG ：止损在入场价下方
+                    position.setStopLoss(stopLoss.setScale(8, RoundingMode.HALF_UP));
+                    log.info("[ATR Stop] strategy={} side={} entryPrice={} atr={} multiplier={} stopLoss={}",
+                            strategy.getName(), position.getSide(), entryPrice,
+                            atrValue, strategy.getAtrStopMultiplier(), position.getStopLoss());
+                } else {
+                    log.warn("[ATR Stop] Cannot compute ATR for {} {}, stop-loss not set",
+                            strategy.getExchange(), strategy.getSymbol());
+                }
             }
-        } else if (hasPctStop) {
+
+            if (hasAtrTp) {
+                if (atrValue != null && atrValue.compareTo(BigDecimal.ZERO) > 0) {
+                    BigDecimal atrOffset = atrValue.multiply(strategy.getAtrTakeProfitMultiplier());
+                    BigDecimal takeProfit = isShort
+                            ? entryPrice.subtract(atrOffset)    // SHORT：止盈在入场价下方
+                            : entryPrice.add(atrOffset);        // LONG ：止盈在入场价上方
+                    position.setTakeProfit(takeProfit.setScale(8, RoundingMode.HALF_UP));
+                    log.info("[ATR TP] strategy={} side={} entryPrice={} atr={} multiplier={} takeProfit={}",
+                            strategy.getName(), position.getSide(), entryPrice,
+                            atrValue, strategy.getAtrTakeProfitMultiplier(), position.getTakeProfit());
+                } else {
+                    log.warn("[ATR TP] Cannot compute ATR for {} {}, take-profit not set",
+                            strategy.getExchange(), strategy.getSymbol());
+                }
+            }
+        } else {
+            // 纯固定百分比路径（无需查询 ATR）
+        }
+
+        // ── 非ATR路径：固定百分比止损 ────────────────────────
+        if (!hasAtrStop && hasPctStop) {
             BigDecimal pct = strategy.getStopLossPct()
                     .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
             BigDecimal stopLoss = isShort
@@ -708,8 +751,8 @@ public class TradeExecutionService {
             position.setStopLoss(stopLoss);
         }
 
-        // ── 止盈：固定百分比 ──────────────────────────────────
-        if (hasTakeProfit) {
+        // ── 非ATR路径：固定百分比止盈 ────────────────────────
+        if (!hasAtrTp && hasPctTp) {
             BigDecimal pct = strategy.getTakeProfitPct()
                     .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
             BigDecimal takeProfit = isShort
