@@ -169,14 +169,21 @@ public class StrategyEngineService {
                 int warmup = properties.getEngine().getWarmupMultiplier();
                 int fetchSize = Math.min(required * warmup + 10, properties.getEngine().getMaxKlineHistory());
 
-                // 以触发事件的K线 openTime 为查询上界（endTime），锁定窗口右端。
-                // 这样无论 @Async 线程何时处理事件，都能保证窗口结束于正确的K线，
-                // 与回测的滑动窗口完全对齐，消除信号时间漂移。
-                // triggeringKlineTime=null（手动触发）时不限上界，取当前最新数据。
+                // 对于高于主周期的二级周期：将 endTime 前移一个周期，
+                // 确保只获取 closeTime < triggeringKlineTime 的已收盘 bar，
+                // 杜绝使用当前未收盘高周期 bar 的完整历史数据（Lookahead Bias）。
+                // 当前周期的实时状态将由 KLinePartialBarBuilder 从主周期 bars 聚合追加。
+                boolean isLargerSecondary = !effectiveInterval.equals(strategy.getInterval())
+                        && effectiveInterval.getMillis() > strategy.getInterval().getMillis();
+                Long endTime = triggeringKlineTime;
+                if (isLargerSecondary && triggeringKlineTime != null) {
+                    endTime = triggeringKlineTime - effectiveInterval.getMillis();
+                }
+
                 int querySize = properties.getEngine().isOnlyClosedKlines() ? fetchSize + 1 : fetchSize;
                 List<KLine> klines = klineStore.query(
                         strategy.getExchange(), strategy.getSymbol(),
-                        effectiveInterval, null, triggeringKlineTime, querySize, false);
+                        effectiveInterval, null, endTime, querySize, false);
 
                 // 过滤未收盘K线，确保指标计算只使用已收盘数据（与回测一致）
                 if (properties.getEngine().isOnlyClosedKlines()) {
@@ -218,6 +225,36 @@ public class StrategyEngineService {
         if (!hasEnoughData) {
             log.debug("Strategy [{}] skipped: no interval has sufficient K-line data", strategy.getName());
             return;
+        }
+
+        // ── 追加高周期 partial bar（从主周期已收盘 K 线实时聚合）──────────────────────
+        // 以触发 bar 为锚点，将主周期 bars 聚合成各高周期当前部分 bar，追加到末尾。
+        // 实盘与回测使用完全相同的逻辑，保证信号一致性，同时纳入当前周期成交量信息。
+        List<KLine> primaryKlines = klinesByInterval.get(strategy.getInterval());
+        if (primaryKlines != null && !primaryKlines.isEmpty()) {
+            long effectiveTriggerTime = triggeringKlineTime != null
+                    ? triggeringKlineTime
+                    : primaryKlines.get(primaryKlines.size() - 1).getOpenTime();
+            for (KLineInterval secInterval : new HashSet<>(klinesByInterval.keySet())) {
+                if (secInterval.equals(strategy.getInterval())) continue;
+                if (secInterval.getMillis() <= strategy.getInterval().getMillis()) continue;
+
+                KLine partialBar = KLinePartialBarBuilder.buildPartialBar(
+                        primaryKlines, secInterval, effectiveTriggerTime,
+                        strategy.getExchange(), strategy.getSymbol());
+
+                if (partialBar != null) {
+                    List<KLine> existing = klinesByInterval.get(secInterval);
+                    if (existing != null) {
+                        List<KLine> withPartial = new ArrayList<>(existing);
+                        withPartial.add(partialBar);
+                        klinesByInterval.put(secInterval, withPartial);
+                        log.debug("[Signal] strategy='{}' partial {} bar appended: openTime={} bars={}→{}",
+                                strategy.getName(), secInterval.getCode(),
+                                partialBar.getOpenTime(), existing.size(), withPartial.size());
+                    }
+                }
+            }
         }
 
         // 生成信号

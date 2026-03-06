@@ -44,8 +44,9 @@ service.interceptors.response.use(
     if (res.code !== 200) {
       message.error(res.message || i18n.t('message.common.requestFailed'));
 
-      // 401：未授权时跳转登录页（排除登录接口本身，避免登录失败时整页重载）
-      if (res.code === 401 && !isLoginRequest(response.config?.url)) {
+      // 401：未授权时跳转登录页（排除登录接口本身，以及已在登录页时避免死循环）
+      if (res.code === 401 && !isLoginRequest(response.config?.url)
+          && window.location.pathname !== '/login') {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/login';
@@ -59,7 +60,7 @@ service.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     const url = error.config?.url;
-    if (status === 401 && !isLoginRequest(url)) {
+    if (status === 401 && !isLoginRequest(url) && window.location.pathname !== '/login') {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';

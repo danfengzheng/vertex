@@ -23,6 +23,11 @@ export const PermissionProvider = ({ children }: { children: ReactNode }) => {
   const [allowedPaths, setAllowedPaths] = useState<Set<string> | null>(null);
 
   useEffect(() => {
+    // 未登录时不发请求，避免 401 → window.location.href = '/login' 死循环
+    if (!localStorage.getItem('token')) {
+      setAllowedPaths(new Set());
+      return;
+    }
     authApi.getUserMenus()
       .then(res => {
         if (res.code === 200 && res.data) {

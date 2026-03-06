@@ -13,6 +13,7 @@ import com.vertex.model.vo.strategy.BacktestResultVO;
 import com.vertex.model.vo.strategy.BacktestResultVO.EquityPoint;
 import com.vertex.model.vo.strategy.BacktestResultVO.TradeRecord;
 import com.vertex.service.quote.store.KLineStore;
+import com.vertex.service.strategy.engine.KLinePartialBarBuilder;
 import com.vertex.service.strategy.engine.SignalGenerator;
 import com.vertex.service.strategy.indicator.IndicatorRegistry;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
@@ -168,18 +169,50 @@ public class BacktestService {
             klinesByInterval.put(strategy.getInterval(), klines.subList(Math.max(0, i - mainWarmupSize + 1), i + 1));
 
             for (Map.Entry<KLineInterval, List<KLine>> e : allKlinesByInterval.entrySet()) {
-                if (e.getKey().equals(strategy.getInterval())) continue;
+                KLineInterval secInterval = e.getKey();
+                if (secInterval.equals(strategy.getInterval())) continue;
                 List<KLine> ivList = e.getValue();
-                int req = requiredByInterval.getOrDefault(e.getKey(), 50);
+                int req = requiredByInterval.getOrDefault(secInterval, 50);
                 int fetchSize = Math.min(req * warmup + 10, maxKlineHistory);
-                List<KLine> window = ivList.stream()
-                        .filter(k -> k.getOpenTime() <= currentKline.getOpenTime())
-                        .collect(Collectors.collectingAndThen(Collectors.toList(), list -> {
-                            int from = Math.max(0, list.size() - fetchSize);
-                            return list.subList(from, list.size());
-                        }));
-                if (window.size() >= req) {
-                    klinesByInterval.put(e.getKey(), window);
+
+                if (secInterval.getMillis() > strategy.getInterval().getMillis()) {
+                    // 高周期：使用 closeTime 过滤，只保留在触发时刻前已完整收盘的 bar，
+                    // 消除 Lookahead Bias（原逻辑 openTime <= triggerTime 会纳入含未来数据的当前周期完整 bar）
+                    List<KLine> closedWindow = ivList.stream()
+                            .filter(k -> k.getCloseTime() != null
+                                    && k.getCloseTime() < currentKline.getOpenTime())
+                            .collect(Collectors.collectingAndThen(Collectors.toList(), list -> {
+                                int from = Math.max(0, list.size() - fetchSize);
+                                return list.subList(from, list.size());
+                            }));
+
+                    // 从主周期 bars 聚合当前高周期的 partial bar（纳入当前周期实时成交量/价格）
+                    // 与 StrategyEngineService 使用完全相同的聚合逻辑，保证回测/实盘信号一致
+                    KLine partialBar = KLinePartialBarBuilder.buildPartialBar(
+                            klines.subList(0, i + 1),   // 截止到当前 bar 的全量主周期数据
+                            secInterval,
+                            currentKline.getOpenTime(),
+                            strategy.getExchange(),
+                            strategy.getSymbol());
+
+                    List<KLine> windowWithPartial = new ArrayList<>(closedWindow);
+                    if (partialBar != null) {
+                        windowWithPartial.add(partialBar);
+                    }
+                    if (!windowWithPartial.isEmpty()) {
+                        klinesByInterval.put(secInterval, windowWithPartial);
+                    }
+                } else {
+                    // 小周期或相同周期：保留原有逻辑
+                    List<KLine> window = ivList.stream()
+                            .filter(k -> k.getOpenTime() <= currentKline.getOpenTime())
+                            .collect(Collectors.collectingAndThen(Collectors.toList(), list -> {
+                                int from = Math.max(0, list.size() - fetchSize);
+                                return list.subList(from, list.size());
+                            }));
+                    if (window.size() >= req) {
+                        klinesByInterval.put(secInterval, window);
+                    }
                 }
             }
             Signal signal = signalGenerator.evaluate(strategy, configs, klinesByInterval);

@@ -51,6 +51,10 @@ public class StrategyVO implements Serializable {
     private Integer leverage;
     private MarginType marginType;
 
+    // ─── 止损配置 ───────────────────────────────────
+    /** ATR 止损倍数（如 2.0），设置后优先于固定止损百分比 */
+    private BigDecimal atrStopMultiplier;
+
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

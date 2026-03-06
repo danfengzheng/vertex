@@ -92,6 +92,8 @@ export interface StrategyVO {
   leverage?: number;
   /** 合约保证金模式（ISOLATED/CROSS，仅合约账户有效） */
   marginType?: string;
+  /** ATR止损倍数（如 2.0），设置后优先于固定止损百分比 */
+  atrStopMultiplier?: number;
   createTime: string;
   updateTime: string;
 }
@@ -134,6 +136,8 @@ export interface StrategyCreateDTO {
   feeRate?: number;
   leverage?: number;
   marginType?: string;
+  /** ATR止损倍数（如 2.0），设置后优先于固定止损百分比 */
+  atrStopMultiplier?: number;
 }
 
 /** 策略更新参数 */
@@ -158,6 +162,8 @@ export interface StrategyUpdateDTO {
   feeRate?: number;
   leverage?: number;
   marginType?: string;
+  /** ATR止损倍数（如 2.0），设置后优先于固定止损百分比 */
+  atrStopMultiplier?: number;
 }
 
 /** 策略查询参数 */

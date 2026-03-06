@@ -4,6 +4,8 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.vertex.common.core.GlobalError;
 import com.vertex.common.core.exception.BizException;
+import com.vertex.model.entity.quote.KLine;
+import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.strategy.Signal;
 import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
@@ -13,12 +15,14 @@ import com.vertex.service.order.client.BinanceTradeClient;
 import com.vertex.service.order.config.TradingProperties;
 import com.vertex.service.order.mapper.OrderMapper;
 import com.vertex.service.order.notify.CompositeTradeNotifier;
+import com.vertex.service.quote.store.KLineStore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -50,6 +54,7 @@ public class TradeExecutionService {
     private final BinanceFuturesClient binanceFuturesClient;
     private final CompositeTradeNotifier compositeTradeNotifier;
     private final TradingProperties tradingProperties;
+    private final KLineStore klineStore;
 
     /**
      * 同一策略的委托必须串行执行，防止并发导致重复开仓。
@@ -292,8 +297,8 @@ public class TradeExecutionService {
 
                 positionManagementService.updatePosition(order);
 
-                // 设置止盈止损（仅开仓 BUY 订单 + 策略有配置）
-                if (strategy != null && !order.isReduceOnly() && order.getSide() == OrderSide.BUY) {
+                // 设置止盈止损（开仓订单 + 策略有配置；含现货BUY和合约SHORT开仓）
+                if (strategy != null && !order.isReduceOnly()) {
                     setStopLossTakeProfit(order, strategy);
                 }
             }
@@ -652,27 +657,114 @@ public class TradeExecutionService {
 
     // ─── 止盈止损 ─────────────────────────────────────────────
 
+    /**
+     * 设置持仓的止损 / 止盈价格。
+     * <p>
+     * 止损优先级：ATR倍数止损 > 固定百分比止损 > 无止损
+     * 止盈始终使用固定百分比（相对于开仓价）
+     * 同时支持 LONG 和 SHORT 持仓方向。
+     * </p>
+     */
     private void setStopLossTakeProfit(Order order, Strategy strategy) {
-        if (strategy.getStopLossPct() == null && strategy.getTakeProfitPct() == null) {
+        boolean hasAtrStop = strategy.getAtrStopMultiplier() != null
+                && strategy.getAtrStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
+        boolean hasPctStop = strategy.getStopLossPct() != null;
+        boolean hasTakeProfit = strategy.getTakeProfitPct() != null;
+
+        if (!hasAtrStop && !hasPctStop && !hasTakeProfit) {
             return;
         }
+
         Position position = positionManagementService.findOpenPosition(
                 order.getStrategyId(), order.getAccountId(), order.getExchange(), order.getSymbol());
-        if (position != null) {
-            BigDecimal entryPrice = position.getEntryPrice();
-            if (strategy.getStopLossPct() != null) {
-                BigDecimal stopLoss = entryPrice.multiply(
-                        BigDecimal.ONE.subtract(strategy.getStopLossPct()
-                                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)));
-                position.setStopLoss(stopLoss);
+        if (position == null) return;
+
+        BigDecimal entryPrice = position.getEntryPrice();
+        boolean isShort = position.getSide() == PositionSide.SHORT;
+
+        // ── 止损：ATR优先，降级为固定百分比 ──────────────────
+        if (hasAtrStop) {
+            BigDecimal atrValue = computeAtr(
+                    strategy.getExchange(), strategy.getSymbol(), strategy.getInterval(), 14);
+            if (atrValue != null && atrValue.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal atrOffset = atrValue.multiply(strategy.getAtrStopMultiplier());
+                BigDecimal stopLoss = isShort
+                        ? entryPrice.add(atrOffset)          // SHORT：止损在入场价上方
+                        : entryPrice.subtract(atrOffset);    // LONG ：止损在入场价下方
+                position.setStopLoss(stopLoss.setScale(8, RoundingMode.HALF_UP));
+                log.info("[ATR Stop] strategy={} side={} entryPrice={} atr={} multiplier={} stopLoss={}",
+                        strategy.getName(), position.getSide(), entryPrice,
+                        atrValue, strategy.getAtrStopMultiplier(), position.getStopLoss());
+            } else {
+                log.warn("[ATR Stop] Cannot compute ATR for {} {}, stop-loss not set",
+                        strategy.getExchange(), strategy.getSymbol());
             }
-            if (strategy.getTakeProfitPct() != null) {
-                BigDecimal takeProfit = entryPrice.multiply(
-                        BigDecimal.ONE.add(strategy.getTakeProfitPct()
-                                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)));
-                position.setTakeProfit(takeProfit);
+        } else if (hasPctStop) {
+            BigDecimal pct = strategy.getStopLossPct()
+                    .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+            BigDecimal stopLoss = isShort
+                    ? entryPrice.multiply(BigDecimal.ONE.add(pct))       // SHORT：止损在上方
+                    : entryPrice.multiply(BigDecimal.ONE.subtract(pct)); // LONG ：止损在下方
+            position.setStopLoss(stopLoss);
+        }
+
+        // ── 止盈：固定百分比 ──────────────────────────────────
+        if (hasTakeProfit) {
+            BigDecimal pct = strategy.getTakeProfitPct()
+                    .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+            BigDecimal takeProfit = isShort
+                    ? entryPrice.multiply(BigDecimal.ONE.subtract(pct)) // SHORT：止盈在下方
+                    : entryPrice.multiply(BigDecimal.ONE.add(pct));     // LONG ：止盈在上方
+            position.setTakeProfit(takeProfit);
+        }
+
+        positionManagementService.updateStopLossTakeProfit(position);
+    }
+
+    /**
+     * 使用 Wilder 平滑法（与 AtrIndicator 算法一致）计算 ATR。
+     *
+     * @param exchange 交易所
+     * @param symbol   交易对
+     * @param interval K 线周期
+     * @param period   ATR 周期（通常为 14）
+     * @return ATR 绝对值，数据不足时返回 null
+     */
+    private BigDecimal computeAtr(String exchange, String symbol, KLineInterval interval, int period) {
+        try {
+            // 多取 1 根用于计算 True Range（需要 prevClose）
+            List<KLine> klines = klineStore.query(
+                    exchange, symbol, interval, null, null, period + 1, true);
+            if (klines == null || klines.size() < 2) {
+                log.warn("[ATR] Insufficient kline data for {} {} {}: got {}",
+                        exchange, symbol, interval, klines == null ? 0 : klines.size());
+                return null;
             }
-            positionManagementService.updateStopLossTakeProfit(position);
+
+            // 计算 True Range 序列
+            double[] trueRanges = new double[klines.size() - 1];
+            for (int i = 1; i < klines.size(); i++) {
+                KLine cur  = klines.get(i);
+                KLine prev = klines.get(i - 1);
+                double highLow   = cur.getHigh().doubleValue()  - cur.getLow().doubleValue();
+                double highClose = Math.abs(cur.getHigh().doubleValue() - prev.getClose().doubleValue());
+                double lowClose  = Math.abs(cur.getLow().doubleValue()  - prev.getClose().doubleValue());
+                trueRanges[i - 1] = Math.max(highLow, Math.max(highClose, lowClose));
+            }
+
+            // Wilder 平滑（首值取简单均值）
+            int calcPeriod = Math.min(period, trueRanges.length);
+            double atr = 0;
+            for (int i = 0; i < calcPeriod; i++) atr += trueRanges[i];
+            atr /= calcPeriod;
+            for (int i = calcPeriod; i < trueRanges.length; i++) {
+                atr = (atr * (period - 1) + trueRanges[i]) / period;
+            }
+
+            return BigDecimal.valueOf(atr);
+        } catch (Exception e) {
+            log.error("[ATR] Failed to compute ATR for {} {} {}: {}", exchange, symbol, interval, e.getMessage());
+            return null;
         }
     }
 
