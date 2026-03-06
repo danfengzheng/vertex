@@ -68,6 +68,8 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setStopLossPct(dto.getStopLossPct());
         strategy.setTakeProfitPct(dto.getTakeProfitPct());
         strategy.setFeeRate(dto.getFeeRate());
+        strategy.setAtrStopMultiplier(dto.getAtrStopMultiplier());
+        strategy.setAtrTakeProfitMultiplier(dto.getAtrTakeProfitMultiplier());
         strategyMapper.insert(strategy);
         return strategy.getId();
     }
@@ -110,6 +112,8 @@ public class StrategyServiceImpl implements IStrategyService {
         if (dto.getStopLossPct() != null) strategy.setStopLossPct(dto.getStopLossPct());
         if (dto.getTakeProfitPct() != null) strategy.setTakeProfitPct(dto.getTakeProfitPct());
         if (dto.getFeeRate() != null) strategy.setFeeRate(dto.getFeeRate());
+        if (dto.getAtrStopMultiplier() != null) strategy.setAtrStopMultiplier(dto.getAtrStopMultiplier());
+        if (dto.getAtrTakeProfitMultiplier() != null) strategy.setAtrTakeProfitMultiplier(dto.getAtrTakeProfitMultiplier());
 
         strategyMapper.updateById(strategy);
     }
