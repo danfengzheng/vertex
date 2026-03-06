@@ -2,6 +2,7 @@ package com.vertex.model.dto.strategy;
 
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.trading.ExecutionMode;
+import com.vertex.model.entity.trading.MarginType;
 import com.vertex.model.entity.trading.PositionSizing;
 import com.vertex.model.entity.trading.TradeMode;
 import jakarta.validation.constraints.NotNull;
@@ -20,15 +21,10 @@ public class StrategyUpdateDTO {
     private Long id;
 
     private String name;
-
     private String description;
-
     private String exchange;
-
     private String symbol;
-
     private KLineInterval interval;
-
     private List<StrategyIndicatorConfig> indicatorConfigs;
 
     // ─── 交易配置（可选） ───────────────────────────
@@ -46,4 +42,10 @@ public class StrategyUpdateDTO {
     private BigDecimal stopLossPct;
     private BigDecimal takeProfitPct;
     private BigDecimal feeRate;
+
+    // ─── 合约配置（可选） ───────────────────────────
+    /** 杠杆倍数（合约账户生效，1-125） */
+    private Integer leverage;
+    /** 保证金模式 ISOLATED/CROSS */
+    private MarginType marginType;
 }

@@ -1,6 +1,8 @@
 package com.vertex.model.vo.trading;
 
 import com.vertex.model.entity.trading.ExecutionMode;
+import com.vertex.model.entity.trading.MarginType;
+import com.vertex.model.entity.trading.MarketType;
 import com.vertex.model.entity.trading.PositionSide;
 import com.vertex.model.entity.trading.PositionStatus;
 import lombok.AllArgsConstructor;
@@ -40,6 +42,14 @@ public class PositionVO implements Serializable {
     private LocalDateTime closedAt;
     private PositionStatus status;
     private ExecutionMode tradeMode;
+
+    // ─── 合约专用字段 ─────────────────────────────────
+    private MarketType marketType;
+    private Integer leverage;
+    private MarginType marginType;
+    private BigDecimal liquidationPrice;
+    private BigDecimal fundingRate;
+
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

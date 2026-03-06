@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.vertex.common.core.base.BaseEntity;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.trading.ExecutionMode;
+import com.vertex.model.entity.trading.MarginType;
 import com.vertex.model.entity.trading.PositionSizing;
 import com.vertex.model.entity.trading.TradeMode;
 import lombok.Data;
@@ -81,4 +82,12 @@ public class Strategy extends BaseEntity {
 
     /** 手续费率（如 0.001 = 0.1%），与回测对齐 */
     private BigDecimal feeRate;
+
+    // ─── 合约配置（账户为 USDM/COINM 时生效） ─────────
+
+    /** 杠杆倍数（1-125，默认 1） */
+    private Integer leverage;
+
+    /** 保证金模式 ISOLATED/CROSS */
+    private MarginType marginType;
 }

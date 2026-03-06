@@ -20,7 +20,7 @@ import {
   INDICATOR_TYPE_LABELS,
 } from '../../api/strategy';
 import { KLINE_INTERVAL_LABELS, KLineInterval } from '../../api/quote';
-import { exchangeAccountApi, ExchangeAccountVO } from '../../api/trading';
+import { exchangeAccountApi, ExchangeAccountVO, MarketType } from '../../api/trading';
 import { BacktestPanel } from './BacktestPanel';
 
 const INTERVAL_OPTIONS = Object.entries(KLINE_INTERVAL_LABELS).map(([value, label]) => ({
@@ -352,6 +352,7 @@ export const StrategyConfig = () => {
   const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
   const [positionSizingMode, setPositionSizingMode] = useState<string>('FIXED');
   const [accounts, setAccounts] = useState<ExchangeAccountVO[]>([]);
+  const [selectedAccountMarketType, setSelectedAccountMarketType] = useState<MarketType | null>(null);
 
   // 回测
   const [backtestVisible, setBacktestVisible] = useState(false);
@@ -424,10 +425,19 @@ export const StrategyConfig = () => {
       stopLossPct: record.stopLossPct,
       takeProfitPct: record.takeProfitPct,
       feeRate: record.feeRate,
+      leverage: record.leverage || 1,
+      marginType: record.marginType || 'ISOLATED',
     });
     setIndicatorTypes(record.indicatorConfigs.map((c) => c.indicatorType));
     setAutoTradeEnabled(record.autoTrade === 1);
     setPositionSizingMode(record.positionSizing || 'FIXED');
+    // 更新已选账户的市场类型
+    if (record.accountId) {
+      const acct = accounts.find((a) => a.id === record.accountId);
+      setSelectedAccountMarketType(acct?.marketType || null);
+    } else {
+      setSelectedAccountMarketType(null);
+    }
     setModalVisible(true);
   };
 
@@ -790,14 +800,34 @@ export const StrategyConfig = () => {
                     style={{ width: 200 }}
                     allowClear
                     placeholder={t('placeholder.common.select')}
+                    onChange={(val: string) => {
+                      const acct = accounts.find((a) => a.id === val);
+                      setSelectedAccountMarketType(acct?.marketType || null);
+                    }}
                   >
                     {accounts.map((acc) => (
                       <Select.Option key={acc.id} value={acc.id}>
-                        {acc.name} ({acc.exchange})
+                        {acc.name} ({acc.exchange}
+                        {acc.marketType && acc.marketType !== 'SPOT' ? ` · ${acc.marketType}` : ''})
                       </Select.Option>
                     ))}
                   </Select>
                 </Form.Item>
+
+                {/* 合约参数（仅合约账户显示）*/}
+                {selectedAccountMarketType && selectedAccountMarketType !== 'SPOT' && (
+                  <>
+                    <Form.Item name="leverage" label="杠杆倍数" initialValue={1}>
+                      <InputNumber min={1} max={125} step={1} style={{ width: 120 }} addonAfter="x" />
+                    </Form.Item>
+                    <Form.Item name="marginType" label="保证金模式" initialValue="ISOLATED">
+                      <Select style={{ width: 120 }}>
+                        <Select.Option value="ISOLATED">逐仓</Select.Option>
+                        <Select.Option value="CROSS">全仓</Select.Option>
+                      </Select>
+                    </Form.Item>
+                  </>
+                )}
               </Space>
 
               <Space style={{ width: '100%' }} size="large" wrap>

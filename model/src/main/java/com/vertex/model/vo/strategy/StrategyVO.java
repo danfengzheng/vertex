@@ -3,6 +3,7 @@ package com.vertex.model.vo.strategy;
 import com.vertex.model.dto.strategy.StrategyIndicatorConfig;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.trading.ExecutionMode;
+import com.vertex.model.entity.trading.MarginType;
 import com.vertex.model.entity.trading.PositionSizing;
 import com.vertex.model.entity.trading.TradeMode;
 import lombok.AllArgsConstructor;
@@ -45,6 +46,10 @@ public class StrategyVO implements Serializable {
     private BigDecimal stopLossPct;
     private BigDecimal takeProfitPct;
     private BigDecimal feeRate;
+
+    // ─── 合约配置 ───────────────────────────────────
+    private Integer leverage;
+    private MarginType marginType;
 
     private LocalDateTime createTime;
     private LocalDateTime updateTime;

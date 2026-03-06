@@ -9,6 +9,7 @@ import {
   PositionStatus,
   PositionSide,
   ExecutionMode,
+  MarketType,
   PositionQueryDTO,
 } from '../../api/trading';
 
@@ -130,6 +131,46 @@ export const PositionMonitor = () => {
       ),
     },
     {
+      title: '杠杆',
+      dataIndex: 'leverage',
+      key: 'leverage',
+      width: 70,
+      render: (val: number, record: PositionVO) =>
+        record.marketType && record.marketType !== 'SPOT' && val ? `${val}x` : '-',
+    },
+    {
+      title: '保证金',
+      dataIndex: 'marginType',
+      key: 'marginType',
+      width: 80,
+      render: (val: string, record: PositionVO) =>
+        record.marketType && record.marketType !== 'SPOT' && val ? (
+          <Tag color={val === 'ISOLATED' ? 'orange' : 'cyan'}>{val === 'ISOLATED' ? '逐仓' : '全仓'}</Tag>
+        ) : null,
+    },
+    {
+      title: '强平价',
+      dataIndex: 'liquidationPrice',
+      key: 'liquidationPrice',
+      width: 110,
+      render: (val: string, record: PositionVO) =>
+        record.marketType && record.marketType !== 'SPOT' ? (
+          <span style={{ color: '#ff4d4f' }}>{val || '-'}</span>
+        ) : null,
+    },
+    {
+      title: '资金费率',
+      dataIndex: 'fundingRate',
+      key: 'fundingRate',
+      width: 100,
+      render: (val: string, record: PositionVO) => {
+        if (!record.marketType || record.marketType === 'SPOT' || !val) return null;
+        const rate = parseFloat(val);
+        const pct = (rate * 100).toFixed(4);
+        return <span style={{ color: rate >= 0 ? '#52c41a' : '#ff4d4f' }}>{pct}%</span>;
+      },
+    },
+    {
       title: t('text.trading.status'),
       dataIndex: 'status',
       key: 'status',
@@ -204,6 +245,17 @@ export const PositionMonitor = () => {
             { value: 'PAPER', label: t('text.trading.paper') },
           ]}
         />
+        <Select
+          allowClear
+          placeholder="市场类型"
+          style={{ width: 140 }}
+          onChange={(val: MarketType) => setQuery({ ...query, marketType: val, pageNum: 1 })}
+          options={[
+            { value: 'SPOT', label: '现货' },
+            { value: 'USDM', label: 'U本位合约' },
+            { value: 'COINM', label: '币本位合约' },
+          ]}
+        />
         <Button icon={<ReloadOutlined />} onClick={fetchPositions}>{t('text.trading.refresh')}</Button>
       </div>
       <Table
@@ -211,7 +263,7 @@ export const PositionMonitor = () => {
         dataSource={positions}
         loading={loading}
         rowKey="id"
-        scroll={{ x: 1400 }}
+        scroll={{ x: 1800 }}
         pagination={{
           current: query.pageNum,
           pageSize: query.pageSize,

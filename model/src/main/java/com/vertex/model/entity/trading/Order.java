@@ -1,6 +1,7 @@
 package com.vertex.model.entity.trading;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.vertex.common.core.base.BaseEntity;
@@ -67,4 +68,11 @@ public class Order extends BaseEntity {
 
     /** 错误信息 */
     private String errorMsg;
+
+    /** 市场类型 SPOT/USDM/COINM */
+    private MarketType marketType;
+
+    /** 是否仅减仓（合约平仓专用，不持久化到数据库）*/
+    @TableField(exist = false)
+    private boolean reduceOnly;
 }

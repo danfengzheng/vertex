@@ -1,5 +1,6 @@
 package com.vertex.model.dto.trading;
 
+import com.vertex.model.entity.trading.MarketType;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -19,4 +20,7 @@ public class ExchangeAccountUpdateDTO {
 
     /** API Secret（可选，为空不更新） */
     private String apiSecret;
+
+    /** 市场类型（可选，为空不更新） */
+    private MarketType marketType;
 }

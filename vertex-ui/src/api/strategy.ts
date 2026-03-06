@@ -88,6 +88,10 @@ export interface StrategyVO {
   takeProfitPct?: number;
   /** 手续费率（如 0.001 = 0.1%） */
   feeRate?: number;
+  /** 合约杠杆倍数（1-125，仅合约账户有效） */
+  leverage?: number;
+  /** 合约保证金模式（ISOLATED/CROSS，仅合约账户有效） */
+  marginType?: string;
   createTime: string;
   updateTime: string;
 }
@@ -128,6 +132,8 @@ export interface StrategyCreateDTO {
   stopLossPct?: number;
   takeProfitPct?: number;
   feeRate?: number;
+  leverage?: number;
+  marginType?: string;
 }
 
 /** 策略更新参数 */
@@ -150,6 +156,8 @@ export interface StrategyUpdateDTO {
   stopLossPct?: number;
   takeProfitPct?: number;
   feeRate?: number;
+  leverage?: number;
+  marginType?: string;
 }
 
 /** 策略查询参数 */

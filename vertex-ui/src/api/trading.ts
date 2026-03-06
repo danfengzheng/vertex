@@ -14,6 +14,8 @@ export type TradeMode = 'AUTO' | 'MANUAL';
 export type ExecutionMode = 'LIVE' | 'PAPER';
 export type PositionSide = 'LONG' | 'SHORT';
 export type PositionStatus = 'OPEN' | 'CLOSED';
+export type MarketType = 'SPOT' | 'USDM' | 'COINM';
+export type MarginType = 'ISOLATED' | 'CROSS';
 
 // ─── 接口定义 ─────────────────────────────────────
 
@@ -22,6 +24,7 @@ export interface ExchangeAccountVO {
   id: string;
   name: string;
   exchange: string;
+  marketType: MarketType;
   status: number;
   createTime: string;
   updateTime: string;
@@ -73,6 +76,11 @@ export interface PositionVO {
   closedAt: string;
   status: PositionStatus;
   tradeMode: ExecutionMode;
+  marketType?: MarketType;
+  leverage?: number;
+  marginType?: MarginType;
+  liquidationPrice?: string;
+  fundingRate?: string;
   createTime: string;
   updateTime: string;
 }
@@ -83,6 +91,7 @@ export interface ExchangeAccountCreateDTO {
   exchange?: string;
   apiKey: string;
   apiSecret: string;
+  marketType?: MarketType;
 }
 
 /** 账户更新参数 */
@@ -91,6 +100,7 @@ export interface ExchangeAccountUpdateDTO {
   name?: string;
   apiKey?: string;
   apiSecret?: string;
+  marketType?: MarketType;
 }
 
 /** 手动下单参数 */
@@ -124,6 +134,7 @@ export interface PositionQueryDTO extends PageQuery {
   symbol?: string;
   status?: PositionStatus;
   tradeMode?: ExecutionMode;
+  marketType?: MarketType;
 }
 
 /** 盈亏分析查询参数 */

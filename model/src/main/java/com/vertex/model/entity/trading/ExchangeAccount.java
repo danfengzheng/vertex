@@ -32,4 +32,7 @@ public class ExchangeAccount extends BaseEntity {
 
     /** 状态 0-禁用 1-正常 */
     private Integer status;
+
+    /** 市场类型 SPOT/USDM/COINM */
+    private MarketType marketType;
 }

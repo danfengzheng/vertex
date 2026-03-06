@@ -9,7 +9,7 @@ import {
   CloseCircleOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import { exchangeAccountApi, ExchangeAccountVO } from '../../api/trading';
+import { exchangeAccountApi, ExchangeAccountVO, MarketType } from '../../api/trading';
 
 export const ExchangeAccountManagement = () => {
   const { t } = useTranslation();
@@ -39,14 +39,18 @@ export const ExchangeAccountManagement = () => {
   const handleCreate = () => {
     setEditingId(null);
     form.resetFields();
-    form.setFieldsValue({ exchange: 'binance' });
+    form.setFieldsValue({ exchange: 'binance', marketType: 'SPOT' });
     setModalOpen(true);
   };
 
   const handleEdit = (record: ExchangeAccountVO) => {
     setEditingId(record.id);
     form.resetFields();
-    form.setFieldsValue({ name: record.name, exchange: record.exchange });
+    form.setFieldsValue({
+      name: record.name,
+      exchange: record.exchange,
+      marketType: record.marketType || 'SPOT',
+    });
     setModalOpen(true);
   };
 
@@ -100,6 +104,16 @@ export const ExchangeAccountManagement = () => {
       dataIndex: 'exchange',
       key: 'exchange',
       render: (val: string) => <Tag color="blue">{val?.toUpperCase()}</Tag>,
+    },
+    {
+      title: t('text.trading.marketType'),
+      dataIndex: 'marketType',
+      key: 'marketType',
+      render: (val: MarketType) => {
+        const colorMap: Record<string, string> = { SPOT: 'default', USDM: 'gold', COINM: 'purple' };
+        const labelMap: Record<string, string> = { SPOT: '现货', USDM: 'U本位合约', COINM: '币本位合约' };
+        return <Tag color={colorMap[val] || 'default'}>{labelMap[val] || val || 'SPOT'}</Tag>;
+      },
     },
     {
       title: t('text.trading.status'),
@@ -170,6 +184,15 @@ export const ExchangeAccountManagement = () => {
           </Form.Item>
           <Form.Item name="exchange" label={t('text.quote.exchange')}>
             <Select options={[{ value: 'binance', label: 'Binance' }]} />
+          </Form.Item>
+          <Form.Item name="marketType" label={t('text.trading.marketType')} rules={[{ required: true }]}>
+            <Select
+              options={[
+                { value: 'SPOT', label: '现货 (Spot)' },
+                { value: 'USDM', label: 'U本位合约 (USDM Futures)' },
+                { value: 'COINM', label: '币本位合约 (COINM Futures)' },
+              ]}
+            />
           </Form.Item>
           <Form.Item
             name="apiKey"

@@ -2,6 +2,7 @@ package com.vertex.model.dto.strategy;
 
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.trading.ExecutionMode;
+import com.vertex.model.entity.trading.MarginType;
 import com.vertex.model.entity.trading.PositionSizing;
 import com.vertex.model.entity.trading.TradeMode;
 import jakarta.validation.constraints.NotBlank;
@@ -58,4 +59,10 @@ public class StrategyCreateDTO {
     private BigDecimal takeProfitPct;
     /** 手续费率 */
     private BigDecimal feeRate;
+
+    // ─── 合约配置（可选） ───────────────────────────
+    /** 杠杆倍数（合约账户生效，1-125） */
+    private Integer leverage;
+    /** 保证金模式 ISOLATED/CROSS */
+    private MarginType marginType;
 }

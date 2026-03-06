@@ -8,6 +8,7 @@ import com.vertex.common.core.exception.BizException;
 import com.vertex.common.core.page.PageResult;
 import com.vertex.model.dto.trading.PositionQueryDTO;
 import com.vertex.model.entity.trading.Position;
+import com.vertex.model.entity.trading.PositionSide;
 import com.vertex.model.entity.trading.PositionStatus;
 import com.vertex.model.vo.trading.PositionVO;
 import com.vertex.common.core.context.UserContext;
@@ -63,6 +64,7 @@ public class PositionServiceImpl implements IPositionService {
                 .eq(query.getSymbol() != null, Position::getSymbol, query.getSymbol())
                 .eq(query.getStatus() != null, Position::getStatus, query.getStatus())
                 .eq(query.getTradeMode() != null, Position::getTradeMode, query.getTradeMode())
+                .eq(query.getMarketType() != null, Position::getMarketType, query.getMarketType())
                 .orderByDesc(Position::getCreateTime);
 
         Page<Position> result = positionMapper.selectPage(page, wrapper);
@@ -105,9 +107,16 @@ public class PositionServiceImpl implements IPositionService {
                 if (position.getEntryPrice() != null
                         && position.getQuantity() != null
                         && position.getQuantity().compareTo(BigDecimal.ZERO) > 0) {
-                    unrealizedPnl = latestPrice.subtract(position.getEntryPrice())
-                            .multiply(position.getQuantity())
-                            .setScale(10, RoundingMode.HALF_UP);
+                    // SHORT：价格下跌获利；LONG：价格上涨获利
+                    if (position.getSide() == PositionSide.SHORT) {
+                        unrealizedPnl = position.getEntryPrice().subtract(latestPrice)
+                                .multiply(position.getQuantity())
+                                .setScale(10, RoundingMode.HALF_UP);
+                    } else {
+                        unrealizedPnl = latestPrice.subtract(position.getEntryPrice())
+                                .multiply(position.getQuantity())
+                                .setScale(10, RoundingMode.HALF_UP);
+                    }
                 }
             }
         }
@@ -130,6 +139,11 @@ public class PositionServiceImpl implements IPositionService {
                 .closedAt(position.getClosedAt())
                 .status(position.getStatus())
                 .tradeMode(position.getTradeMode())
+                .marketType(position.getMarketType())
+                .leverage(position.getLeverage())
+                .marginType(position.getMarginType())
+                .liquidationPrice(position.getLiquidationPrice())
+                .fundingRate(position.getFundingRate())
                 .createTime(position.getCreateTime())
                 .updateTime(position.getUpdateTime())
                 .build();

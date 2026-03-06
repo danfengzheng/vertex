@@ -68,4 +68,21 @@ public class Position extends BaseEntity {
 
     /** 交易模式 LIVE/PAPER */
     private ExecutionMode tradeMode;
+
+    // ─── 合约专用字段 ─────────────────────────────────
+
+    /** 市场类型 SPOT/USDM/COINM */
+    private MarketType marketType;
+
+    /** 杠杆倍数 */
+    private Integer leverage;
+
+    /** 保证金模式 ISOLATED/CROSS */
+    private MarginType marginType;
+
+    /** 强平价格（合约专用） */
+    private BigDecimal liquidationPrice;
+
+    /** 最新资金费率（合约专用） */
+    private BigDecimal fundingRate;
 }
