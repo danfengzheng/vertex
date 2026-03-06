@@ -9,6 +9,8 @@ import com.vertex.service.order.config.TradingProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Mac;
@@ -16,6 +18,8 @@ import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -35,7 +39,15 @@ public class BinanceTradeClient {
 
     private final OkHttpClient httpClient;
     private final TradingProperties properties;
-
+    @EventListener(ApplicationReadyEvent.class)
+    public void loadStep() {
+        List<String> symbols = new ArrayList<>();
+        symbols.add("BTCUSDT");
+        symbols.add("ETHUSDT");
+        symbols.add("LTCUSDT");
+        symbols.add("BNBUSDT");
+        this.preloadStepSizes(symbols);
+    }
     /**
      * 交易对 stepSize 缓存（binanceSymbol → stepSize）。
      * <p>
@@ -238,7 +250,7 @@ public class BinanceTradeClient {
     /**
      * 查询并缓存交易对的 LOT_SIZE stepSize（公开接口，无需 API Key）。
      */
-    private BigDecimal getStepSize(String binanceSymbol) {
+    public BigDecimal getStepSize(String binanceSymbol) {
         return stepSizeCache.computeIfAbsent(binanceSymbol, this::fetchStepSize);
     }
 

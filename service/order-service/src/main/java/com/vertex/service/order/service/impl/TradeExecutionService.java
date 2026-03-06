@@ -244,6 +244,11 @@ public class TradeExecutionService {
 
             // 成交后更新持仓
             if (order.getStatus() == OrderStatus.FILLED || order.getStatus() == OrderStatus.SIMULATED) {
+                BigDecimal stepSize = binanceTradeClient.getStepSize(order.getSymbol());
+                // floor(quantity / stepSize) * stepSize
+                BigDecimal steps = order.getFilledQuantity().divide(stepSize, 0, RoundingMode.DOWN);
+                BigDecimal positionQuantity = steps.multiply(stepSize).stripTrailingZeros();
+                order.setFilledQuantity(positionQuantity);
                 positionManagementService.updatePosition(order);
 
                 // 设置止盈止损（如果策略配置了）
