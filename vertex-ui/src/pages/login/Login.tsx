@@ -4,11 +4,13 @@ import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { authApi } from '../../api/auth';
+import { usePermission } from '../../contexts/PermissionContext';
 
 export const Login = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
+  const { refreshPermissions } = usePermission();
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
 
@@ -32,6 +34,9 @@ export const Login = () => {
           localStorage.setItem('user', JSON.stringify(data.user));
         }
         message.success(t('text.auth.loginSuccess'));
+        // 登录后立即刷新权限，确保 PermissionContext 拿到菜单再跳转，
+        // 避免首次登录侧边栏空白（Context 的 useEffect 只在挂载时运行一次）
+        await refreshPermissions();
         navigate(from, { replace: true });
       }
     } catch (e) {
