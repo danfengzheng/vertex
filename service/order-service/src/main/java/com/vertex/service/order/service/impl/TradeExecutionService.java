@@ -676,12 +676,14 @@ public class TradeExecutionService {
     /**
      * 设置持仓的止损 / 止盈价格。
      * <p>
-     * 止损优先级：ATR倍数止损 > 固定百分比止损 > 无止损
-     * 止盈优先级：ATR倍数止盈 > 固定百分比止盈 > 无止盈
+     * 优先级：移动ATR止损（四参数） > 固定ATR止损 > 固定百分比止损<br>
+     * 止盈优先级：ATR倍数止盈 > 固定百分比止盈<br>
      * 同时支持 LONG 和 SHORT 持仓方向。
      * </p>
      */
     private void setStopLossTakeProfit(Order order, Strategy strategy) {
+        boolean hasTrailingStop = strategy.getInitialStopMultiplier() != null
+                && strategy.getInitialStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
         boolean hasAtrStop   = strategy.getAtrStopMultiplier() != null
                 && strategy.getAtrStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
         boolean hasPctStop   = strategy.getStopLossPct() != null;
@@ -689,7 +691,7 @@ public class TradeExecutionService {
                 && strategy.getAtrTakeProfitMultiplier().compareTo(BigDecimal.ZERO) > 0;
         boolean hasPctTp     = strategy.getTakeProfitPct() != null;
 
-        if (!hasAtrStop && !hasPctStop && !hasAtrTp && !hasPctTp) {
+        if (!hasTrailingStop && !hasAtrStop && !hasPctStop && !hasAtrTp && !hasPctTp) {
             return;
         }
 
@@ -700,54 +702,62 @@ public class TradeExecutionService {
         BigDecimal entryPrice = position.getEntryPrice();
         boolean isShort = position.getSide() == PositionSide.SHORT;
 
-        // ── 止损：ATR优先，降级为固定百分比 ──────────────────
-        if (hasAtrStop || hasAtrTp) {
-            // 止损和止盈任一需要 ATR 时，统一查询一次
+        // ── 移动ATR止损：四参数联动，优先级最高 ──────────────
+        if (hasTrailingStop) {
+            BigDecimal atrValue = computeAtr(
+                    strategy.getExchange(), strategy.getSymbol(), strategy.getInterval(), 14);
+            if (atrValue != null && atrValue.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal atrOffset = atrValue.multiply(strategy.getInitialStopMultiplier());
+                BigDecimal stopLoss = isShort
+                        ? entryPrice.add(atrOffset)
+                        : entryPrice.subtract(atrOffset);
+                position.setStopLoss(stopLoss.setScale(8, RoundingMode.HALF_UP));
+                position.setStopLossStage(StopLossStage.INITIAL);
+                // 初始化极值追踪字段
+                position.setHighestPrice(entryPrice);
+                position.setLowestPrice(entryPrice);
+                log.info("[Trailing SL] strategy={} side={} entryPrice={} atr={} initialStop={} stopLoss={}",
+                        strategy.getName(), position.getSide(), entryPrice,
+                        atrValue, strategy.getInitialStopMultiplier(), position.getStopLoss());
+            } else {
+                log.warn("[Trailing SL] Cannot compute ATR for {} {}", strategy.getExchange(), strategy.getSymbol());
+            }
+            // 移动止损模式下止盈仍走正常逻辑
+        } else if (hasAtrStop || hasAtrTp) {
+            // ── 固定ATR止损/止盈 ──────────────────────────────
             BigDecimal atrValue = computeAtr(
                     strategy.getExchange(), strategy.getSymbol(), strategy.getInterval(), 14);
 
-            if (hasAtrStop) {
-                if (atrValue != null && atrValue.compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal atrOffset = atrValue.multiply(strategy.getAtrStopMultiplier());
-                    BigDecimal stopLoss = isShort
-                            ? entryPrice.add(atrOffset)          // SHORT：止损在入场价上方
-                            : entryPrice.subtract(atrOffset);    // LONG ：止损在入场价下方
-                    position.setStopLoss(stopLoss.setScale(8, RoundingMode.HALF_UP));
-                    log.info("[ATR Stop] strategy={} side={} entryPrice={} atr={} multiplier={} stopLoss={}",
-                            strategy.getName(), position.getSide(), entryPrice,
-                            atrValue, strategy.getAtrStopMultiplier(), position.getStopLoss());
-                } else {
-                    log.warn("[ATR Stop] Cannot compute ATR for {} {}, stop-loss not set",
-                            strategy.getExchange(), strategy.getSymbol());
-                }
+            if (hasAtrStop && atrValue != null && atrValue.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal atrOffset = atrValue.multiply(strategy.getAtrStopMultiplier());
+                BigDecimal stopLoss = isShort
+                        ? entryPrice.add(atrOffset)
+                        : entryPrice.subtract(atrOffset);
+                position.setStopLoss(stopLoss.setScale(8, RoundingMode.HALF_UP));
+                log.info("[ATR Stop] strategy={} side={} entryPrice={} atr={} multiplier={} stopLoss={}",
+                        strategy.getName(), position.getSide(), entryPrice,
+                        atrValue, strategy.getAtrStopMultiplier(), position.getStopLoss());
             }
 
-            if (hasAtrTp) {
-                if (atrValue != null && atrValue.compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal atrOffset = atrValue.multiply(strategy.getAtrTakeProfitMultiplier());
-                    BigDecimal takeProfit = isShort
-                            ? entryPrice.subtract(atrOffset)    // SHORT：止盈在入场价下方
-                            : entryPrice.add(atrOffset);        // LONG ：止盈在入场价上方
-                    position.setTakeProfit(takeProfit.setScale(8, RoundingMode.HALF_UP));
-                    log.info("[ATR TP] strategy={} side={} entryPrice={} atr={} multiplier={} takeProfit={}",
-                            strategy.getName(), position.getSide(), entryPrice,
-                            atrValue, strategy.getAtrTakeProfitMultiplier(), position.getTakeProfit());
-                } else {
-                    log.warn("[ATR TP] Cannot compute ATR for {} {}, take-profit not set",
-                            strategy.getExchange(), strategy.getSymbol());
-                }
+            if (hasAtrTp && atrValue != null && atrValue.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal atrOffset = atrValue.multiply(strategy.getAtrTakeProfitMultiplier());
+                BigDecimal takeProfit = isShort
+                        ? entryPrice.subtract(atrOffset)
+                        : entryPrice.add(atrOffset);
+                position.setTakeProfit(takeProfit.setScale(8, RoundingMode.HALF_UP));
+                log.info("[ATR TP] strategy={} side={} entryPrice={} atr={} multiplier={} takeProfit={}",
+                        strategy.getName(), position.getSide(), entryPrice,
+                        atrValue, strategy.getAtrTakeProfitMultiplier(), position.getTakeProfit());
             }
-        } else {
-            // 纯固定百分比路径（无需查询 ATR）
         }
 
         // ── 非ATR路径：固定百分比止损 ────────────────────────
-        if (!hasAtrStop && hasPctStop) {
+        if (!hasTrailingStop && !hasAtrStop && hasPctStop) {
             BigDecimal pct = strategy.getStopLossPct()
                     .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
             BigDecimal stopLoss = isShort
-                    ? entryPrice.multiply(BigDecimal.ONE.add(pct))       // SHORT：止损在上方
-                    : entryPrice.multiply(BigDecimal.ONE.subtract(pct)); // LONG ：止损在下方
+                    ? entryPrice.multiply(BigDecimal.ONE.add(pct))
+                    : entryPrice.multiply(BigDecimal.ONE.subtract(pct));
             position.setStopLoss(stopLoss);
         }
 
@@ -756,12 +766,137 @@ public class TradeExecutionService {
             BigDecimal pct = strategy.getTakeProfitPct()
                     .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
             BigDecimal takeProfit = isShort
-                    ? entryPrice.multiply(BigDecimal.ONE.subtract(pct)) // SHORT：止盈在下方
-                    : entryPrice.multiply(BigDecimal.ONE.add(pct));     // LONG ：止盈在上方
+                    ? entryPrice.multiply(BigDecimal.ONE.subtract(pct))
+                    : entryPrice.multiply(BigDecimal.ONE.add(pct));
             position.setTakeProfit(takeProfit);
         }
 
         positionManagementService.updateStopLossTakeProfit(position);
+    }
+
+    /**
+     * K线收盘后更新该策略所有OPEN持仓的移动ATR止损阶段。
+     * <p>
+     * 由 TradeExecutionListenerImpl.onKLineClose() 调用，
+     * 按 INITIAL → BREAKEVEN → TRAILING 状态机推进止损价。
+     * </p>
+     *
+     * @param strategy 策略（含四参数）
+     * @param atrValue 最新ATR值（由 StrategyEngineService 计算后传入，避免重复查询）
+     * @param klines   主周期K线（升序），取末尾收盘价作为当前价格
+     */
+    public void updateTrailingStops(Strategy strategy, BigDecimal atrValue, List<KLine> klines) {
+        if (atrValue == null || atrValue.compareTo(BigDecimal.ZERO) <= 0) return;
+        if (klines == null || klines.isEmpty()) return;
+
+        BigDecimal currentPrice = klines.get(klines.size() - 1).getClose();
+        if (currentPrice == null) return;
+
+        List<Position> openPositions = positionManagementService.findOpenPositionsByStrategy(strategy.getId());
+        if (openPositions.isEmpty()) return;
+
+        for (Position position : openPositions) {
+            try {
+                boolean isShort = position.getSide() == PositionSide.SHORT;
+                StopLossStage stage = position.getStopLossStage();
+                if (stage == null) stage = StopLossStage.INITIAL;
+
+                switch (stage) {
+                    case INITIAL -> evaluateBreakeven(position, strategy, currentPrice, atrValue, isShort);
+                    case BREAKEVEN -> evaluateTrailingActivation(position, strategy, currentPrice, atrValue, isShort);
+                    case TRAILING -> updateTrailingStopPrice(position, strategy, currentPrice, atrValue, isShort);
+                }
+            } catch (Exception e) {
+                log.error("[Trailing SL] Error updating position {}: {}", position.getId(), e.getMessage(), e);
+            }
+        }
+    }
+
+    /** INITIAL → BREAKEVEN：价格突破 entry + breakevenActivationMultiplier × ATR */
+    private void evaluateBreakeven(Position position, Strategy strategy,
+                                   BigDecimal currentPrice, BigDecimal atrValue, boolean isShort) {
+        if (strategy.getBreakevenActivationMultiplier() == null) return;
+        BigDecimal entryPrice = position.getEntryPrice();
+        BigDecimal threshold = atrValue.multiply(strategy.getBreakevenActivationMultiplier());
+
+        boolean activated = isShort
+                ? currentPrice.compareTo(entryPrice.subtract(threshold)) <= 0
+                : currentPrice.compareTo(entryPrice.add(threshold)) >= 0;
+
+        if (activated) {
+            position.setStopLoss(entryPrice.setScale(8, RoundingMode.HALF_UP));
+            position.setStopLossStage(StopLossStage.BREAKEVEN);
+            positionManagementService.updateStopLossTakeProfit(position);
+            log.info("[Trailing SL] BREAKEVEN activated: position={} side={} stopLoss=entryPrice={}",
+                    position.getId(), position.getSide(), entryPrice);
+        }
+    }
+
+    /** BREAKEVEN → TRAILING：价格突破 entry + trailingActivationMultiplier × ATR */
+    private void evaluateTrailingActivation(Position position, Strategy strategy,
+                                            BigDecimal currentPrice, BigDecimal atrValue, boolean isShort) {
+        if (strategy.getTrailingActivationMultiplier() == null) return;
+        BigDecimal entryPrice = position.getEntryPrice();
+        BigDecimal threshold = atrValue.multiply(strategy.getTrailingActivationMultiplier());
+
+        boolean activated = isShort
+                ? currentPrice.compareTo(entryPrice.subtract(threshold)) <= 0
+                : currentPrice.compareTo(entryPrice.add(threshold)) >= 0;
+
+        if (activated) {
+            // 初始化极值追踪字段并立即计算追踪止损
+            if (isShort) {
+                position.setLowestPrice(currentPrice);
+            } else {
+                position.setHighestPrice(currentPrice);
+            }
+            position.setStopLossStage(StopLossStage.TRAILING);
+            updateTrailingStopPrice(position, strategy, currentPrice, atrValue, isShort);
+            log.info("[Trailing SL] TRAILING activated: position={} side={} currentPrice={}",
+                    position.getId(), position.getSide(), currentPrice);
+        }
+    }
+
+    /** TRAILING：更新极值价格，止损只朝有利方向移动（LONG只升，SHORT只降） */
+    private void updateTrailingStopPrice(Position position, Strategy strategy,
+                                         BigDecimal currentPrice, BigDecimal atrValue, boolean isShort) {
+        if (strategy.getTrailingDistanceMultiplier() == null) return;
+        BigDecimal trailingOffset = atrValue.multiply(strategy.getTrailingDistanceMultiplier());
+        boolean updated = false;
+
+        if (isShort) {
+            BigDecimal lowestPrice = position.getLowestPrice() != null ? position.getLowestPrice() : currentPrice;
+            if (currentPrice.compareTo(lowestPrice) < 0) {
+                position.setLowestPrice(currentPrice);
+                lowestPrice = currentPrice;
+                updated = true;
+            }
+            // SHORT 止损 = 最低价 + 追踪距离（止损只下移）
+            BigDecimal newStop = lowestPrice.add(trailingOffset).setScale(8, RoundingMode.HALF_UP);
+            if (position.getStopLoss() == null || newStop.compareTo(position.getStopLoss()) < 0) {
+                position.setStopLoss(newStop);
+                updated = true;
+            }
+        } else {
+            BigDecimal highestPrice = position.getHighestPrice() != null ? position.getHighestPrice() : currentPrice;
+            if (currentPrice.compareTo(highestPrice) > 0) {
+                position.setHighestPrice(currentPrice);
+                highestPrice = currentPrice;
+                updated = true;
+            }
+            // LONG 止损 = 最高价 - 追踪距离（止损只上移）
+            BigDecimal newStop = highestPrice.subtract(trailingOffset).setScale(8, RoundingMode.HALF_UP);
+            if (position.getStopLoss() == null || newStop.compareTo(position.getStopLoss()) > 0) {
+                position.setStopLoss(newStop);
+                updated = true;
+            }
+        }
+
+        if (updated) {
+            positionManagementService.updateStopLossTakeProfit(position);
+            log.debug("[Trailing SL] Stop updated: position={} side={} newStop={}",
+                    position.getId(), position.getSide(), position.getStopLoss());
+        }
     }
 
     /**

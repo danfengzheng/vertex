@@ -1,6 +1,7 @@
 package com.vertex.service.order.task;
 
 import com.vertex.model.entity.trading.Position;
+import com.vertex.model.entity.trading.PositionSide;
 import com.vertex.model.entity.trading.PositionStatus;
 import com.vertex.service.order.service.impl.PaperTradingService;
 import com.vertex.service.order.service.impl.PositionManagementService;
@@ -61,28 +62,38 @@ public class StopLossTakeProfitTask {
                 }
 
                 boolean triggered = false;
+                boolean isShort = position.getSide() == PositionSide.SHORT;
 
-                // 止损检查
-                if (position.getStopLoss() != null
-                        && currentPrice.compareTo(position.getStopLoss()) <= 0) {
-                    log.info("[SL/TP Task] Stop loss triggered: {} {} currentPrice={} stopLoss={}",
-                            position.getExchange(), position.getSymbol(),
-                            currentPrice, position.getStopLoss());
-                    // 统一走 executeClose：
-                    // - LIVE 模式：向交易所提交 MARKET SELL，按实际成交更新本地持仓
-                    // - PAPER 模式：直接按当前市价更新本地持仓记录
-                    tradeExecutionService.executeClose(position);
-                    triggered = true;
+                // 止损检查（区分方向）
+                // LONG：价格下跌触达止损（currentPrice <= stopLoss）
+                // SHORT：价格上涨触达止损（currentPrice >= stopLoss）
+                if (position.getStopLoss() != null) {
+                    boolean slTriggered = isShort
+                            ? currentPrice.compareTo(position.getStopLoss()) >= 0
+                            : currentPrice.compareTo(position.getStopLoss()) <= 0;
+                    if (slTriggered) {
+                        log.info("[SL/TP Task] Stop loss triggered: {} {} side={} currentPrice={} stopLoss={}",
+                                position.getExchange(), position.getSymbol(), position.getSide(),
+                                currentPrice, position.getStopLoss());
+                        tradeExecutionService.executeClose(position);
+                        triggered = true;
+                    }
                 }
 
-                // 止盈检查
-                if (!triggered && position.getTakeProfit() != null
-                        && currentPrice.compareTo(position.getTakeProfit()) >= 0) {
-                    log.info("[SL/TP Task] Take profit triggered: {} {} currentPrice={} takeProfit={}",
-                            position.getExchange(), position.getSymbol(),
-                            currentPrice, position.getTakeProfit());
-                    tradeExecutionService.executeClose(position);
-                    triggered = true;
+                // 止盈检查（区分方向）
+                // LONG：价格上涨触达止盈（currentPrice >= takeProfit）
+                // SHORT：价格下跌触达止盈（currentPrice <= takeProfit）
+                if (!triggered && position.getTakeProfit() != null) {
+                    boolean tpTriggered = isShort
+                            ? currentPrice.compareTo(position.getTakeProfit()) <= 0
+                            : currentPrice.compareTo(position.getTakeProfit()) >= 0;
+                    if (tpTriggered) {
+                        log.info("[SL/TP Task] Take profit triggered: {} {} side={} currentPrice={} takeProfit={}",
+                                position.getExchange(), position.getSymbol(), position.getSide(),
+                                currentPrice, position.getTakeProfit());
+                        tradeExecutionService.executeClose(position);
+                        triggered = true;
+                    }
                 }
 
                 // 未触发止盈止损 → 持久化价格更新到数据库

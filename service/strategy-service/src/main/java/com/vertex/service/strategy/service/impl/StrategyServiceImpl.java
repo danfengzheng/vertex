@@ -71,6 +71,10 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setFeeRate(dto.getFeeRate());
         strategy.setAtrStopMultiplier(dto.getAtrStopMultiplier());
         strategy.setAtrTakeProfitMultiplier(dto.getAtrTakeProfitMultiplier());
+        strategy.setInitialStopMultiplier(dto.getInitialStopMultiplier());
+        strategy.setBreakevenActivationMultiplier(dto.getBreakevenActivationMultiplier());
+        strategy.setTrailingActivationMultiplier(dto.getTrailingActivationMultiplier());
+        strategy.setTrailingDistanceMultiplier(dto.getTrailingDistanceMultiplier());
         strategyMapper.insert(strategy);
         return strategy.getId();
     }
@@ -117,6 +121,10 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setFeeRate(dto.getFeeRate());
         strategy.setAtrStopMultiplier(dto.getAtrStopMultiplier());
         strategy.setAtrTakeProfitMultiplier(dto.getAtrTakeProfitMultiplier());
+        strategy.setInitialStopMultiplier(dto.getInitialStopMultiplier());
+        strategy.setBreakevenActivationMultiplier(dto.getBreakevenActivationMultiplier());
+        strategy.setTrailingActivationMultiplier(dto.getTrailingActivationMultiplier());
+        strategy.setTrailingDistanceMultiplier(dto.getTrailingDistanceMultiplier());
 
         strategyMapper.updateById(strategy);
     }

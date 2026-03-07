@@ -59,6 +59,12 @@ public class StrategyVO implements Serializable {
     /** ATR 止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
     private BigDecimal atrTakeProfitMultiplier;
 
+    // ─── 移动ATR止损配置 ──────────────────────────────
+    private BigDecimal initialStopMultiplier;
+    private BigDecimal breakevenActivationMultiplier;
+    private BigDecimal trailingActivationMultiplier;
+    private BigDecimal trailingDistanceMultiplier;
+
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

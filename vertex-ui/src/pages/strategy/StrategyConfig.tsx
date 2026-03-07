@@ -435,6 +435,10 @@ export const StrategyConfig = () => {
       marginType: record.marginType || 'ISOLATED',
       atrStopMultiplier: record.atrStopMultiplier,
       atrTakeProfitMultiplier: record.atrTakeProfitMultiplier,
+      initialStopMultiplier: record.initialStopMultiplier,
+      breakevenActivationMultiplier: record.breakevenActivationMultiplier,
+      trailingActivationMultiplier: record.trailingActivationMultiplier,
+      trailingDistanceMultiplier: record.trailingDistanceMultiplier,
     });
     setIndicatorTypes(record.indicatorConfigs.map((c) => c.indicatorType));
     setAutoTradeEnabled(record.autoTrade === 1);
@@ -503,6 +507,8 @@ export const StrategyConfig = () => {
         const CLEARABLE_FIELDS = [
           'minSignalStrength', 'stopLossPct', 'takeProfitPct',
           'feeRate', 'atrStopMultiplier', 'atrTakeProfitMultiplier',
+          'initialStopMultiplier', 'breakevenActivationMultiplier',
+          'trailingActivationMultiplier', 'trailingDistanceMultiplier',
         ] as const;
         const payload: Record<string, unknown> = { id: editingId, ...values };
         CLEARABLE_FIELDS.forEach((key) => {
@@ -973,6 +979,41 @@ export const StrategyConfig = () => {
                   tooltip={t('text.trading.feeRateTip')}
                 >
                   <InputNumber min={0} max={0.1} step={0.0001} style={{ width: 160 }} placeholder="0.001" />
+                </Form.Item>
+              </Space>
+
+              <Divider orientation="left" style={{ marginTop: 8 }}>{t('text.trading.trailingStopTitle')}</Divider>
+              <Space size="large" wrap>
+                <Form.Item
+                  name="initialStopMultiplier"
+                  label={t('text.trading.initialStopMultiplier')}
+                  tooltip={t('text.trading.initialStopMultiplierTip')}
+                >
+                  <InputNumber min={0.1} max={20} step={0.1} style={{ width: 150 }} addonAfter="× ATR" placeholder="3.5" />
+                </Form.Item>
+
+                <Form.Item
+                  name="breakevenActivationMultiplier"
+                  label={t('text.trading.breakevenActivationMultiplier')}
+                  tooltip={t('text.trading.breakevenActivationMultiplierTip')}
+                >
+                  <InputNumber min={0.1} max={20} step={0.1} style={{ width: 150 }} addonAfter="× ATR" placeholder="1.8" />
+                </Form.Item>
+
+                <Form.Item
+                  name="trailingActivationMultiplier"
+                  label={t('text.trading.trailingActivationMultiplier')}
+                  tooltip={t('text.trading.trailingActivationMultiplierTip')}
+                >
+                  <InputNumber min={0.1} max={20} step={0.1} style={{ width: 150 }} addonAfter="× ATR" placeholder="2.5" />
+                </Form.Item>
+
+                <Form.Item
+                  name="trailingDistanceMultiplier"
+                  label={t('text.trading.trailingDistanceMultiplier')}
+                  tooltip={t('text.trading.trailingDistanceMultiplierTip')}
+                >
+                  <InputNumber min={0.1} max={20} step={0.1} style={{ width: 150 }} addonAfter="× ATR" placeholder="2.0" />
                 </Form.Item>
               </Space>
             </>

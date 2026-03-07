@@ -112,4 +112,28 @@ public class Strategy extends BaseEntity {
     /** ATR 止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal atrTakeProfitMultiplier;
+
+    // ─── 移动ATR止损配置（四参数联动，任一不为null时启用移动止损） ──────
+
+    /** 阶段1：初始止损倍数（如 3.5），开仓时 stopLoss = entry ∓ ATR × 此值 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal initialStopMultiplier;
+
+    /**
+     * 阶段2：激活保本的ATR距离倍数（如 1.8）。
+     * 价格超过 entry + ATR × 此值 时，止损上移至入场价（保本）。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal breakevenActivationMultiplier;
+
+    /**
+     * 阶段3：激活追踪的ATR距离倍数（如 2.5）。
+     * 价格超过 entry + ATR × 此值 时，开始追踪止损（只升不降）。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal trailingActivationMultiplier;
+
+    /** 阶段4：追踪距离倍数（如 2.0），止损 = 最优价格 ∓ ATR × 此值 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal trailingDistanceMultiplier;
 }

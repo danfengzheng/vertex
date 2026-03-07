@@ -386,6 +386,17 @@ public class PositionManagementService {
     }
 
     /**
+     * 查询指定策略的所有活跃持仓（用于移动止损更新）
+     */
+    public List<Position> findOpenPositionsByStrategy(Long strategyId) {
+        LambdaQueryWrapper<Position> wrapper = new LambdaQueryWrapper<Position>()
+                .eq(Position::getStrategyId, strategyId)
+                .eq(Position::getStatus, PositionStatus.OPEN)
+                .eq(Position::getDeleted, 0);
+        return positionMapper.selectList(wrapper);
+    }
+
+    /**
      * 更新持仓当前价格和未实现盈亏
      */
     public void updateCurrentPrice(Position position) {

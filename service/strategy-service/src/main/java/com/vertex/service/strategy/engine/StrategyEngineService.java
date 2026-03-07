@@ -261,6 +261,22 @@ public class StrategyEngineService {
         // 生成信号
         Signal signal = signalGenerator.evaluate(strategy, configs, klinesByInterval);
 
+        // 移动ATR止损：每根K线收盘后触发（与信号无关，始终执行）
+        if (tradeExecutionListener != null && strategy.getInitialStopMultiplier() != null
+                && strategy.getInitialStopMultiplier().compareTo(BigDecimal.ZERO) > 0) {
+            try {
+                List<KLine> primaryKlines = klinesByInterval.get(strategy.getInterval());
+                if (primaryKlines != null && !primaryKlines.isEmpty()) {
+                    BigDecimal atrValue = computeAtrFromKlines(primaryKlines, 14);
+                    if (atrValue != null) {
+                        tradeExecutionListener.onKLineClose(strategy, atrValue, primaryKlines);
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Trailing stop update failed for strategy [{}]: {}", strategy.getName(), e.getMessage(), e);
+            }
+        }
+
         // 跳过 NEUTRAL 信号，不写库不推送
         if (signal.getSignalType() == SignalType.NEUTRAL) {
             return;
@@ -370,6 +386,40 @@ public class StrategyEngineService {
             }
         }
         return intervals;
+    }
+
+    // ─── ATR 计算（复用 AtrIndicator 算法，避免重复依赖 KLineStore） ────────────
+
+    /**
+     * 从已加载的 K 线列表计算 ATR（Wilder 平滑法）。
+     * <p>
+     * 与 TradeExecutionService.computeAtr() 算法完全一致，
+     * 避免在移动止损更新时重复查询 KLineStore。
+     * </p>
+     *
+     * @param klines 升序K线列表（已预热，size >= period+1）
+     * @param period ATR 周期（通常为 14）
+     * @return ATR 绝对值，数据不足时返回 null
+     */
+    private BigDecimal computeAtrFromKlines(List<KLine> klines, int period) {
+        if (klines == null || klines.size() < 2) return null;
+        double[] trueRanges = new double[klines.size() - 1];
+        for (int i = 1; i < klines.size(); i++) {
+            KLine cur  = klines.get(i);
+            KLine prev = klines.get(i - 1);
+            double highLow   = cur.getHigh().doubleValue()  - cur.getLow().doubleValue();
+            double highClose = Math.abs(cur.getHigh().doubleValue() - prev.getClose().doubleValue());
+            double lowClose  = Math.abs(cur.getLow().doubleValue()  - prev.getClose().doubleValue());
+            trueRanges[i - 1] = Math.max(highLow, Math.max(highClose, lowClose));
+        }
+        int calcPeriod = Math.min(period, trueRanges.length);
+        double atr = 0;
+        for (int i = 0; i < calcPeriod; i++) atr += trueRanges[i];
+        atr /= calcPeriod;
+        for (int i = calcPeriod; i < trueRanges.length; i++) {
+            atr = (atr * (period - 1) + trueRanges[i]) / period;
+        }
+        return BigDecimal.valueOf(atr);
     }
 
     // ─── 节流 ─────────────────────────────────────────────────────

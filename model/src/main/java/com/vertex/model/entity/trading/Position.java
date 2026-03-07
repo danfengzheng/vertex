@@ -1,6 +1,7 @@
 package com.vertex.model.entity.trading;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.vertex.common.core.base.BaseEntity;
@@ -85,4 +86,22 @@ public class Position extends BaseEntity {
 
     /** 最新资金费率（合约专用） */
     private BigDecimal fundingRate;
+
+    // ─── 移动止损追踪字段（仅策略启用移动ATR止损时使用） ────────────
+
+    /** 当前止损阶段：INITIAL / BREAKEVEN / TRAILING */
+    @TableField("`stop_loss_stage`")
+    private StopLossStage stopLossStage;
+
+    /**
+     * LONG 持仓追踪最高价（用于 TRAILING 阶段计算追踪止损）。
+     * SHORT 持仓此字段不使用。
+     */
+    private BigDecimal highestPrice;
+
+    /**
+     * SHORT 持仓追踪最低价（用于 TRAILING 阶段计算追踪止损）。
+     * LONG 持仓此字段不使用。
+     */
+    private BigDecimal lowestPrice;
 }

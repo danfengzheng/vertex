@@ -98,6 +98,14 @@ export interface StrategyVO {
   atrStopMultiplier?: number;
   /** ATR止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
   atrTakeProfitMultiplier?: number;
+  /** 移动止损：阶段1初始止损倍数（如 3.5） */
+  initialStopMultiplier?: number;
+  /** 移动止损：阶段2激活保本的ATR距离倍数（如 1.8） */
+  breakevenActivationMultiplier?: number;
+  /** 移动止损：阶段3激活追踪的ATR距离倍数（如 2.5） */
+  trailingActivationMultiplier?: number;
+  /** 移动止损：阶段4追踪距离倍数（如 2.0） */
+  trailingDistanceMultiplier?: number;
   createTime: string;
   updateTime: string;
 }
@@ -144,6 +152,10 @@ export interface StrategyCreateDTO {
   atrStopMultiplier?: number;
   /** ATR止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
   atrTakeProfitMultiplier?: number;
+  initialStopMultiplier?: number;
+  breakevenActivationMultiplier?: number;
+  trailingActivationMultiplier?: number;
+  trailingDistanceMultiplier?: number;
 }
 
 /** 策略更新参数 */
@@ -172,6 +184,11 @@ export interface StrategyUpdateDTO {
   atrStopMultiplier?: number;
   /** ATR止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
   atrTakeProfitMultiplier?: number;
+  initialStopMultiplier?: number;
+  breakevenActivationMultiplier?: number;
+  trailingActivationMultiplier?: number;
+  trailingDistanceMultiplier?: number;
+  minSignalStrength?: number;
 }
 
 /** 策略查询参数 */

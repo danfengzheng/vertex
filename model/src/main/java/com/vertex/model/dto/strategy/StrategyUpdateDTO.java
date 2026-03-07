@@ -56,4 +56,14 @@ public class StrategyUpdateDTO {
     private BigDecimal atrStopMultiplier;
     /** ATR 止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
     private BigDecimal atrTakeProfitMultiplier;
+
+    // ─── 移动ATR止损配置（四参数联动） ────────────────────
+    /** 阶段1：初始止损倍数（如 3.5） */
+    private BigDecimal initialStopMultiplier;
+    /** 阶段2：激活保本的ATR距离倍数（如 1.8） */
+    private BigDecimal breakevenActivationMultiplier;
+    /** 阶段3：激活追踪的ATR距离倍数（如 2.5） */
+    private BigDecimal trailingActivationMultiplier;
+    /** 阶段4：追踪距离倍数（如 2.0） */
+    private BigDecimal trailingDistanceMultiplier;
 }
