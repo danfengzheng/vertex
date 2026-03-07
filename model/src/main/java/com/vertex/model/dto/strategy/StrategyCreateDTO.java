@@ -39,6 +39,8 @@ public class StrategyCreateDTO {
     // ─── 交易配置（可选） ───────────────────────────
     /** 是否开启自动交易 */
     private Integer autoTrade;
+    /** 自动交易最低信号强度门槛（0-100） */
+    private Integer minSignalStrength;
     /** 交易模式 AUTO/MANUAL */
     private TradeMode tradeMode;
     /** 执行模式 LIVE/PAPER */

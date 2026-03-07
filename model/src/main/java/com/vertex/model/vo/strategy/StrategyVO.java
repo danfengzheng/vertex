@@ -36,6 +36,8 @@ public class StrategyVO implements Serializable {
 
     // ─── 交易配置 ───────────────────────────────────
     private Integer autoTrade;
+    /** 自动交易最低信号强度门槛（0-100） */
+    private Integer minSignalStrength;
     private TradeMode tradeMode;
     private ExecutionMode executionMode;
     private Long accountId;

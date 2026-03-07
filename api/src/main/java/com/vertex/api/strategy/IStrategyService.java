@@ -24,4 +24,12 @@ public interface IStrategyService {
     void enable(Long id);
 
     void disable(Long id);
+
+    /**
+     * 复制策略，生成同配置的新策略（默认禁用，名称加"(副本)"后缀）
+     *
+     * @param id 源策略 ID
+     * @return 新策略 ID
+     */
+    Long copy(Long id);
 }

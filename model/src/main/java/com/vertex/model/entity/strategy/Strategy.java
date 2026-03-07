@@ -1,5 +1,6 @@
 package com.vertex.model.entity.strategy;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -58,6 +59,7 @@ public class Strategy extends BaseEntity {
      * 信号强度低于此值时，即使 autoTrade=1 也不触发实盘委托。
      * 未配置时默认使用 60，防止弱信号入场。
      */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Integer minSignalStrength;
 
     /** 交易模式 AUTO/MANUAL */
@@ -82,12 +84,15 @@ public class Strategy extends BaseEntity {
     private BigDecimal initialCapital;
 
     /** 止损百分比 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal stopLossPct;
 
     /** 止盈百分比 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal takeProfitPct;
 
     /** 手续费率（如 0.001 = 0.1%），与回测对齐 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal feeRate;
 
     // ─── 合约配置（账户为 USDM/COINM 时生效） ─────────
@@ -101,8 +106,10 @@ public class Strategy extends BaseEntity {
     // ─── 止损止盈配置 ────────────────────────────────────────────
 
     /** ATR 止损倍数（如 2.0），设置后优先于固定止损百分比 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal atrStopMultiplier;
 
     /** ATR 止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal atrTakeProfitMultiplier;
 }

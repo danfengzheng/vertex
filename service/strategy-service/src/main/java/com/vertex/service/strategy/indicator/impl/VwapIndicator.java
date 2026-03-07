@@ -11,16 +11,26 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 成交量加权平均价格 (VWAP)
+ * 成交量加权平均价格 (VWAP) — 突破确认模式
  * <p>
- * 日内/短线交易核心指标，判断当前价格相对于成交量加权均价的偏离。
- * <br>
- * 公式: VWAP = Σ(典型价格 × 成交量) / Σ(成交量)
- * <br>
- * 典型价格 = (最高价 + 最低价 + 收盘价) / 3
- * <br>
- * 信号: 价格 < VWAP × 0.998 → BUY (低估), 价格 > VWAP × 1.002 → SELL (高估)
+ * 公式: VWAP = Σ(典型价格 × 成交量) / Σ(成交量)，典型价格 = (最高 + 最低 + 收盘) / 3
  * </p>
+ *
+ * <h3>参数</h3>
+ * <ul>
+ *   <li>{@code deviationPct}（默认 0.2）：有效突破的偏离区间上限（%）。
+ *       偏离超过此值视为"强弩之末"，不追入。</li>
+ * </ul>
+ *
+ * <h3>信号逻辑（突破确认，非均值回归）</h3>
+ * <ul>
+ *   <li>BUY ：收盘价 &gt; VWAP 且正偏离 ∈ (0, deviationPct]%
+ *       → 价格有效上破 VWAP，且尚未过度偏离（刚突破，不追高）</li>
+ *   <li>SELL：收盘价 &lt; VWAP 且负偏离 ∈ [-deviationPct, 0)%
+ *       → 价格有效下破 VWAP，且尚未过度偏离（刚跌穿，不追空）</li>
+ *   <li>NEUTRAL：价格与 VWAP 齐平（deviation = 0），
+ *       或偏离超过阈值（强弩之末，观望）</li>
+ * </ul>
  */
 @Component
 public class VwapIndicator implements TechnicalIndicator {
@@ -38,13 +48,16 @@ public class VwapIndicator implements TechnicalIndicator {
 
     @Override
     public IndicatorResult calculate(List<KLine> klines, Map<String, Object> params) {
-        double cumulativeTPV = 0; // 累计 (典型价格 × 成交量)
-        double cumulativeVol = 0; // 累计成交量
+        // 有效突破偏离阈值（%），默认 0.2%，可通过 params 配置
+        double deviationPct = getParam(params, "deviationPct", 0.2);
+
+        double cumulativeTPV = 0; // Σ(典型价格 × 成交量)
+        double cumulativeVol = 0; // Σ(成交量)
 
         for (KLine k : klines) {
-            double high = k.getHigh().doubleValue();
-            double low = k.getLow().doubleValue();
-            double close = k.getClose().doubleValue();
+            double high   = k.getHigh().doubleValue();
+            double low    = k.getLow().doubleValue();
+            double close  = k.getClose().doubleValue();
             double volume = k.getVolume().doubleValue();
 
             double typicalPrice = (high + low + close) / 3.0;
@@ -56,25 +69,35 @@ public class VwapIndicator implements TechnicalIndicator {
         double vwap = cumulativeVol > 0 ? cumulativeTPV / cumulativeVol : 0;
 
         double currentClose = klines.get(klines.size() - 1).getClose().doubleValue();
+        // deviation > 0 表示价格在 VWAP 上方，< 0 表示在下方，单位 %
         double deviation = vwap > 0 ? (currentClose - vwap) / vwap * 100 : 0;
 
         SignalSuggestion suggestion;
-        if (currentClose < vwap * 0.998) {
-            suggestion = SignalSuggestion.BUY;  // 价格低于 VWAP，可能被低估
-        } else if (currentClose > vwap * 1.002) {
-            suggestion = SignalSuggestion.SELL; // 价格高于 VWAP，可能被高估
+        if (deviation > 0 && deviation <= deviationPct) {
+            // 有效上破：价格刚突破 VWAP，偏离在阈值内，确认为买入信号
+            suggestion = SignalSuggestion.BUY;
+        } else if (deviation < 0 && deviation >= -deviationPct) {
+            // 有效下破：价格刚跌穿 VWAP，偏离在阈值内，确认为卖出信号
+            suggestion = SignalSuggestion.SELL;
         } else {
+            // 价格与 VWAP 齐平，或偏离超过阈值（强弩之末），观望
             suggestion = SignalSuggestion.NEUTRAL;
         }
 
         return IndicatorResult.builder()
                 .type(IndicatorType.VWAP)
                 .values(Map.of(
-                        "vwap", round(vwap),
+                        "vwap",      round(vwap),
                         "deviation", round(deviation)
                 ))
                 .suggestion(suggestion)
                 .build();
+    }
+
+    private double getParam(Map<String, Object> params, String key, double defaultValue) {
+        if (params == null) return defaultValue;
+        Object val = params.get(key);
+        return val instanceof Number ? ((Number) val).doubleValue() : defaultValue;
     }
 
     private double round(double val) {

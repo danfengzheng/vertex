@@ -78,4 +78,11 @@ public class StrategyController {
         strategyService.disable(id);
         return Result.success();
     }
+
+    @RequiresPermission("strategy:config")
+    @PostMapping("/{id}/copy")
+    @Operation(summary = "复制策略", description = "克隆现有策略的所有配置，生成新策略（默认禁用，名称加(副本)后缀）")
+    public Result<Long> copy(@PathVariable Long id) {
+        return Result.success(strategyService.copy(id));
+    }
 }

@@ -12,6 +12,7 @@
     "cancel": "取消",
     "delete": "删除",
     "edit": "编辑",
+    "copy": "复制",
     "add": "新增",
     "save": "保存",
     "search": "查询",
@@ -225,6 +226,8 @@
       "recentDays": "最近 {{days}} 天",
       "noTradesInPeriod": "该时间段内未产生交易信号",
       "vwapNoParams": "VWAP 无需额外参数，自动使用窗口内K线数据计算",
+      "deviationPct": "突破偏离阈值",
+      "deviationPctTip": "收盘价突破 VWAP 后的最大有效偏离（%），超出则视为强弩之末，输出 NEUTRAL",
       "rsiPeriod": "RSI周期",
       "stochPeriod": "随机周期",
       "kSmooth": "K平滑",
@@ -481,7 +484,9 @@
       "analyzeSubmitted": "分析任务已提交",
       "loadFailed": "加载失败",
       "backtestSuccess": "回测完成",
-      "backtestFailed": "回测执行失败"
+      "backtestFailed": "回测执行失败",
+      "copySuccess": "策略已复制，请修改名称后保存",
+      "copyFailed": "策略复制失败"
     },
     "chain": {
       "scanSubmitted": "扫描任务已提交，约 30 秒后刷新列表",

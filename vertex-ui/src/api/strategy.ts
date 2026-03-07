@@ -68,6 +68,8 @@ export interface StrategyVO {
   enabled: number;
   /** 是否自动交易 0-否 1-是 */
   autoTrade: number;
+  /** 自动交易最低信号强度门槛（0-100） */
+  minSignalStrength?: number;
   /** 交易模式 */
   tradeMode?: TradeMode;
   /** 执行模式 */
@@ -265,6 +267,9 @@ export const strategyApi = {
 
   disable: (id: string): Promise<ApiResponse<void>> =>
     request.post(`/strategy/${id}/disable`),
+
+  copy: (id: string): Promise<ApiResponse<string>> =>
+    request.post(`/strategy/${id}/copy`),
 };
 
 /** 信号管理 API */

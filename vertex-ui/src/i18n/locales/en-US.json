@@ -12,6 +12,7 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "edit": "Edit",
+    "copy": "Copy",
     "add": "Add",
     "save": "Save",
     "search": "Search",
@@ -225,6 +226,8 @@
       "recentDays": "Last {{days}} days",
       "noTradesInPeriod": "No trades generated in this period",
       "vwapNoParams": "VWAP requires no extra parameters, calculated from K-line window automatically",
+      "deviationPct": "Breakout Deviation",
+      "deviationPctTip": "Max valid deviation (%) after price breaks VWAP. Exceeding this is considered overextended and outputs NEUTRAL",
       "rsiPeriod": "RSI Period",
       "stochPeriod": "Stoch Period",
       "kSmooth": "K Smooth",
@@ -482,7 +485,9 @@
       "analyzeSubmitted": "Analysis submitted",
       "loadFailed": "Load failed",
       "backtestSuccess": "Backtest completed",
-      "backtestFailed": "Backtest failed"
+      "backtestFailed": "Backtest failed",
+      "copySuccess": "Strategy copied, please rename before saving",
+      "copyFailed": "Failed to copy strategy"
     },
     "chain": {
       "scanSubmitted": "Scan submitted, refresh list in ~30s",

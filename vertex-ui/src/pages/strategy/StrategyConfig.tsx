@@ -10,6 +10,7 @@ import {
   ReloadOutlined,
   ExperimentOutlined,
   SwapOutlined,
+  CopyOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import {
@@ -160,11 +161,15 @@ const IndicatorParamsFields = ({
         </Form.Item>
       );
     case 'VWAP':
-      // VWAP 无需用户配置参数，使用全部窗口K线计算
       return (
-        <span style={{ color: '#888', fontSize: 12 }}>
-          {t('text.strategy.vwapNoParams')}
-        </span>
+        <Form.Item
+          name={[...prefix, 'params', 'deviationPct']}
+          label={t('text.strategy.deviationPct')}
+          initialValue={0.2}
+          tooltip={t('text.strategy.deviationPctTip')}
+        >
+          <InputNumber min={0.05} max={5} step={0.05} style={{ width: 130 }} addonAfter="%" />
+        </Form.Item>
       );
     case 'STOCH_RSI':
       return (
@@ -415,6 +420,7 @@ export const StrategyConfig = () => {
       interval: record.interval,
       indicatorConfigs: record.indicatorConfigs,
       autoTrade: record.autoTrade ?? 0,
+      minSignalStrength: record.minSignalStrength,
       tradeMode: record.tradeMode,
       executionMode: record.executionMode,
       accountId: record.accountId,
@@ -453,6 +459,23 @@ export const StrategyConfig = () => {
     }
   };
 
+  const handleCopy = async (record: StrategyVO) => {
+    try {
+      const res = await strategyApi.copy(record.id);
+      if (res.data) {
+        // 复制成功后刷新列表，再拉取新策略详情并打开编辑弹窗
+        await loadData();
+        const detail = await strategyApi.getById(res.data);
+        if (detail.data) {
+          handleEdit(detail.data);
+          message.success(t('message.strategy.copySuccess'));
+        }
+      }
+    } catch {
+      message.error(t('message.strategy.copyFailed'));
+    }
+  };
+
   const handleToggleEnabled = async (record: StrategyVO) => {
     try {
       if (record.enabled === 1) {
@@ -485,7 +508,7 @@ export const StrategyConfig = () => {
         CLEARABLE_FIELDS.forEach((key) => {
           if (payload[key] === undefined) payload[key] = null;
         });
-        await strategyApi.update(payload as Parameters<typeof strategyApi.update>[0]);
+        await strategyApi.update(payload as unknown as Parameters<typeof strategyApi.update>[0]);
         message.success(t('message.strategy.updateSuccess'));
       } else {
         await strategyApi.create(values as StrategyCreateDTO);
@@ -570,11 +593,14 @@ export const StrategyConfig = () => {
     {
       title: t('common.operation'),
       key: 'action',
-      width: 220,
+      width: 300,
       render: (_: unknown, record: StrategyVO) => (
         <Space>
           <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             {t('common.edit')}
+          </Button>
+          <Button type="link" icon={<CopyOutlined />} onClick={() => handleCopy(record)}>
+            {t('common.copy')}
           </Button>
           <Button
             type="link"
@@ -750,9 +776,9 @@ export const StrategyConfig = () => {
                           options={INTERVAL_OPTIONS}
                         />
                       </Form.Item>
-                    </Space>
 
-                    <IndicatorParamsFields type={indicatorTypes[index]} prefix={[field.name]} />
+                      <IndicatorParamsFields type={indicatorTypes[index]} prefix={[field.name]} />
+                    </Space>
                   </Card>
                 ))}
 

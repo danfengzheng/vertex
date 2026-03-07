@@ -58,6 +58,7 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setEnabled(0); // 默认禁用
         // 交易配置
         strategy.setAutoTrade(dto.getAutoTrade());
+        strategy.setMinSignalStrength(dto.getMinSignalStrength());
         strategy.setTradeMode(dto.getTradeMode());
         strategy.setExecutionMode(dto.getExecutionMode());
         strategy.setAccountId(dto.getAccountId());
@@ -127,6 +128,60 @@ public class StrategyServiceImpl implements IStrategyService {
             throw new BizException(GlobalError.STRATEGY_NOT_FOUND);
         }
         strategyMapper.deleteById(id);
+    }
+
+    @Override
+    public Long copy(Long id) {
+        Strategy source = strategyMapper.selectById(id);
+        if (source == null) {
+            throw new BizException(GlobalError.STRATEGY_NOT_FOUND);
+        }
+
+        // 生成不重名的副本名称：原名 (副本)、原名 (副本2)、原名 (副本3) …
+        String baseName = source.getName() + " (副本)";
+        String copyName = baseName;
+        int counter = 2;
+        while (strategyMapper.selectCount(new LambdaQueryWrapper<Strategy>()
+                .eq(Strategy::getName, copyName)
+                .eq(Strategy::getDeleted, 0)) > 0) {
+            copyName = baseName + counter++;
+        }
+
+        // 逐字段复制，确保所有配置完整保留
+        Strategy copy = new Strategy();
+        copy.setName(copyName);
+        copy.setDescription(source.getDescription());
+        copy.setExchange(source.getExchange());
+        copy.setSymbol(source.getSymbol());
+        copy.setInterval(source.getInterval());
+        copy.setIndicatorConfigs(source.getIndicatorConfigs());
+        copy.setEnabled(0); // 副本默认禁用，需用户确认后再启用
+
+        // 交易配置
+        copy.setAutoTrade(source.getAutoTrade());
+        copy.setMinSignalStrength(source.getMinSignalStrength());
+        copy.setTradeMode(source.getTradeMode());
+        copy.setExecutionMode(source.getExecutionMode());
+        copy.setAccountId(source.getAccountId());
+        copy.setPositionSizing(source.getPositionSizing());
+        copy.setTradeQuantity(source.getTradeQuantity());
+        copy.setPositionRatio(source.getPositionRatio());
+        copy.setInitialCapital(source.getInitialCapital());
+        copy.setStopLossPct(source.getStopLossPct());
+        copy.setTakeProfitPct(source.getTakeProfitPct());
+        copy.setFeeRate(source.getFeeRate());
+
+        // 合约配置
+        copy.setLeverage(source.getLeverage());
+        copy.setMarginType(source.getMarginType());
+
+        // ATR 止损止盈
+        copy.setAtrStopMultiplier(source.getAtrStopMultiplier());
+        copy.setAtrTakeProfitMultiplier(source.getAtrTakeProfitMultiplier());
+
+        strategyMapper.insert(copy);
+        log.info("策略复制成功: 源={} → 副本={} (id={})", source.getName(), copyName, copy.getId());
+        return copy.getId();
     }
 
     @Override
