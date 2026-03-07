@@ -55,10 +55,10 @@ public class KLinePartialBarBuilder {
         // 当前高周期的起始时间（向下取整到周期边界）
         long periodStart = (triggerOpenTime / intervalMillis) * intervalMillis;
 
-        // 筛选属于当前高周期且 openTime <= triggerOpenTime 的主周期已收盘 bars
+        // 筛选属于当前高周期且 openTime <= triggerOpenTime 的主周期已收盘 bars。
+        // 调用方保证 primaryKlines 已按 openTime 升序排列，无需再次排序。
         List<KLine> periodBars = primaryKlines.stream()
                 .filter(k -> k.getOpenTime() >= periodStart && k.getOpenTime() <= triggerOpenTime)
-                .sorted(Comparator.comparingLong(KLine::getOpenTime))
                 .toList();
 
         if (periodBars.isEmpty()) {

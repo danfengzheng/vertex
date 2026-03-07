@@ -153,8 +153,19 @@ public class BacktestService {
 
         // 滑动窗口模拟（以策略主周期为时间轴）
         // 起始索引取 warmupSize-1，确保首次评估时就能取到完整的预热窗口
-        int mainWarmupSize0 = Math.min(mainRequiredDataPoints * warmup + 10, maxKlineHistory);
-        int startIdx = Math.max(mainRequiredDataPoints, mainWarmupSize0 - 1);
+        int mainWarmupSize = Math.min(mainRequiredDataPoints * warmup + 10, maxKlineHistory);
+        int startIdx = Math.max(mainRequiredDataPoints, mainWarmupSize - 1);
+
+        // ── 次级周期单调推进指针 ────────────────────────────────────────────────────
+        // currentKline.getOpenTime() 严格单调递增，已收盘/已处理的右边界只会前进，
+        // 无需每轮从头全扫 ivList（O(n×m) → O(n+m)）。
+        Map<KLineInterval, Integer> secPointers = new HashMap<>();
+        for (KLineInterval iv : allKlinesByInterval.keySet()) {
+            if (!iv.equals(strategy.getInterval())) {
+                secPointers.put(iv, 0);
+            }
+        }
+
         for (int i = startIdx; i < klines.size(); i++) {
             KLine currentKline = klines.get(i);
 
@@ -164,9 +175,10 @@ public class BacktestService {
             }
 
             // 构建多周期 K 线窗口，使用 warmupMultiplier 倍数预热，与 StrategyEngineService 一致
-            int mainWarmupSize = Math.min(mainRequiredDataPoints * warmup + 10, maxKlineHistory);
             Map<KLineInterval, List<KLine>> klinesByInterval = new HashMap<>();
             klinesByInterval.put(strategy.getInterval(), klines.subList(Math.max(0, i - mainWarmupSize + 1), i + 1));
+
+            long triggerOpenTime = currentKline.getOpenTime();
 
             for (Map.Entry<KLineInterval, List<KLine>> e : allKlinesByInterval.entrySet()) {
                 KLineInterval secInterval = e.getKey();
@@ -175,23 +187,41 @@ public class BacktestService {
                 int req = requiredByInterval.getOrDefault(secInterval, 50);
                 int fetchSize = Math.min(req * warmup + 10, maxKlineHistory);
 
-                if (secInterval.getMillis() > strategy.getInterval().getMillis()) {
-                    // 高周期：使用 closeTime 过滤，只保留在触发时刻前已完整收盘的 bar，
-                    // 消除 Lookahead Bias（原逻辑 openTime <= triggerTime 会纳入含未来数据的当前周期完整 bar）
-                    List<KLine> closedWindow = ivList.stream()
-                            .filter(k -> k.getCloseTime() != null
-                                    && k.getCloseTime() < currentKline.getOpenTime())
-                            .collect(Collectors.collectingAndThen(Collectors.toList(), list -> {
-                                int from = Math.max(0, list.size() - fetchSize);
-                                return list.subList(from, list.size());
-                            }));
+                int ptr = secPointers.getOrDefault(secInterval, 0);
 
-                    // 从主周期 bars 聚合当前高周期的 partial bar（纳入当前周期实时成交量/价格）
-                    // 与 StrategyEngineService 使用完全相同的聚合逻辑，保证回测/实盘信号一致
+                if (secInterval.getMillis() > strategy.getInterval().getMillis()) {
+                    // 高周期：推进已收盘指针（closeTime < triggerOpenTime）
+                    // 消除 Lookahead Bias：不纳入尚未完整收盘的 bar
+                    while (ptr < ivList.size()) {
+                        KLine k = ivList.get(ptr);
+                        if (k.getCloseTime() != null && k.getCloseTime() < triggerOpenTime) {
+                            ptr++;
+                        } else {
+                            break;
+                        }
+                    }
+                    secPointers.put(secInterval, ptr);
+                    // closedWindow = 最近 fetchSize 根已收盘高周期 bar（O(1) subList 视图）
+                    List<KLine> closedWindow = ivList.subList(Math.max(0, ptr - fetchSize), ptr);
+
+                    // ── buildPartialBar 优化：O(n²) → O(log n) ───────────────────────
+                    // 原实现传入 klines.subList(0, i+1)，buildPartialBar 内部每轮全扫 i+1 个元素，
+                    // 造成总扫描量 1+2+…+n = O(n²)（30天1m约 9 亿次操作）。
+                    // 优化：二分查找当前高周期的 periodStart 在主周期 klines 中的起始索引，
+                    // 仅传入本周期内的切片（最多 secInterval/primaryInterval 根，如 1h/1m=60 根），
+                    // 且切片已按 openTime 升序，buildPartialBar 无需再排序。
+                    long secIntervalMs = secInterval.getMillis();
+                    long periodStart = (triggerOpenTime / secIntervalMs) * secIntervalMs;
+                    int lo = 0, hi = i;
+                    while (lo < hi) {
+                        int mid = (lo + hi) >>> 1;
+                        if (klines.get(mid).getOpenTime() < periodStart) lo = mid + 1;
+                        else hi = mid;
+                    }
                     KLine partialBar = KLinePartialBarBuilder.buildPartialBar(
-                            klines.subList(0, i + 1),   // 截止到当前 bar 的全量主周期数据
+                            klines.subList(lo, i + 1),   // 仅含当前高周期内的主周期 bars，已升序
                             secInterval,
-                            currentKline.getOpenTime(),
+                            triggerOpenTime,
                             strategy.getExchange(),
                             strategy.getSymbol());
 
@@ -203,13 +233,13 @@ public class BacktestService {
                         klinesByInterval.put(secInterval, windowWithPartial);
                     }
                 } else {
-                    // 小周期或相同周期：保留原有逻辑
-                    List<KLine> window = ivList.stream()
-                            .filter(k -> k.getOpenTime() <= currentKline.getOpenTime())
-                            .collect(Collectors.collectingAndThen(Collectors.toList(), list -> {
-                                int from = Math.max(0, list.size() - fetchSize);
-                                return list.subList(from, list.size());
-                            }));
+                    // 小周期：推进已处理指针（openTime <= triggerOpenTime）
+                    while (ptr < ivList.size() && ivList.get(ptr).getOpenTime() <= triggerOpenTime) {
+                        ptr++;
+                    }
+                    secPointers.put(secInterval, ptr);
+                    // window = 最近 fetchSize 根小周期 bar（O(1) subList 视图）
+                    List<KLine> window = ivList.subList(Math.max(0, ptr - fetchSize), ptr);
                     if (window.size() >= req) {
                         klinesByInterval.put(secInterval, window);
                     }
