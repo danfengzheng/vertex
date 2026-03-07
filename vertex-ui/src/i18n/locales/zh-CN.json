@@ -209,6 +209,11 @@
       "quantity": "数量",
       "profit": "盈亏",
       "profitPercent": "收益率",
+      "exitReason": "平仓原因",
+      "exitReasonSignal": "信号",
+      "exitReasonStopLoss": "止损",
+      "exitReasonTakeProfit": "止盈",
+      "exitReasonEnd": "结束",
       "connected": "已连接",
       "disconnected": "未连接",
       "runStrategy": "运行策略",
@@ -368,7 +373,8 @@
       "free": "可用",
       "locked": "冻结",
       "total": "总计",
-      "noData": "暂无数据"
+      "noData": "暂无数据",
+      "marketType": "账户类型"
     }
   },
   "placeholder": {

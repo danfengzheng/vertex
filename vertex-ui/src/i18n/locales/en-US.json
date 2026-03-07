@@ -209,6 +209,11 @@
       "quantity": "Quantity",
       "profit": "Profit",
       "profitPercent": "Return %",
+      "exitReason": "Exit Reason",
+      "exitReasonSignal": "Signal",
+      "exitReasonStopLoss": "Stop Loss",
+      "exitReasonTakeProfit": "Take Profit",
+      "exitReasonEnd": "End",
       "connected": "Connected",
       "disconnected": "Disconnected",
       "runStrategy": "Run Strategy",
@@ -368,7 +373,8 @@
       "free": "Available",
       "locked": "Locked",
       "total": "Total",
-      "noData": "No Data"
+      "noData": "No Data",
+      "marketType": "Account Type"
     }
   },
   "placeholder": {

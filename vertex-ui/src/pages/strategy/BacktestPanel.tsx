@@ -230,6 +230,29 @@ export const BacktestPanel = ({ strategyId, strategyName, visible, onClose }: Ba
         );
       },
     },
+    {
+      title: t('text.strategy.exitReason'),
+      dataIndex: 'exitReason',
+      key: 'exitReason',
+      width: 90,
+      render: (v: string) => {
+        const colorMap: Record<string, string> = {
+          SIGNAL:           'blue',
+          STOP_LOSS:        'error',
+          TAKE_PROFIT:      'success',
+          END_OF_BACKTEST:  'default',
+        };
+        const labelKey: Record<string, string> = {
+          SIGNAL:           'text.strategy.exitReasonSignal',
+          STOP_LOSS:        'text.strategy.exitReasonStopLoss',
+          TAKE_PROFIT:      'text.strategy.exitReasonTakeProfit',
+          END_OF_BACKTEST:  'text.strategy.exitReasonEnd',
+        };
+        return v
+          ? <Tag color={colorMap[v] ?? 'default'}>{t(labelKey[v] ?? v)}</Tag>
+          : '-';
+      },
+    },
   ];
 
   return (

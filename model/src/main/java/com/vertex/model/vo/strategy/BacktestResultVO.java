@@ -77,6 +77,8 @@ public class BacktestResultVO implements Serializable {
         private BigDecimal quantity;
         private BigDecimal profit;
         private BigDecimal profitPercent;
+        /** 平仓原因：SIGNAL | STOP_LOSS | TAKE_PROFIT | END_OF_BACKTEST */
+        private String exitReason;
     }
 
     @Data

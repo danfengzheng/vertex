@@ -211,6 +211,8 @@ export interface TradeRecord {
   quantity: string;
   profit: string;
   profitPercent: string;
+  /** 平仓原因：SIGNAL | STOP_LOSS | TAKE_PROFIT | END_OF_BACKTEST */
+  exitReason?: string;
 }
 
 /** 资金曲线数据点 */

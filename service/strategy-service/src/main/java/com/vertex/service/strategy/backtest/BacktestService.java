@@ -142,6 +142,9 @@ public class BacktestService {
         BigDecimal entryPrice = BigDecimal.ZERO;
         Long entryTime = null;
         boolean inPosition = false;
+        // 止损止盈触发价（开仓时按策略配置计算，null 表示未配置）
+        BigDecimal stopLossPrice = null;
+        BigDecimal takeProfitPrice = null;
 
         List<TradeRecord> trades = new ArrayList<>();
         List<EquityPoint> equityCurve = new ArrayList<>();
@@ -247,8 +250,57 @@ public class BacktestService {
             }
             Signal signal = signalGenerator.evaluate(strategy, configs, klinesByInterval);
 
-            // 当前权益
+            // 当前 bar 收盘价（用于权益计算与信号平仓）
             BigDecimal currentPrice = currentKline.getClose();
+
+            // ── 止损止盈检查（优先于信号，使用 K 线 High/Low 判断触发）───────────────────
+            // 同一根 K 线同时触及止损和止盈时，止损优先（保守原则）
+            boolean closedByStopOrTp = false;
+            if (inPosition) {
+                boolean stopHit = stopLossPrice != null
+                        && currentKline.getLow() != null
+                        && currentKline.getLow().compareTo(stopLossPrice) <= 0;
+                boolean tpHit = !stopHit && takeProfitPrice != null
+                        && currentKline.getHigh() != null
+                        && currentKline.getHigh().compareTo(takeProfitPrice) >= 0;
+
+                if (stopHit || tpHit) {
+                    BigDecimal exitPrice = stopHit ? stopLossPrice : takeProfitPrice;
+                    String exitReason  = stopHit ? "STOP_LOSS" : "TAKE_PROFIT";
+
+                    BigDecimal exitValue = position.multiply(exitPrice);
+                    BigDecimal fee       = exitValue.multiply(config.getFeeRate());
+                    BigDecimal netValue  = exitValue.subtract(fee);
+                    BigDecimal cost      = position.multiply(entryPrice);
+                    BigDecimal profit    = netValue.subtract(cost);
+                    BigDecimal profitPct = cost.compareTo(BigDecimal.ZERO) > 0
+                            ? profit.divide(cost, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+                            : BigDecimal.ZERO;
+
+                    trades.add(TradeRecord.builder()
+                            .entryTime(entryTime)
+                            .exitTime(currentKline.getOpenTime())
+                            .type("LONG")
+                            .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
+                            .exitPrice(exitPrice.setScale(8, RoundingMode.HALF_UP))
+                            .quantity(position.setScale(8, RoundingMode.HALF_UP))
+                            .profit(profit.setScale(2, RoundingMode.HALF_UP))
+                            .profitPercent(profitPct.setScale(2, RoundingMode.HALF_UP))
+                            .exitReason(exitReason)
+                            .build());
+
+                    capital        = capital.add(netValue);
+                    position       = BigDecimal.ZERO;
+                    inPosition     = false;
+                    stopLossPrice  = null;
+                    takeProfitPrice = null;
+                    closedByStopOrTp = true;
+                    // 止损/止盈当根 K 线权益以出场价结算
+                    currentPrice = exitPrice;
+                }
+            }
+
+            // 当前权益（止损/止盈出场后 inPosition=false，capital 已更新）
             BigDecimal currentEquity = inPosition
                     ? capital.add(position.multiply(currentPrice))
                     : capital;
@@ -278,20 +330,59 @@ public class BacktestService {
                 }
             }
 
-            // 根据信号执行交易
-            if (!inPosition && signal.getSignalType() == SignalType.BUY) {
+            // 根据信号执行交易（止损/止盈出场后本根 K 线不再重新开仓）
+            if (!inPosition && !closedByStopOrTp && signal.getSignalType() == SignalType.BUY) {
                 // 开仓
                 BigDecimal tradeAmount = capital.multiply(config.getPositionRatio());
                 BigDecimal fee = tradeAmount.multiply(config.getFeeRate());
                 BigDecimal netAmount = tradeAmount.subtract(fee);
-                position = netAmount.divide(currentPrice, 8, RoundingMode.DOWN);
-                capital = capital.subtract(tradeAmount);
+                position  = netAmount.divide(currentPrice, 8, RoundingMode.DOWN);
+                capital   = capital.subtract(tradeAmount);
                 entryPrice = currentPrice;
-                entryTime = currentKline.getOpenTime();
+                entryTime  = currentKline.getOpenTime();
                 inPosition = true;
 
+                // ── 计算止损止盈触发价（与实盘 TradeExecutionService 逻辑一致）──────────
+                // 优先级：ATR > 固定% > 不设置
+                stopLossPrice   = null;
+                takeProfitPrice = null;
+                boolean hasAtrStop = strategy.getAtrStopMultiplier() != null
+                        && strategy.getAtrStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
+                boolean hasPctStop = strategy.getStopLossPct() != null;
+                boolean hasAtrTp   = strategy.getAtrTakeProfitMultiplier() != null
+                        && strategy.getAtrTakeProfitMultiplier().compareTo(BigDecimal.ZERO) > 0;
+                boolean hasPctTp   = strategy.getTakeProfitPct() != null;
+
+                if (hasAtrStop || hasAtrTp) {
+                    BigDecimal atr = computeAtrFromWindow(klines, i, 14);
+                    if (atr != null && atr.compareTo(BigDecimal.ZERO) > 0) {
+                        if (hasAtrStop) {
+                            stopLossPrice = entryPrice
+                                    .subtract(atr.multiply(strategy.getAtrStopMultiplier()))
+                                    .setScale(8, RoundingMode.HALF_UP);
+                        }
+                        if (hasAtrTp) {
+                            takeProfitPrice = entryPrice
+                                    .add(atr.multiply(strategy.getAtrTakeProfitMultiplier()))
+                                    .setScale(8, RoundingMode.HALF_UP);
+                        }
+                    }
+                }
+                if (stopLossPrice == null && hasPctStop) {
+                    BigDecimal pct = strategy.getStopLossPct()
+                            .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+                    stopLossPrice = entryPrice.multiply(BigDecimal.ONE.subtract(pct))
+                            .setScale(8, RoundingMode.HALF_UP);
+                }
+                if (takeProfitPrice == null && hasPctTp) {
+                    BigDecimal pct = strategy.getTakeProfitPct()
+                            .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+                    takeProfitPrice = entryPrice.multiply(BigDecimal.ONE.add(pct))
+                            .setScale(8, RoundingMode.HALF_UP);
+                }
+
             } else if (inPosition && signal.getSignalType() == SignalType.SELL) {
-                // 平仓
+                // 信号平仓
                 BigDecimal exitValue = position.multiply(currentPrice);
                 BigDecimal fee = exitValue.multiply(config.getFeeRate());
                 BigDecimal netValue = exitValue.subtract(fee);
@@ -311,11 +402,14 @@ public class BacktestService {
                         .quantity(position.setScale(8, RoundingMode.HALF_UP))
                         .profit(profit.setScale(2, RoundingMode.HALF_UP))
                         .profitPercent(profitPercent.setScale(2, RoundingMode.HALF_UP))
+                        .exitReason("SIGNAL")
                         .build());
 
-                capital = capital.add(netValue);
-                position = BigDecimal.ZERO;
-                inPosition = false;
+                capital         = capital.add(netValue);
+                position        = BigDecimal.ZERO;
+                inPosition      = false;
+                stopLossPrice   = null;
+                takeProfitPrice = null;
             }
         }
 
@@ -341,6 +435,7 @@ public class BacktestService {
                     .quantity(position.setScale(8, RoundingMode.HALF_UP))
                     .profit(profit.setScale(2, RoundingMode.HALF_UP))
                     .profitPercent(profitPercent.setScale(2, RoundingMode.HALF_UP))
+                    .exitReason("END_OF_BACKTEST")
                     .build());
 
             position = BigDecimal.ZERO;
@@ -441,5 +536,43 @@ public class BacktestService {
                 .trades(trades)
                 .equityCurve(equityCurve)
                 .build();
+    }
+
+    /**
+     * 从主周期K线窗口内联计算 ATR（Wilder 平滑，period=14）。
+     * <p>
+     * 复用 TradeExecutionService 中相同的算法，避免跨服务依赖。
+     * 取 barIdx 前 period+1 根（含当前 bar）计算 True Range，再做 Wilder 平滑。
+     *
+     * @param klines  全量主周期K线（升序）
+     * @param barIdx  当前 bar 在 klines 中的索引
+     * @param period  ATR 周期（通常为 14）
+     * @return ATR 值；若数据不足则返回 null
+     */
+    private BigDecimal computeAtrFromWindow(List<KLine> klines, int barIdx, int period) {
+        // 需要 period+1 根才能算出 period 个 TR
+        int from = Math.max(0, barIdx - period);
+        List<KLine> window = klines.subList(from, barIdx + 1);
+        if (window.size() < 2) return null;
+
+        double[] trueRanges = new double[window.size() - 1];
+        for (int j = 1; j < window.size(); j++) {
+            KLine cur  = window.get(j);
+            KLine prev = window.get(j - 1);
+            double highLow   = cur.getHigh().doubleValue() - cur.getLow().doubleValue();
+            double highClose = Math.abs(cur.getHigh().doubleValue() - prev.getClose().doubleValue());
+            double lowClose  = Math.abs(cur.getLow().doubleValue()  - prev.getClose().doubleValue());
+            trueRanges[j - 1] = Math.max(highLow, Math.max(highClose, lowClose));
+        }
+
+        int calcPeriod = Math.min(period, trueRanges.length);
+        double atr = 0;
+        for (int j = 0; j < calcPeriod; j++) atr += trueRanges[j];
+        atr /= calcPeriod;
+        // Wilder 平滑
+        for (int j = calcPeriod; j < trueRanges.length; j++) {
+            atr = (atr * (period - 1) + trueRanges[j]) / period;
+        }
+        return BigDecimal.valueOf(atr);
     }
 }
