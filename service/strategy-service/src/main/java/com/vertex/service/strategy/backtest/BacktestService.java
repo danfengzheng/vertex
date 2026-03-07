@@ -98,6 +98,19 @@ public class BacktestService {
             allKlinesByInterval.put(iv, ivKlines);
         }
 
+        // 若策略配置了独立的 ATR 止损周期，且该周期尚未被指标加载，则额外补充
+        KLineInterval atrIv = strategy.getAtrInterval();
+        if (atrIv != null && !allKlinesByInterval.containsKey(atrIv)) {
+            int atrReq = 50; // ATR14 × 3 + 缓冲
+            long ivMillis = atrIv.getMillis();
+            long prefetchStart = config.getStartTime() - ivMillis * (atrReq * mainWarmup + 10);
+            List<KLine> ivKlines = klineStore.query(
+                    strategy.getExchange(), strategy.getSymbol(), atrIv,
+                    prefetchStart, config.getEndTime(), Integer.MAX_VALUE, true);
+            allKlinesByInterval.put(atrIv, ivKlines);
+            requiredByInterval.put(atrIv, atrReq);
+        }
+
         if (allIntervals.size() > 1) {
             log.info("Backtest [{}] multi-interval mode: {}", strategy.getName(),
                     allIntervals.stream().map(KLineInterval::getCode).sorted().toList());
@@ -136,6 +149,10 @@ public class BacktestService {
 
         int maxKlineHistory = properties.getEngine().getMaxKlineHistory();
         int warmup = properties.getEngine().getWarmupMultiplier();
+
+        // ATR 止损专用周期（与实盘 TradeExecutionService 保持一致）
+        KLineInterval effectiveAtrInterval = strategy.getAtrInterval() != null
+                ? strategy.getAtrInterval() : strategy.getInterval();
 
         BigDecimal capital = config.getInitialCapital();
         BigDecimal position = BigDecimal.ZERO;
@@ -347,8 +364,10 @@ public class BacktestService {
                 boolean hasAtrPositionSizing = strategy.getAtrStopMultiplier() != null
                         && strategy.getAtrStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
                 if (hasAtrPositionSizing) {
-                    BigDecimal atr14 = computeAtrFromWindow(klines, i, 14);
-                    BigDecimal atr50 = computeAtrFromWindow(klines, i, 50);
+                    List<KLine> atrWindow = klinesByInterval.getOrDefault(
+                            effectiveAtrInterval, klinesByInterval.get(strategy.getInterval()));
+                    BigDecimal atr14 = computeAtrFromList(atrWindow, 14);
+                    BigDecimal atr50 = computeAtrFromList(atrWindow, 50);
                     if (atr14 != null && atr50 != null && atr14.compareTo(BigDecimal.ZERO) > 0) {
                         // 当前短期 ATR 高于长期均值 → 市场更波动 → 缩小头寸
                         double coeff = atr50.doubleValue() / atr14.doubleValue();
@@ -377,7 +396,9 @@ public class BacktestService {
                 boolean hasPctTp   = strategy.getTakeProfitPct() != null;
 
                 if (hasAtrStop || hasAtrTp) {
-                    BigDecimal atr = computeAtrFromWindow(klines, i, 14);
+                    List<KLine> atrWindow = klinesByInterval.getOrDefault(
+                            effectiveAtrInterval, klinesByInterval.get(strategy.getInterval()));
+                    BigDecimal atr = computeAtrFromList(atrWindow, 14);
                     if (atr != null && atr.compareTo(BigDecimal.ZERO) > 0) {
                         if (hasAtrStop) {
                             stopLossPrice = entryPrice
@@ -573,8 +594,8 @@ public class BacktestService {
      * @return ATR 值；若数据不足则返回 null
      */
     private BigDecimal computeAtrFromWindow(List<KLine> klines, int barIdx, int period) {
-        // 需要 period+1 根才能算出 period 个 TR
-        int from = Math.max(0, barIdx - period);
+        // 取 period×3+1 根以确保 Wilder 平滑有足够预热数据
+        int from = Math.max(0, barIdx - period * 3);
         List<KLine> window = klines.subList(from, barIdx + 1);
         if (window.size() < 2) return null;
 
@@ -593,6 +614,41 @@ public class BacktestService {
         for (int j = 0; j < calcPeriod; j++) atr += trueRanges[j];
         atr /= calcPeriod;
         // Wilder 平滑
+        for (int j = calcPeriod; j < trueRanges.length; j++) {
+            atr = (atr * (period - 1) + trueRanges[j]) / period;
+        }
+        return BigDecimal.valueOf(atr);
+    }
+
+    /**
+     * 从任意周期K线列表末尾计算 ATR（Wilder 平滑）。
+     * 用于支持 atrInterval 时从非主周期K线窗口中取数。
+     *
+     * @param klines 已按 openTime 升序排列的K线列表（来自 klinesByInterval）
+     * @param period ATR 周期（通常为 14）
+     * @return ATR 值；若数据不足则返回 null
+     */
+    private BigDecimal computeAtrFromList(List<KLine> klines, int period) {
+        if (klines == null || klines.size() < 2) return null;
+        // 取末尾 period×3+1 根以保证 Wilder 平滑预热充分
+        int from = Math.max(0, klines.size() - (period * 3 + 1));
+        List<KLine> window = klines.subList(from, klines.size());
+        if (window.size() < 2) return null;
+
+        double[] trueRanges = new double[window.size() - 1];
+        for (int j = 1; j < window.size(); j++) {
+            KLine cur  = window.get(j);
+            KLine prev = window.get(j - 1);
+            double highLow   = cur.getHigh().doubleValue() - cur.getLow().doubleValue();
+            double highClose = Math.abs(cur.getHigh().doubleValue() - prev.getClose().doubleValue());
+            double lowClose  = Math.abs(cur.getLow().doubleValue()  - prev.getClose().doubleValue());
+            trueRanges[j - 1] = Math.max(highLow, Math.max(highClose, lowClose));
+        }
+
+        int calcPeriod = Math.min(period, trueRanges.length);
+        double atr = 0;
+        for (int j = 0; j < calcPeriod; j++) atr += trueRanges[j];
+        atr /= calcPeriod;
         for (int j = calcPeriod; j < trueRanges.length; j++) {
             atr = (atr * (period - 1) + trueRanges[j]) / period;
         }

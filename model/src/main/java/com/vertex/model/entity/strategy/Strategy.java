@@ -136,4 +136,12 @@ public class Strategy extends BaseEntity {
     /** 阶段4：追踪距离倍数（如 2.0），止损 = 最优价格 ∓ ATR × 此值 */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal trailingDistanceMultiplier;
+
+    /**
+     * ATR止损专用K线周期（可选）。
+     * 未设置时默认使用 strategy.interval。
+     * 当主周期为 1m 但指标全用高周期时，可在此单独指定 ATR 计算周期（如 15m）。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private KLineInterval atrInterval;
 }

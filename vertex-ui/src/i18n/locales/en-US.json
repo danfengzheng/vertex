@@ -328,6 +328,8 @@
       "trailingActivationMultiplierTip": "Activate trailing stop logic when profit exceeds N×ATR",
       "trailingDistanceMultiplier": "Trailing Distance",
       "trailingDistanceMultiplierTip": "Trailing stop follows N×ATR below the highest price (long) or above the lowest price (short)",
+      "atrInterval": "ATR Interval",
+      "atrIntervalTip": "K-line interval used for ATR stop-loss calculation. Leave blank to use the strategy's primary interval. When the primary bar is 1m but all indicators use 15m+, set this to match the indicator timeframe (e.g. 15m)",
       "feeRate": "Fee Rate",
       "feeRateTip": "e.g. 0.001 = 0.1%, aligned with backtest parameters",
       "symbol": "Symbol",

@@ -439,6 +439,7 @@ export const StrategyConfig = () => {
       breakevenActivationMultiplier: record.breakevenActivationMultiplier,
       trailingActivationMultiplier: record.trailingActivationMultiplier,
       trailingDistanceMultiplier: record.trailingDistanceMultiplier,
+      atrInterval: record.atrInterval ?? undefined,
     });
     setIndicatorTypes(record.indicatorConfigs.map((c) => c.indicatorType));
     setAutoTradeEnabled(record.autoTrade === 1);
@@ -509,6 +510,7 @@ export const StrategyConfig = () => {
           'feeRate', 'atrStopMultiplier', 'atrTakeProfitMultiplier',
           'initialStopMultiplier', 'breakevenActivationMultiplier',
           'trailingActivationMultiplier', 'trailingDistanceMultiplier',
+          'atrInterval',
         ] as const;
         const payload: Record<string, unknown> = { id: editingId, ...values };
         CLEARABLE_FIELDS.forEach((key) => {
@@ -1014,6 +1016,18 @@ export const StrategyConfig = () => {
                   tooltip={t('text.trading.trailingDistanceMultiplierTip')}
                 >
                   <InputNumber min={0.1} max={20} step={0.1} style={{ width: 150 }} addonAfter="× ATR" placeholder="2.0" />
+                </Form.Item>
+                <Form.Item
+                  name="atrInterval"
+                  label={t('text.trading.atrInterval')}
+                  tooltip={t('text.trading.atrIntervalTip')}
+                >
+                  <Select
+                    allowClear
+                    style={{ width: 120 }}
+                    placeholder={t('placeholder.strategy.interval')}
+                    options={INTERVAL_OPTIONS}
+                  />
                 </Form.Item>
               </Space>
             </>

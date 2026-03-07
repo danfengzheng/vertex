@@ -75,6 +75,7 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setBreakevenActivationMultiplier(dto.getBreakevenActivationMultiplier());
         strategy.setTrailingActivationMultiplier(dto.getTrailingActivationMultiplier());
         strategy.setTrailingDistanceMultiplier(dto.getTrailingDistanceMultiplier());
+        strategy.setAtrInterval(dto.getAtrInterval());
         strategyMapper.insert(strategy);
         return strategy.getId();
     }
@@ -125,6 +126,7 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setBreakevenActivationMultiplier(dto.getBreakevenActivationMultiplier());
         strategy.setTrailingActivationMultiplier(dto.getTrailingActivationMultiplier());
         strategy.setTrailingDistanceMultiplier(dto.getTrailingDistanceMultiplier());
+        strategy.setAtrInterval(dto.getAtrInterval());
 
         strategyMapper.updateById(strategy);
     }
@@ -186,6 +188,13 @@ public class StrategyServiceImpl implements IStrategyService {
         // ATR 止损止盈
         copy.setAtrStopMultiplier(source.getAtrStopMultiplier());
         copy.setAtrTakeProfitMultiplier(source.getAtrTakeProfitMultiplier());
+
+        // 移动ATR止损
+        copy.setInitialStopMultiplier(source.getInitialStopMultiplier());
+        copy.setBreakevenActivationMultiplier(source.getBreakevenActivationMultiplier());
+        copy.setTrailingActivationMultiplier(source.getTrailingActivationMultiplier());
+        copy.setTrailingDistanceMultiplier(source.getTrailingDistanceMultiplier());
+        copy.setAtrInterval(source.getAtrInterval());
 
         strategyMapper.insert(copy);
         log.info("策略复制成功: 源={} → 副本={} (id={})", source.getName(), copyName, copy.getId());

@@ -703,9 +703,11 @@ public class TradeExecutionService {
         boolean isShort = position.getSide() == PositionSide.SHORT;
 
         // ── 移动ATR止损：四参数联动，优先级最高 ──────────────
+        KLineInterval effectiveAtrInterval = strategy.getAtrInterval() != null
+                ? strategy.getAtrInterval() : strategy.getInterval();
         if (hasTrailingStop) {
             BigDecimal atrValue = computeAtr(
-                    strategy.getExchange(), strategy.getSymbol(), strategy.getInterval(), 14);
+                    strategy.getExchange(), strategy.getSymbol(), effectiveAtrInterval, 14);
             if (atrValue != null && atrValue.compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal atrOffset = atrValue.multiply(strategy.getInitialStopMultiplier());
                 BigDecimal stopLoss = isShort
@@ -726,7 +728,7 @@ public class TradeExecutionService {
         } else if (hasAtrStop || hasAtrTp) {
             // ── 固定ATR止损/止盈 ──────────────────────────────
             BigDecimal atrValue = computeAtr(
-                    strategy.getExchange(), strategy.getSymbol(), strategy.getInterval(), 14);
+                    strategy.getExchange(), strategy.getSymbol(), effectiveAtrInterval, 14);
 
             if (hasAtrStop && atrValue != null && atrValue.compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal atrOffset = atrValue.multiply(strategy.getAtrStopMultiplier());
@@ -799,7 +801,8 @@ public class TradeExecutionService {
             try {
                 boolean isShort = position.getSide() == PositionSide.SHORT;
                 StopLossStage stage = position.getStopLossStage();
-                if (stage == null) stage = StopLossStage.INITIAL;
+                // stage == null 表示该持仓不是追踪止损模式（非本功能管辖），直接跳过
+                if (stage == null) continue;
 
                 switch (stage) {
                     case INITIAL -> evaluateBreakeven(position, strategy, currentPrice, atrValue, isShort);
@@ -910,9 +913,10 @@ public class TradeExecutionService {
      */
     private BigDecimal computeAtr(String exchange, String symbol, KLineInterval interval, int period) {
         try {
-            // 多取 1 根用于计算 True Range（需要 prevClose）
+            // 多取 3 倍 period：前 period 根用作 Wilder 平滑种子，再 period 根用于充分预热，
+            // 最后 1 根用于计算 True Range（需要 prevClose）。
             List<KLine> klines = klineStore.query(
-                    exchange, symbol, interval, null, null, period + 1, true);
+                    exchange, symbol, interval, null, null, period * 3 + 1, true);
             if (klines == null || klines.size() < 2) {
                 log.warn("[ATR] Insufficient kline data for {} {} {}: got {}",
                         exchange, symbol, interval, klines == null ? 0 : klines.size());

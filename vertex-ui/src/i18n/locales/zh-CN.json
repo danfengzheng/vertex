@@ -328,6 +328,8 @@
       "trailingActivationMultiplierTip": "当价格盈利超过 N×ATR 时，启动追踪逻辑",
       "trailingDistanceMultiplier": "追踪距离倍数",
       "trailingDistanceMultiplierTip": "追踪止损始终跟随在最高价（多）/最低价（空）的 N×ATR 处",
+      "atrInterval": "ATR计算周期",
+      "atrIntervalTip": "ATR止损使用的K线周期，留空则使用策略主周期。当主周期为 1m 但指标全部使用 15m+ 时，建议在此指定 ATR 周期（如 15m）以匹配指标维度",
       "feeRate": "手续费率",
       "feeRateTip": "如 0.001 表示 0.1%，与回测参数保持一致",
       "symbol": "交易对",

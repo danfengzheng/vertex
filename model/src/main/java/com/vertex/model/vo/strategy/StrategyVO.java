@@ -65,6 +65,9 @@ public class StrategyVO implements Serializable {
     private BigDecimal trailingActivationMultiplier;
     private BigDecimal trailingDistanceMultiplier;
 
+    /** ATR止损专用K线周期（留空则使用策略默认周期） */
+    private KLineInterval atrInterval;
+
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

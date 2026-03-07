@@ -265,12 +265,32 @@ public class StrategyEngineService {
         if (tradeExecutionListener != null && strategy.getInitialStopMultiplier() != null
                 && strategy.getInitialStopMultiplier().compareTo(BigDecimal.ZERO) > 0) {
             try {
-                List<KLine> primaryKlines = klinesByInterval.get(strategy.getInterval());
-                if (primaryKlines != null && !primaryKlines.isEmpty()) {
-                    BigDecimal atrValue = computeAtrFromKlines(primaryKlines, 14);
-                    if (atrValue != null) {
-                        tradeExecutionListener.onKLineClose(strategy, atrValue, primaryKlines);
+                // 确定 ATR 使用的 K 线周期：优先 atrInterval，回退到主周期
+                KLineInterval effectiveAtrInterval = strategy.getAtrInterval() != null
+                        ? strategy.getAtrInterval() : strategy.getInterval();
+
+                // 如果该周期的 K 线尚未加载（主周期无指标使用时为空），则按需补充加载
+                if (!klinesByInterval.containsKey(effectiveAtrInterval)) {
+                    int fetchSize = Math.min(50, properties.getEngine().getMaxKlineHistory());
+                    List<KLine> atrKlines = klineStore.query(
+                            strategy.getExchange(), strategy.getSymbol(),
+                            effectiveAtrInterval, null, triggeringKlineTime, fetchSize + 1, false);
+                    if (atrKlines != null && !atrKlines.isEmpty()) {
+                        atrKlines = new ArrayList<>(atrKlines);
+                        Collections.reverse(atrKlines);
+                        klinesByInterval.put(effectiveAtrInterval, atrKlines);
                     }
+                }
+
+                List<KLine> atrKlines = klinesByInterval.get(effectiveAtrInterval);
+                if (atrKlines != null && !atrKlines.isEmpty()) {
+                    BigDecimal atrValue = computeAtrFromKlines(atrKlines, 14);
+                    if (atrValue != null) {
+                        tradeExecutionListener.onKLineClose(strategy, atrValue, atrKlines);
+                    }
+                } else {
+                    log.warn("[Trailing SL] No K-lines for atrInterval={} in strategy '{}'",
+                            effectiveAtrInterval, strategy.getName());
                 }
             } catch (Exception e) {
                 log.error("Trailing stop update failed for strategy [{}]: {}", strategy.getName(), e.getMessage(), e);

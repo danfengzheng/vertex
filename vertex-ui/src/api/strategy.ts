@@ -106,6 +106,8 @@ export interface StrategyVO {
   trailingActivationMultiplier?: number;
   /** 移动止损：阶段4追踪距离倍数（如 2.0） */
   trailingDistanceMultiplier?: number;
+  /** ATR止损专用K线周期（留空则使用策略默认周期） */
+  atrInterval?: KLineInterval;
   createTime: string;
   updateTime: string;
 }
@@ -156,6 +158,7 @@ export interface StrategyCreateDTO {
   breakevenActivationMultiplier?: number;
   trailingActivationMultiplier?: number;
   trailingDistanceMultiplier?: number;
+  atrInterval?: KLineInterval;
 }
 
 /** 策略更新参数 */
@@ -188,6 +191,7 @@ export interface StrategyUpdateDTO {
   breakevenActivationMultiplier?: number;
   trailingActivationMultiplier?: number;
   trailingDistanceMultiplier?: number;
+  atrInterval?: KLineInterval;
   minSignalStrength?: number;
 }
 

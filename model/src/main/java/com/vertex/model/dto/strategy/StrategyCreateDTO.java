@@ -83,4 +83,7 @@ public class StrategyCreateDTO {
     private BigDecimal trailingActivationMultiplier;
     /** 阶段4：追踪距离倍数（如 2.0） */
     private BigDecimal trailingDistanceMultiplier;
+
+    /** ATR止损专用K线周期（留空则使用策略默认周期） */
+    private KLineInterval atrInterval;
 }
