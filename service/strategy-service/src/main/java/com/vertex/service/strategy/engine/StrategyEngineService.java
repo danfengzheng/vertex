@@ -315,7 +315,8 @@ public class StrategyEngineService {
 
         // 交易执行钩子（可选）
         if (tradeExecutionListener != null && strategy.getAutoTrade() != null
-                && strategy.getAutoTrade() == 1) {
+                && strategy.getAutoTrade() == 1
+                && meetsStrengthThreshold(strategy, signal)) {
             try {
                 tradeExecutionListener.onSignal(strategy, signal);
             } catch (Exception e) {
@@ -326,6 +327,28 @@ public class StrategyEngineService {
     }
 
     // ─── 辅助方法 ───────────────────────────────────────────────
+
+    /**
+     * 检查信号强度是否达到策略配置的最低门槛。
+     * <ul>
+     *   <li>策略未配置 minSignalStrength 时，默认门槛为 60</li>
+     *   <li>信号强度低于门槛时，记录日志并返回 false，跳过本次委托</li>
+     * </ul>
+     */
+    private static final int DEFAULT_MIN_SIGNAL_STRENGTH = 60;
+
+    private boolean meetsStrengthThreshold(Strategy strategy, Signal signal) {
+        int threshold = (strategy.getMinSignalStrength() != null && strategy.getMinSignalStrength() > 0)
+                ? strategy.getMinSignalStrength()
+                : DEFAULT_MIN_SIGNAL_STRENGTH;
+        int strength = signal.getSignalStrength() != null ? signal.getSignalStrength() : 0;
+        if (strength < threshold) {
+            log.info("[{}] 信号强度 {} 低于门槛 {}，跳过自动交易（signal={}）",
+                    strategy.getName(), strength, threshold, signal.getSignalType());
+            return false;
+        }
+        return true;
+    }
 
     /** 解析指标配置 JSON */
     private List<StrategyIndicatorConfig> parseConfigs(Strategy strategy) {

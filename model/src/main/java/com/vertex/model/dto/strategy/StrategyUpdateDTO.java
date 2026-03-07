@@ -29,6 +29,8 @@ public class StrategyUpdateDTO {
 
     // ─── 交易配置（可选） ───────────────────────────
     private Integer autoTrade;
+    /** 自动交易最低信号强度门槛（0-100），null 时清空（代码默认 60） */
+    private Integer minSignalStrength;
     private TradeMode tradeMode;
     private ExecutionMode executionMode;
     private Long accountId;

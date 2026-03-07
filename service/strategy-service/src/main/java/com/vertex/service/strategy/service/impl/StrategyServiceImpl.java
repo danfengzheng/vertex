@@ -109,11 +109,13 @@ public class StrategyServiceImpl implements IStrategyService {
         if (dto.getTradeQuantity() != null) strategy.setTradeQuantity(dto.getTradeQuantity());
         if (dto.getPositionRatio() != null) strategy.setPositionRatio(dto.getPositionRatio());
         if (dto.getInitialCapital() != null) strategy.setInitialCapital(dto.getInitialCapital());
-        if (dto.getStopLossPct() != null) strategy.setStopLossPct(dto.getStopLossPct());
-        if (dto.getTakeProfitPct() != null) strategy.setTakeProfitPct(dto.getTakeProfitPct());
-        if (dto.getFeeRate() != null) strategy.setFeeRate(dto.getFeeRate());
-        if (dto.getAtrStopMultiplier() != null) strategy.setAtrStopMultiplier(dto.getAtrStopMultiplier());
-        if (dto.getAtrTakeProfitMultiplier() != null) strategy.setAtrTakeProfitMultiplier(dto.getAtrTakeProfitMultiplier());
+        // 以下字段允许清空（前端明确发送 null 时置空数据库中的值）
+        strategy.setMinSignalStrength(dto.getMinSignalStrength());
+        strategy.setStopLossPct(dto.getStopLossPct());
+        strategy.setTakeProfitPct(dto.getTakeProfitPct());
+        strategy.setFeeRate(dto.getFeeRate());
+        strategy.setAtrStopMultiplier(dto.getAtrStopMultiplier());
+        strategy.setAtrTakeProfitMultiplier(dto.getAtrTakeProfitMultiplier());
 
         strategyMapper.updateById(strategy);
     }

@@ -21,8 +21,13 @@ import java.util.Map;
 /**
  * 信号生成器
  * <p>
- * 根据策略配置的指标，逐一计算后按权重加权聚合，生成最终信号。
+ * 根据策略配置的指标，逐一计算后按<b>三桶加权投票</b>聚合，生成最终信号。
  * </p>
+ *
+ * <h3>评分规则</h3>
+ * 每个指标根据 suggestion 累计权重到对应桶（BUY / SELL / NEUTRAL）。
+ * NEUTRAL 桶始终作为守门员参与三桶竞争，避免噪音信号穿透。
+ * 哪个桶权重最高，且严格大于另外两个桶，则输出该方向信号；否则输出 NEUTRAL。
  */
 @Slf4j
 @Component
@@ -42,11 +47,15 @@ public class SignalGenerator {
     public Signal evaluate(Strategy strategy, List<StrategyIndicatorConfig> configs,
                            Map<KLineInterval, List<KLine>> klinesByInterval) {
         Map<String, Object> allIndicatorValues = new HashMap<>();
+
+        // ── 三桶评分变量 ────────────────────────────────────────────────────────
         int buyWeight = 0;
         int sellWeight = 0;
         int neutralWeight = 0;
+
         StringBuilder descBuilder = new StringBuilder();
 
+        // ── 主循环：指标计算 + 三桶评分 ─────────────────────────────────────────
         for (StrategyIndicatorConfig config : configs) {
             TechnicalIndicator indicator = indicatorRegistry.get(config.getIndicatorType());
             int weight = config.getWeight() != null ? config.getWeight() : 50;
@@ -57,7 +66,7 @@ public class SignalGenerator {
             List<KLine> klines = klinesByInterval.getOrDefault(effectiveInterval, List.of());
 
             if (klines.isEmpty()) {
-                neutralWeight += weight;  // 无数据时归为 NEUTRAL
+                neutralWeight += weight;
                 descBuilder.append(config.getIndicatorType().getCode())
                         .append("=NEUTRAL(no_data,w:").append(weight).append(") ");
                 continue;
@@ -68,8 +77,8 @@ public class SignalGenerator {
                 allIndicatorValues.putAll(result.getValues());
 
                 switch (result.getSuggestion()) {
-                    case BUY -> buyWeight += weight;
-                    case SELL -> sellWeight += weight;
+                    case BUY     -> buyWeight     += weight;
+                    case SELL    -> sellWeight    += weight;
                     case NEUTRAL -> neutralWeight += weight;
                 }
 
@@ -87,7 +96,7 @@ public class SignalGenerator {
             }
         }
 
-        // 确定最终信号
+        // ── 确定最终信号（NEUTRAL 桶作为守门员参与三桶竞争）──────────────────
         int totalWeight = buyWeight + sellWeight + neutralWeight;
         SignalType signalType;
         int strength;
@@ -106,7 +115,7 @@ public class SignalGenerator {
             strength = (int) Math.round((double) neutralWeight / totalWeight * 100);
         }
 
-        // price/signalTime 取策略默认周期的最新K线（主周期）
+        // ── price/signalTime 取策略默认周期的最新K线（主周期）────────────────────
         List<KLine> defaultKlines = klinesByInterval.getOrDefault(strategy.getInterval(), List.of());
         BigDecimal price = BigDecimal.ZERO;
         long signalTime = System.currentTimeMillis();
@@ -131,4 +140,5 @@ public class SignalGenerator {
 
         return signal;
     }
+
 }

@@ -331,9 +331,32 @@ public class BacktestService {
             }
 
             // 根据信号执行交易（止损/止盈出场后本根 K 线不再重新开仓）
-            if (!inPosition && !closedByStopOrTp && signal.getSignalType() == SignalType.BUY) {
+            // 最低信号强度门槛：与实盘 StrategyEngineService.meetsStrengthThreshold() 保持一致
+            int minStrength = (strategy.getMinSignalStrength() != null && strategy.getMinSignalStrength() > 0)
+                    ? strategy.getMinSignalStrength() : 60;
+            if (!inPosition && !closedByStopOrTp && signal.getSignalType() == SignalType.BUY
+                    && signal.getSignalStrength() != null && signal.getSignalStrength() >= minStrength) {
                 // 开仓
-                BigDecimal tradeAmount = capital.multiply(config.getPositionRatio());
+                // ── ATR 仓位控制系数 ──────────────────────────────────────────────
+                // 策略配置了 atrStopMultiplier 时，用 ATR14/ATR50 比值动态缩放头寸：
+                //   coefficient = ATR50 / ATR14，当前波动率 > 历史均值时 < 1.0 → 减仓
+                //   coefficient 钳制在 [0.2, 1.0]，避免极端行情下仓位过小
+                // 未配置 atrStopMultiplier 时按 positionRatio 全量开仓
+                BigDecimal baseTradeAmount = capital.multiply(config.getPositionRatio());
+                BigDecimal tradeAmount = baseTradeAmount;
+                boolean hasAtrPositionSizing = strategy.getAtrStopMultiplier() != null
+                        && strategy.getAtrStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
+                if (hasAtrPositionSizing) {
+                    BigDecimal atr14 = computeAtrFromWindow(klines, i, 14);
+                    BigDecimal atr50 = computeAtrFromWindow(klines, i, 50);
+                    if (atr14 != null && atr50 != null && atr14.compareTo(BigDecimal.ZERO) > 0) {
+                        // 当前短期 ATR 高于长期均值 → 市场更波动 → 缩小头寸
+                        double coeff = atr50.doubleValue() / atr14.doubleValue();
+                        coeff = Math.max(0.2, Math.min(1.0, coeff));
+                        tradeAmount = baseTradeAmount.multiply(BigDecimal.valueOf(coeff))
+                                .setScale(8, RoundingMode.DOWN);
+                    }
+                }
                 BigDecimal fee = tradeAmount.multiply(config.getFeeRate());
                 BigDecimal netAmount = tradeAmount.subtract(fee);
                 position  = netAmount.divide(currentPrice, 8, RoundingMode.DOWN);

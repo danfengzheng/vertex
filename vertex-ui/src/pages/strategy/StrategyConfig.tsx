@@ -474,7 +474,18 @@ export const StrategyConfig = () => {
       setModalLoading(true);
 
       if (editingId) {
-        await strategyApi.update({ id: editingId, ...values });
+        // 可清空的数字字段：用户清空输入后值为 undefined，JSON.stringify 会将其忽略，
+        // 导致后端收不到 null 从而无法清空数据库中的旧值。
+        // 这里显式将 undefined 转为 null，确保后端能识别用户的"清空"意图。
+        const CLEARABLE_FIELDS = [
+          'minSignalStrength', 'stopLossPct', 'takeProfitPct',
+          'feeRate', 'atrStopMultiplier', 'atrTakeProfitMultiplier',
+        ] as const;
+        const payload: Record<string, unknown> = { id: editingId, ...values };
+        CLEARABLE_FIELDS.forEach((key) => {
+          if (payload[key] === undefined) payload[key] = null;
+        });
+        await strategyApi.update(payload as Parameters<typeof strategyApi.update>[0]);
         message.success(t('message.strategy.updateSuccess'));
       } else {
         await strategyApi.create(values as StrategyCreateDTO);
@@ -720,6 +731,15 @@ export const StrategyConfig = () => {
                       </Form.Item>
 
                       <Form.Item
+                        name={[field.name, 'penaltyWeight']}
+                        label={t('text.strategy.penaltyWeight')}
+                        initialValue={0}
+                        tooltip={t('text.strategy.penaltyWeightTip')}
+                      >
+                        <InputNumber min={0} max={100} style={{ width: 80 }} />
+                      </Form.Item>
+
+                      <Form.Item
                         name={[field.name, 'interval']}
                         label={t('text.strategy.indicatorInterval')}
                       >
@@ -764,6 +784,20 @@ export const StrategyConfig = () => {
               checkedChildren={t('common.enabled')}
               unCheckedChildren={t('common.disabled')}
               onChange={(checked) => setAutoTradeEnabled(checked)}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="minSignalStrength"
+            label={t('text.trading.minSignalStrength')}
+            initialValue={60}
+            tooltip={t('text.trading.minSignalStrengthTip')}
+          >
+            <InputNumber
+              min={0}
+              max={100}
+              style={{ width: 120 }}
+              addonAfter="%"
             />
           </Form.Item>
 

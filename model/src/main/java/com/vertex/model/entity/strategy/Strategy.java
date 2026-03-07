@@ -53,6 +53,13 @@ public class Strategy extends BaseEntity {
     /** 是否开启自动交易 0-否 1-是 */
     private Integer autoTrade;
 
+    /**
+     * 自动交易最低信号强度门槛（0-100）。
+     * 信号强度低于此值时，即使 autoTrade=1 也不触发实盘委托。
+     * 未配置时默认使用 60，防止弱信号入场。
+     */
+    private Integer minSignalStrength;
+
     /** 交易模式 AUTO/MANUAL */
     private TradeMode tradeMode;
 
