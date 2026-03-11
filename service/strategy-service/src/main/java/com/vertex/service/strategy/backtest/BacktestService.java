@@ -23,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import com.vertex.model.entity.quote.KLineInterval;
+import com.vertex.model.entity.trading.StopLossStage;
 import com.vertex.service.strategy.config.StrategyProperties;
 
 import java.math.BigDecimal;
@@ -162,6 +163,9 @@ public class BacktestService {
         // 止损止盈触发价（开仓时按策略配置计算，null 表示未配置）
         BigDecimal stopLossPrice = null;
         BigDecimal takeProfitPrice = null;
+        // 移动ATR止损状态（null = 未启用）
+        StopLossStage stopLossStage = null;
+        BigDecimal highestPrice    = null; // LONG 极值追踪
 
         List<TradeRecord> trades = new ArrayList<>();
         List<EquityPoint> equityCurve = new ArrayList<>();
@@ -311,6 +315,8 @@ public class BacktestService {
                     inPosition     = false;
                     stopLossPrice  = null;
                     takeProfitPrice = null;
+                    stopLossStage  = null;
+                    highestPrice   = null;
                     closedByStopOrTp = true;
                     // 止损/止盈当根 K 线权益以出场价结算
                     currentPrice = exitPrice;
@@ -384,10 +390,13 @@ public class BacktestService {
                 entryTime  = currentKline.getOpenTime();
                 inPosition = true;
 
-                // ── 计算止损止盈触发价（与实盘 TradeExecutionService 逻辑一致）──────────
-                // 优先级：ATR > 固定% > 不设置
+                // ── 计算止损止盈（优先级：移动ATR止损 > 固定ATR > 固定%，与实盘 TradeExecutionService 一致）──
                 stopLossPrice   = null;
                 takeProfitPrice = null;
+                stopLossStage   = null;
+                highestPrice    = null;
+                boolean hasTrailingStop = strategy.getInitialStopMultiplier() != null
+                        && strategy.getInitialStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
                 boolean hasAtrStop = strategy.getAtrStopMultiplier() != null
                         && strategy.getAtrStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
                 boolean hasPctStop = strategy.getStopLossPct() != null;
@@ -395,9 +404,22 @@ public class BacktestService {
                         && strategy.getAtrTakeProfitMultiplier().compareTo(BigDecimal.ZERO) > 0;
                 boolean hasPctTp   = strategy.getTakeProfitPct() != null;
 
-                if (hasAtrStop || hasAtrTp) {
-                    List<KLine> atrWindow = klinesByInterval.getOrDefault(
-                            effectiveAtrInterval, klinesByInterval.get(strategy.getInterval()));
+                List<KLine> atrWindow = klinesByInterval.getOrDefault(
+                        effectiveAtrInterval, klinesByInterval.get(strategy.getInterval()));
+
+                if (hasTrailingStop) {
+                    // 移动ATR止损：开仓时设置 INITIAL 止损，后续每根K线逐步推进状态机
+                    BigDecimal atr = computeAtrFromList(atrWindow, 14);
+                    if (atr != null && atr.compareTo(BigDecimal.ZERO) > 0) {
+                        stopLossPrice = entryPrice
+                                .subtract(atr.multiply(strategy.getInitialStopMultiplier()))
+                                .setScale(8, RoundingMode.HALF_UP);
+                        stopLossStage = StopLossStage.INITIAL;
+                        highestPrice  = entryPrice;
+                    }
+                    // 移动止损模式下止盈仍走固定%止盈逻辑（见下方）
+                } else if (hasAtrStop || hasAtrTp) {
+                    // 固定ATR止损/止盈
                     BigDecimal atr = computeAtrFromList(atrWindow, 14);
                     if (atr != null && atr.compareTo(BigDecimal.ZERO) > 0) {
                         if (hasAtrStop) {
@@ -412,20 +434,23 @@ public class BacktestService {
                         }
                     }
                 }
-                if (stopLossPrice == null && hasPctStop) {
+                // 非ATR路径：固定%止损（移动止损模式下不叠加）
+                if (!hasTrailingStop && !hasAtrStop && hasPctStop) {
                     BigDecimal pct = strategy.getStopLossPct()
                             .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
                     stopLossPrice = entryPrice.multiply(BigDecimal.ONE.subtract(pct))
                             .setScale(8, RoundingMode.HALF_UP);
                 }
-                if (takeProfitPrice == null && hasPctTp) {
+                // 固定%止盈（无ATR止盈时生效，移动止损模式下也可叠加）
+                if (!hasAtrTp && hasPctTp) {
                     BigDecimal pct = strategy.getTakeProfitPct()
                             .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
                     takeProfitPrice = entryPrice.multiply(BigDecimal.ONE.add(pct))
                             .setScale(8, RoundingMode.HALF_UP);
                 }
 
-            } else if (inPosition && signal.getSignalType() == SignalType.SELL) {
+            } else if (inPosition && signal.getSignalType() == SignalType.SELL
+                    && signal.getSignalStrength() != null && signal.getSignalStrength() >= minStrength) {
                 // 信号平仓
                 BigDecimal exitValue = position.multiply(currentPrice);
                 BigDecimal fee = exitValue.multiply(config.getFeeRate());
@@ -454,6 +479,66 @@ public class BacktestService {
                 inPosition      = false;
                 stopLossPrice   = null;
                 takeProfitPrice = null;
+                stopLossStage   = null;
+                highestPrice    = null;
+            }
+
+            // ── 移动ATR止损状态机：每根K线收盘后推进（与实盘 TradeExecutionService 一致）────
+            // 在信号处理之后执行，新止损价在下一根K线的止损检查中生效
+            if (inPosition && stopLossStage != null) {
+                List<KLine> atrWin = klinesByInterval.getOrDefault(
+                        effectiveAtrInterval, klinesByInterval.get(strategy.getInterval()));
+                BigDecimal atr = computeAtrFromList(atrWin, 14);
+                if (atr != null && atr.compareTo(BigDecimal.ZERO) > 0) {
+                    BigDecimal closePrice = currentKline.getClose();
+                    switch (stopLossStage) {
+                        case INITIAL -> {
+                            // → BREAKEVEN：收盘价 >= entry + breakevenActivationMultiplier × ATR
+                            if (strategy.getBreakevenActivationMultiplier() != null) {
+                                BigDecimal threshold = entryPrice
+                                        .add(atr.multiply(strategy.getBreakevenActivationMultiplier()));
+                                if (closePrice.compareTo(threshold) >= 0) {
+                                    stopLossPrice = entryPrice.setScale(8, RoundingMode.HALF_UP);
+                                    stopLossStage = StopLossStage.BREAKEVEN;
+                                }
+                            }
+                        }
+                        case BREAKEVEN -> {
+                            // → TRAILING：收盘价 >= entry + trailingActivationMultiplier × ATR
+                            if (strategy.getTrailingActivationMultiplier() != null) {
+                                BigDecimal threshold = entryPrice
+                                        .add(atr.multiply(strategy.getTrailingActivationMultiplier()));
+                                if (closePrice.compareTo(threshold) >= 0) {
+                                    highestPrice  = closePrice;
+                                    stopLossStage = StopLossStage.TRAILING;
+                                    // 立即计算初始追踪止损
+                                    if (strategy.getTrailingDistanceMultiplier() != null) {
+                                        BigDecimal newStop = highestPrice
+                                                .subtract(atr.multiply(strategy.getTrailingDistanceMultiplier()))
+                                                .setScale(8, RoundingMode.HALF_UP);
+                                        if (stopLossPrice == null || newStop.compareTo(stopLossPrice) > 0) {
+                                            stopLossPrice = newStop;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        case TRAILING -> {
+                            // 更新最高价，止损只朝有利方向移动（只升不降）
+                            if (closePrice.compareTo(highestPrice) > 0) {
+                                highestPrice = closePrice;
+                            }
+                            if (strategy.getTrailingDistanceMultiplier() != null) {
+                                BigDecimal newStop = highestPrice
+                                        .subtract(atr.multiply(strategy.getTrailingDistanceMultiplier()))
+                                        .setScale(8, RoundingMode.HALF_UP);
+                                if (stopLossPrice == null || newStop.compareTo(stopLossPrice) > 0) {
+                                    stopLossPrice = newStop;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
