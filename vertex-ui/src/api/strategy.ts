@@ -47,6 +47,13 @@ export interface FilterCondition {
   op: 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ';
   /** 阈值 */
   threshold: number;
+  /**
+   * 条件适用的信号方向：
+   * - undefined/null：双向通用，复合投票前校验，任一失败则跳过所有复合计算
+   * - "BUY"：仅对买入信号有效，复合投票后校验
+   * - "SELL"：仅对卖出信号有效，复合投票后校验
+   */
+  applyTo?: 'BUY' | 'SELL';
 }
 
 export interface StrategyIndicatorConfig {

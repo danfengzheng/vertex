@@ -43,24 +43,47 @@ const FILTER_OP_OPTIONS = [
   { label: '=', value: 'EQ' },
 ];
 
-/** 各指标计算值字段候选（用于自动补全提示） */
-const INDICATOR_VALUE_FIELDS: Partial<Record<IndicatorType, string[]>> = {
-  MA:          ['ma20', 'ma50', 'ma200'],
-  EMA:         ['ema20', 'ema50', 'ema200'],
-  RSI:         ['rsi14'],
-  MACD:        ['macd', 'signal', 'histogram'],
-  BOLL:        ['upper', 'middle', 'lower', 'stdDev'],
-  KDJ:         ['k', 'd', 'j'],
-  ATR:         ['atr', 'atrPercent'],
-  VWAP:        ['vwap', 'deviation'],
-  STOCH_RSI:   ['stochRsiK', 'stochRsiD'],
-  WR:          ['wr14'],
-  SAR:         ['sar', 'trend'],
-  ADX:         ['adx', 'plusDi', 'minusDi'],
-  SUPERTREND:  ['trend', 'superTrend', 'upperBand', 'lowerBand'],
-  VOL_CONFIRM: ['volRatio', 'currentVolume', 'avgVolume'],
-  OBV:         ['obv', 'obvSignal'],
-};
+/**
+ * 硬性过滤器条件适用方向选项
+ * 不选（undefined/null）= 双向通用，在复合投票前校验
+ * BUY / SELL = 方向专属，在复合投票后校验对应方向信号
+ */
+const FILTER_APPLY_TO_OPTIONS = [
+  { label: '仅买入', value: 'BUY' },
+  { label: '仅卖出', value: 'SELL' },
+];
+
+/**
+ * 根据指标类型和当前参数动态生成数值条件字段候选列表。
+ *
+ * RSI / MA / EMA / WR 的值键名包含 period（如 rsi36、ma50），
+ * 必须与后端 IndicatorResult.values 的实际键名一致，否则数值条件永远匹配不到值。
+ */
+function getIndicatorValueFields(
+  type: IndicatorType | undefined,
+  params?: Record<string, unknown>,
+): string[] {
+  // 从当前指标参数中取 period，没有则用各指标默认值
+  const p = (n: number) => (params?.period ? Number(params.period) : n);
+  switch (type) {
+    case 'RSI':        return [`rsi${p(14)}`];
+    case 'MA':         return [`ma${p(20)}`];
+    case 'EMA':        return [`ema${p(20)}`];
+    case 'WR':         return [`wr${p(14)}`];
+    case 'MACD':       return ['macd', 'signal', 'histogram'];
+    case 'BOLL':       return ['upper', 'middle', 'lower', 'stdDev'];
+    case 'KDJ':        return ['k', 'd', 'j'];
+    case 'ATR':        return ['atr', 'atrPercent'];
+    case 'VWAP':       return ['vwap', 'deviation'];
+    case 'STOCH_RSI':  return ['stochRsiK', 'stochRsiD'];
+    case 'SAR':        return ['sar', 'trend'];
+    case 'ADX':        return ['adx', 'plusDi', 'minusDi'];
+    case 'SUPERTREND': return ['trend', 'superTrend', 'upperBand', 'lowerBand'];
+    case 'VOL_CONFIRM':return ['volRatio', 'currentVolume', 'avgVolume'];
+    case 'OBV':        return ['obv', 'obvSignal'];
+    default:           return [];
+  }
+}
 
 /** 根据指标类型渲染参数字段 */
 const IndicatorParamsFields = ({
@@ -441,36 +464,7 @@ export const StrategyConfig = () => {
   const handleEdit = (record: StrategyVO) => {
     setEditingId(record.id);
     setEditingRecord(record);
-    form.resetFields();
-    form.setFieldsValue({
-      name: record.name,
-      description: record.description,
-      exchange: record.exchange,
-      symbol: record.symbol,
-      interval: record.interval,
-      indicatorConfigs: record.indicatorConfigs,
-      autoTrade: record.autoTrade ?? 0,
-      minSignalStrength: record.minSignalStrength,
-      tradeMode: record.tradeMode,
-      executionMode: record.executionMode,
-      accountId: record.accountId,
-      positionSizing: record.positionSizing || 'FIXED',
-      tradeQuantity: record.tradeQuantity,
-      positionRatio: record.positionRatio,
-      initialCapital: record.initialCapital,
-      stopLossPct: record.stopLossPct,
-      takeProfitPct: record.takeProfitPct,
-      feeRate: record.feeRate,
-      leverage: record.leverage || 1,
-      marginType: record.marginType || 'ISOLATED',
-      atrStopMultiplier: record.atrStopMultiplier,
-      atrTakeProfitMultiplier: record.atrTakeProfitMultiplier,
-      initialStopMultiplier: record.initialStopMultiplier,
-      breakevenActivationMultiplier: record.breakevenActivationMultiplier,
-      trailingActivationMultiplier: record.trailingActivationMultiplier,
-      trailingDistanceMultiplier: record.trailingDistanceMultiplier,
-      atrInterval: record.atrInterval ?? undefined,
-    });
+    // 先更新所有 UI 状态，让条件渲染（filterConditions Form.List）在正确的 hardFilters 下挂载
     setIndicatorTypes(record.indicatorConfigs.map((c) => c.indicatorType));
     setHardFilters(record.indicatorConfigs.map((c) => !!c.hardFilter));
     setAutoTradeEnabled(record.autoTrade === 1);
@@ -482,7 +476,50 @@ export const StrategyConfig = () => {
     } else {
       setSelectedAccountMarketType(null);
     }
+    // 立即 reset 清空旧表单数据，再打开弹窗
+    form.resetFields();
     setModalVisible(true);
+    // 延迟到下一个 tick：等 React 以最新 hardFilters 重新渲染，
+    // 使 filterConditions Form.List 已挂载后再填充值，
+    // 避免嵌套 Form.List 在挂载前被 setFieldsValue 写入而丢失数据。
+    setTimeout(() => {
+      form.setFieldsValue({
+        name: record.name,
+        description: record.description,
+        exchange: record.exchange,
+        symbol: record.symbol,
+        interval: record.interval,
+        // 将 filterConditions 中 applyTo: null 转为 undefined，让 Select 显示占位符
+        indicatorConfigs: record.indicatorConfigs.map((config) => ({
+          ...config,
+          filterConditions: config.filterConditions?.map((fc) => ({
+            ...fc,
+            applyTo: fc.applyTo ?? undefined,
+          })),
+        })),
+        autoTrade: record.autoTrade ?? 0,
+        minSignalStrength: record.minSignalStrength,
+        tradeMode: record.tradeMode,
+        executionMode: record.executionMode,
+        accountId: record.accountId,
+        positionSizing: record.positionSizing || 'FIXED',
+        tradeQuantity: record.tradeQuantity,
+        positionRatio: record.positionRatio,
+        initialCapital: record.initialCapital,
+        stopLossPct: record.stopLossPct,
+        takeProfitPct: record.takeProfitPct,
+        feeRate: record.feeRate,
+        leverage: record.leverage || 1,
+        marginType: record.marginType || 'ISOLATED',
+        atrStopMultiplier: record.atrStopMultiplier,
+        atrTakeProfitMultiplier: record.atrTakeProfitMultiplier,
+        initialStopMultiplier: record.initialStopMultiplier,
+        breakevenActivationMultiplier: record.breakevenActivationMultiplier,
+        trailingActivationMultiplier: record.trailingActivationMultiplier,
+        trailingDistanceMultiplier: record.trailingDistanceMultiplier,
+        atrInterval: record.atrInterval ?? undefined,
+      });
+    }, 0);
   };
 
   const handleDelete = async (id: string) => {
@@ -863,8 +900,10 @@ export const StrategyConfig = () => {
                                     <AutoComplete
                                       style={{ width: 150 }}
                                       placeholder={t('placeholder.strategy.filterField')}
-                                      options={(INDICATOR_VALUE_FIELDS[indicatorTypes[index] as IndicatorType] ?? [])
-                                        .map((f) => ({ value: f }))}
+                                      options={getIndicatorValueFields(
+                                        indicatorTypes[index] as IndicatorType,
+                                        form.getFieldValue(['indicatorConfigs', field.name, 'params']),
+                                      ).map((f) => ({ value: f }))}
                                       filterOption={(input, opt) =>
                                         (opt?.value ?? '').toLowerCase().includes(input.toLowerCase())
                                       }
@@ -874,7 +913,15 @@ export const StrategyConfig = () => {
                                     <Select style={{ width: 70 }} options={FILTER_OP_OPTIONS} />
                                   </Form.Item>
                                   <Form.Item name={[condField.name, 'threshold']} noStyle>
-                                    <InputNumber style={{ width: 110 }} placeholder="0" step={0.1} />
+                                    <InputNumber style={{ width: 100 }} placeholder="0" step={0.1} />
+                                  </Form.Item>
+                                  <Form.Item name={[condField.name, 'applyTo']} noStyle>
+                                    <Select
+                                      style={{ width: 90 }}
+                                      placeholder={t('text.strategy.filterApplyToBoth')}
+                                      allowClear
+                                      options={FILTER_APPLY_TO_OPTIONS}
+                                    />
                                   </Form.Item>
                                   <Button
                                     type="link"
@@ -1102,7 +1149,7 @@ export const StrategyConfig = () => {
                 </Form.Item>
               </Space>
 
-              <Divider orientation="left" style={{ marginTop: 8 }}>{t('text.trading.trailingStopTitle')}</Divider>
+              <Divider titlePlacement="left" style={{ marginTop: 8 }}>{t('text.trading.trailingStopTitle')}</Divider>
               <Space size="large" wrap>
                 <Form.Item
                   name="initialStopMultiplier"
