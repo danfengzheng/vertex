@@ -39,12 +39,30 @@ export const SIGNAL_TYPE_LABELS: Record<SignalType, string> = {
 };
 
 /** 指标配置 */
+/** 硬性过滤器的数值条件 */
+export interface FilterCondition {
+  /** 指标计算值字段名，如 "volRatio"、"adx"、"rsi14"、"trend" */
+  field: string;
+  /** 运算符：GT(>) GTE(>=) LT(<) LTE(<=) EQ(=) */
+  op: 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ';
+  /** 阈值 */
+  threshold: number;
+}
+
 export interface StrategyIndicatorConfig {
   indicatorType: IndicatorType;
   params: Record<string, number>;
   weight: number;
+  penaltyWeight?: number;
   /** 指标专属K线周期（可选，为空时使用策略默认周期） */
   interval?: KLineInterval;
+  /**
+   * 是否为硬性过滤器（默认 false）
+   * filterConditions 为空 → 方向校验（指标方向必须与复合信号一致）
+   * filterConditions 非空 → 数值校验（校验指标计算值，忽略方向）
+   */
+  hardFilter?: boolean;
+  filterConditions?: FilterCondition[];
 }
 
 /** 交易模式 */

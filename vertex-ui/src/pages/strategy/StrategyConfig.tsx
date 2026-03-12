@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Table, Button, Space, message, Tag, Modal, Form, Select, Input, Switch,
-  InputNumber, Card, Popconfirm, Divider, Tooltip,
+  InputNumber, Card, Popconfirm, Divider, Tooltip, AutoComplete,
 } from 'antd';
 import {
   PlusOutlined,
@@ -33,6 +33,34 @@ const INDICATOR_OPTIONS = Object.entries(INDICATOR_TYPE_LABELS).map(([value, lab
   value,
   label,
 }));
+
+/** 硬性过滤器运算符选项 */
+const FILTER_OP_OPTIONS = [
+  { label: '>', value: 'GT' },
+  { label: '≥', value: 'GTE' },
+  { label: '<', value: 'LT' },
+  { label: '≤', value: 'LTE' },
+  { label: '=', value: 'EQ' },
+];
+
+/** 各指标计算值字段候选（用于自动补全提示） */
+const INDICATOR_VALUE_FIELDS: Partial<Record<IndicatorType, string[]>> = {
+  MA:          ['ma20', 'ma50', 'ma200'],
+  EMA:         ['ema20', 'ema50', 'ema200'],
+  RSI:         ['rsi14'],
+  MACD:        ['macd', 'signal', 'histogram'],
+  BOLL:        ['upper', 'middle', 'lower', 'stdDev'],
+  KDJ:         ['k', 'd', 'j'],
+  ATR:         ['atr', 'atrPercent'],
+  VWAP:        ['vwap', 'deviation'],
+  STOCH_RSI:   ['stochRsiK', 'stochRsiD'],
+  WR:          ['wr14'],
+  SAR:         ['sar', 'trend'],
+  ADX:         ['adx', 'plusDi', 'minusDi'],
+  SUPERTREND:  ['trend', 'superTrend', 'upperBand', 'lowerBand'],
+  VOL_CONFIRM: ['volRatio', 'currentVolume', 'avgVolume'],
+  OBV:         ['obv', 'obvSignal'],
+};
 
 /** 根据指标类型渲染参数字段 */
 const IndicatorParamsFields = ({
@@ -352,6 +380,7 @@ export const StrategyConfig = () => {
 
   // 指标配置联动
   const [indicatorTypes, setIndicatorTypes] = useState<(IndicatorType | undefined)[]>([]);
+  const [hardFilters, setHardFilters] = useState<boolean[]>([]);
 
   // 自动交易
   const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
@@ -403,6 +432,7 @@ export const StrategyConfig = () => {
     form.resetFields();
     form.setFieldsValue({ indicatorConfigs: [{}], autoTrade: 0, positionSizing: 'FIXED' });
     setIndicatorTypes([undefined]);
+    setHardFilters([false]);
     setAutoTradeEnabled(false);
     setPositionSizingMode('FIXED');
     setModalVisible(true);
@@ -442,6 +472,7 @@ export const StrategyConfig = () => {
       atrInterval: record.atrInterval ?? undefined,
     });
     setIndicatorTypes(record.indicatorConfigs.map((c) => c.indicatorType));
+    setHardFilters(record.indicatorConfigs.map((c) => !!c.hardFilter));
     setAutoTradeEnabled(record.autoTrade === 1);
     setPositionSizingMode(record.positionSizing || 'FIXED');
     // 更新已选账户的市场类型
@@ -720,19 +751,41 @@ export const StrategyConfig = () => {
                     size="small"
                     style={{ marginBottom: 12 }}
                     extra={
-                      fields.length > 1 && (
-                        <Button
-                          type="link"
-                          danger
-                          size="small"
-                          onClick={() => {
-                            remove(field.name);
-                            setIndicatorTypes((prev) => prev.filter((_, i) => i !== index));
-                          }}
-                        >
-                          {t('common.delete')}
-                        </Button>
-                      )
+                      <Space>
+                        <Tooltip title={t('text.strategy.hardFilterTip')}>
+                          <Space size={4}>
+                            <span style={{ fontSize: 12, color: hardFilters[index] ? '#fa8c16' : undefined }}>
+                              {t('text.strategy.hardFilter')}
+                            </span>
+                            <Form.Item name={[field.name, 'hardFilter']} valuePropName="checked" noStyle>
+                              <Switch
+                                size="small"
+                                onChange={(checked) => {
+                                  setHardFilters((prev) => {
+                                    const next = [...prev];
+                                    next[index] = checked;
+                                    return next;
+                                  });
+                                }}
+                              />
+                            </Form.Item>
+                          </Space>
+                        </Tooltip>
+                        {fields.length > 1 && (
+                          <Button
+                            type="link"
+                            danger
+                            size="small"
+                            onClick={() => {
+                              remove(field.name);
+                              setIndicatorTypes((prev) => prev.filter((_, i) => i !== index));
+                              setHardFilters((prev) => prev.filter((_, i) => i !== index));
+                            }}
+                          >
+                            {t('common.delete')}
+                          </Button>
+                        )}
+                      </Space>
                     }
                   >
                     <Space align="start" wrap>
@@ -755,23 +808,27 @@ export const StrategyConfig = () => {
                         />
                       </Form.Item>
 
-                      <Form.Item
-                        name={[field.name, 'weight']}
-                        label={t('text.strategy.weight')}
-                        initialValue={50}
-                        rules={[{ required: true }]}
-                      >
-                        <InputNumber min={1} max={100} style={{ width: 80 }} />
-                      </Form.Item>
+                      {!hardFilters[index] && (
+                        <>
+                          <Form.Item
+                            name={[field.name, 'weight']}
+                            label={t('text.strategy.weight')}
+                            initialValue={50}
+                            rules={[{ required: true }]}
+                          >
+                            <InputNumber min={1} max={100} style={{ width: 80 }} />
+                          </Form.Item>
 
-                      <Form.Item
-                        name={[field.name, 'penaltyWeight']}
-                        label={t('text.strategy.penaltyWeight')}
-                        initialValue={0}
-                        tooltip={t('text.strategy.penaltyWeightTip')}
-                      >
-                        <InputNumber min={0} max={100} style={{ width: 80 }} />
-                      </Form.Item>
+                          <Form.Item
+                            name={[field.name, 'penaltyWeight']}
+                            label={t('text.strategy.penaltyWeight')}
+                            initialValue={0}
+                            tooltip={t('text.strategy.penaltyWeightTip')}
+                          >
+                            <InputNumber min={0} max={100} style={{ width: 80 }} />
+                          </Form.Item>
+                        </>
+                      )}
 
                       <Form.Item
                         name={[field.name, 'interval']}
@@ -787,6 +844,66 @@ export const StrategyConfig = () => {
 
                       <IndicatorParamsFields type={indicatorTypes[index]} prefix={[field.name]} />
                     </Space>
+
+                    {/* 数值条件区域：仅在硬性过滤模式下显示 */}
+                    {hardFilters[index] && (
+                      <div style={{ marginTop: 8 }}>
+                        <Divider plain style={{ margin: '6px 0', fontSize: 12 }}>
+                          {t('text.strategy.filterConditions')}
+                          <span style={{ color: '#999', marginLeft: 8, fontWeight: 'normal' }}>
+                            {t('text.strategy.filterConditionsTip')}
+                          </span>
+                        </Divider>
+                        <Form.List name={[field.name, 'filterConditions']}>
+                          {(condFields, { add: addCond, remove: removeCond }) => (
+                            <>
+                              {condFields.map((condField) => (
+                                <Space key={condField.key} style={{ marginBottom: 6, display: 'flex' }} align="center">
+                                  <Form.Item name={[condField.name, 'field']} noStyle>
+                                    <AutoComplete
+                                      style={{ width: 150 }}
+                                      placeholder={t('placeholder.strategy.filterField')}
+                                      options={(INDICATOR_VALUE_FIELDS[indicatorTypes[index] as IndicatorType] ?? [])
+                                        .map((f) => ({ value: f }))}
+                                      filterOption={(input, opt) =>
+                                        (opt?.value ?? '').toLowerCase().includes(input.toLowerCase())
+                                      }
+                                    />
+                                  </Form.Item>
+                                  <Form.Item name={[condField.name, 'op']} noStyle initialValue="GT">
+                                    <Select style={{ width: 70 }} options={FILTER_OP_OPTIONS} />
+                                  </Form.Item>
+                                  <Form.Item name={[condField.name, 'threshold']} noStyle>
+                                    <InputNumber style={{ width: 110 }} placeholder="0" step={0.1} />
+                                  </Form.Item>
+                                  <Button
+                                    type="link"
+                                    danger
+                                    size="small"
+                                    onClick={() => removeCond(condField.name)}
+                                  >
+                                    {t('common.delete')}
+                                  </Button>
+                                </Space>
+                              ))}
+                              {condFields.length === 0 && (
+                                <div style={{ color: '#999', fontSize: 12, marginBottom: 6 }}>
+                                  {t('text.strategy.filterConditionsEmpty')}
+                                </div>
+                              )}
+                              <Button
+                                size="small"
+                                type="dashed"
+                                onClick={() => addCond({ op: 'GT' })}
+                                icon={<PlusOutlined />}
+                              >
+                                {t('text.strategy.addCondition')}
+                              </Button>
+                            </>
+                          )}
+                        </Form.List>
+                      </div>
+                    )}
                   </Card>
                 ))}
 
@@ -795,6 +912,7 @@ export const StrategyConfig = () => {
                   onClick={() => {
                     add({});
                     setIndicatorTypes((prev) => [...prev, undefined]);
+                    setHardFilters((prev) => [...prev, false]);
                   }}
                   block
                   icon={<PlusOutlined />}

@@ -5,6 +5,7 @@ import com.vertex.model.entity.strategy.IndicatorType;
 import lombok.Data;
 
 import java.io.Serializable;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -35,4 +36,27 @@ public class StrategyIndicatorConfig implements Serializable {
 
     /** 指标专属K线周期（可选，为空时使用策略默认周期） */
     private KLineInterval interval;
+
+    /**
+     * 是否为硬性过滤器（默认 false）
+     * <ul>
+     *   <li>true：该指标不参与三桶投票，复合信号产出后独立校验。
+     *       <ul>
+     *         <li>若 filterConditions 为空 → 方向校验：BUY 信号时此指标必须也返回 BUY，
+     *             SELL 信号时必须返回 SELL，否则否决为 NEUTRAL。</li>
+     *         <li>若 filterConditions 非空 → 数值校验：计算指标值后逐条检查条件，
+     *             全部满足才放行，否则否决为 NEUTRAL（忽略指标方向）。</li>
+     *       </ul>
+     *   </li>
+     *   <li>false（默认）：参与正常的加权投票流程，filterConditions 无效。</li>
+     * </ul>
+     */
+    private Boolean hardFilter;
+
+    /**
+     * 数值条件列表（仅 hardFilter=true 时生效）。
+     * 非空时走数值校验模式，为空时走方向校验模式。
+     * 例如：[{field:"volRatio", op:"GT", threshold:1.5}, {field:"adx", op:"GTE", threshold:25}]
+     */
+    private List<FilterCondition> filterConditions;
 }

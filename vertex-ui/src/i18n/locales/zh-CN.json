@@ -164,6 +164,12 @@
       "weight": "权重",
       "penaltyWeight": "惩罚权重",
       "penaltyWeightTip": "BUY/SELL 时额外增强该方向得分；NEUTRAL 时主动压制主导方向，默认 0（不启用）",
+      "hardFilter": "硬性过滤",
+      "hardFilterTip": "开启后该指标不参与加权投票，作为前置门槛优先校验：①不满足则直接跳过综合计算返回 NEUTRAL；②满足后才进行综合投票；③无条件时还会在复合信号产出后做方向对齐校验（BUY 必须对应 BUY，SELL 对应 SELL）",
+      "filterConditions": "数值条件",
+      "filterConditionsTip": "（空 = 方向校验，有条件 = 数值校验）",
+      "filterConditionsEmpty": "未设置条件时默认校验方向（BUY/SELL 必须与复合信号一致）",
+      "addCondition": "添加条件",
       "addIndicator": "添加指标",
       "signalType": "信号类型",
       "signalStrength": "信号强度",
@@ -434,7 +440,8 @@
       "description": "请输入策略描述",
       "exchange": "请选择交易所",
       "symbol": "请输入交易对",
-      "interval": "请选择K线周期"
+      "interval": "请选择K线周期",
+      "filterField": "指标计算值字段，如 volRatio"
     }
   },
   "message": {

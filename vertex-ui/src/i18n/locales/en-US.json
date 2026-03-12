@@ -164,6 +164,8 @@
       "weight": "Weight",
       "penaltyWeight": "Penalty Weight",
       "penaltyWeightTip": "BUY/SELL: amplifies signal in that direction; NEUTRAL: suppresses dominant direction. Default 0 (disabled)",
+      "hardFilter": "Hard Filter",
+      "hardFilterTip": "When enabled, this indicator is excluded from weighted voting and evaluated first as a prerequisite gate: ① if the gate fails, composite calculation is skipped and NEUTRAL is returned immediately; ② only if all gates pass does composite voting run; ③ for direction mode (no conditions), direction alignment is also checked post-composite (BUY must match BUY, SELL must match SELL)",
       "addIndicator": "Add Indicator",
       "signalType": "Signal Type",
       "signalStrength": "Strength",
@@ -435,7 +437,8 @@
       "description": "Enter description",
       "exchange": "Select exchange",
       "symbol": "Enter symbol",
-      "interval": "Select interval"
+      "interval": "Select interval",
+      "filterField": "Indicator field, e.g. volRatio"
     }
   },
   "message": {
