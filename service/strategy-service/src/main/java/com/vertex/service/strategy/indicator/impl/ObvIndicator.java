@@ -3,7 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
+
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -14,19 +14,8 @@ import java.util.Map;
  * 能量潮指标 (On-Balance Volume, OBV)
  * <p>
  * 通过累积涨跌K线的成交量来追踪资金流向：
- * <br>
- * 上涨K线: OBV += Volume（资金流入）
- * <br>
- * 下跌K线: OBV -= Volume（资金流出）
- * <br>
- * 平盘K线: OBV 不变
- * <br>
- * OBV 信号线 = OBV 的 SMA(signalPeriod)
- * <br>
- * OBV > 信号线 → BUY（资金净流入）
- * <br>
- * OBV < 信号线 → SELL（资金净流出）
- * <br>
+ * 上涨K线: OBV += Volume（资金流入），下跌K线: OBV -= Volume（资金流出），平盘K线: OBV 不变。
+ * OBV 信号线 = OBV 的 SMA(signalPeriod)。
  * 适用场景: 量价背离检测 — 价格新高但 OBV 未新高 = 顶背离（看空）
  * </p>
  */
@@ -78,25 +67,12 @@ public class ObvIndicator implements TechnicalIndicator {
         }
         obvSignal = signalCount > 0 ? obvSignal / signalCount : 0;
 
-        // Step 3: 信号判定
-        SignalSuggestion suggestion;
-        double diff = obvSignal != 0 ? (obv - obvSignal) / Math.abs(obvSignal) * 100 : 0;
-
-        if (diff > 1.0) {
-            suggestion = SignalSuggestion.BUY;   // OBV 显著高于信号线 → 资金净流入
-        } else if (diff < -1.0) {
-            suggestion = SignalSuggestion.SELL;  // OBV 显著低于信号线 → 资金净流出
-        } else {
-            suggestion = SignalSuggestion.NEUTRAL; // OBV ≈ 信号线 → 方向不明
-        }
-
         return IndicatorResult.builder()
                 .type(IndicatorType.OBV)
                 .values(Map.of(
                         "obv", round(obv),
                         "obvSignal", round(obvSignal)
                 ))
-                .suggestion(suggestion)
                 .build();
     }
 

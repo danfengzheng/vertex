@@ -59,4 +59,34 @@ public class StrategyIndicatorConfig implements Serializable {
      * 例如：[{field:"volRatio", op:"GT", threshold:1.5}, {field:"adx", op:"GTE", threshold:25}]
      */
     private List<FilterCondition> filterConditions;
+
+    /**
+     * 投票指标的买入判断条件（hardFilter=false 时生效）。
+     * <p>
+     * 非空时，所有条件全部满足 → 该指标本轮投 BUY，buyWeight += weight。<br>
+     * 为空时回退到指标内部的 suggestion 逻辑（向后兼容旧策略，未来废弃）。
+     * </p>
+     * 示例：[{field:"rsi14", op:"LT", threshold:30}]
+     */
+    private List<FilterCondition> buyConditions;
+
+    /**
+     * 投票指标的卖出判断条件（hardFilter=false 时生效）。
+     * <p>
+     * 非空时，所有条件全部满足 → 该指标本轮投 SELL，sellWeight += weight。<br>
+     * buyConditions 和 sellConditions 均不满足时投 NEUTRAL。<br>
+     * 为空时回退到指标内部的 suggestion 逻辑（向后兼容旧策略，未来废弃）。
+     * </p>
+     * 示例：[{field:"rsi14", op:"GT", threshold:70}]
+     */
+    private List<FilterCondition> sellConditions;
+
+    /**
+     * 当前投票指标是否已配置策略层判断条件（新方式）。
+     * true → 使用 buyConditions/sellConditions 投票；false → 回退到指标 suggestion（旧方式）。
+     */
+    public boolean hasVotingConditions() {
+        return (buyConditions != null && !buyConditions.isEmpty())
+                || (sellConditions != null && !sellConditions.isEmpty());
+    }
 }

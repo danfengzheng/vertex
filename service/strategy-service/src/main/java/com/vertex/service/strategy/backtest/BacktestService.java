@@ -13,10 +13,9 @@ import com.vertex.model.vo.strategy.BacktestResultVO;
 import com.vertex.model.vo.strategy.BacktestResultVO.EquityPoint;
 import com.vertex.model.vo.strategy.BacktestResultVO.TradeRecord;
 import com.vertex.service.quote.store.KLineStore;
-import com.vertex.service.strategy.engine.KLinePartialBarBuilder;
+import com.vertex.service.strategy.engine.IndicatorCalculationEngine;
 import com.vertex.service.strategy.engine.SignalGenerator;
-import com.vertex.service.strategy.indicator.IndicatorRegistry;
-import com.vertex.service.strategy.indicator.TechnicalIndicator;
+import com.vertex.service.strategy.indicator.IndicatorResult;
 import com.vertex.service.strategy.mapper.StrategyMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,7 +28,6 @@ import com.vertex.service.strategy.config.StrategyProperties;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 策略回测服务
@@ -45,7 +43,7 @@ public class BacktestService {
 
     private final StrategyMapper strategyMapper;
     private final KLineStore klineStore;
-    private final IndicatorRegistry indicatorRegistry;
+    private final IndicatorCalculationEngine indicatorEngine;
     private final SignalGenerator signalGenerator;
     private final StrategyProperties properties;
 
@@ -66,15 +64,10 @@ public class BacktestService {
         }
 
         // 2. 按周期计算所需数据量，加载多周期K线（与 StrategyEngineService 一致）
-        Map<KLineInterval, Integer> requiredByInterval = new HashMap<>();
-        Set<KLineInterval> allIntervals = new HashSet<>();
+        Map<KLineInterval, Integer> requiredByInterval =
+                indicatorEngine.computeMaxRequired(strategy, indicatorConfigs);
+        Set<KLineInterval> allIntervals = new HashSet<>(requiredByInterval.keySet());
         allIntervals.add(strategy.getInterval());
-        for (StrategyIndicatorConfig ic : indicatorConfigs) {
-            KLineInterval iv = getEffectiveInterval(ic, strategy);
-            allIntervals.add(iv);
-            int req = indicatorRegistry.get(ic.getIndicatorType()).requiredDataPoints(ic.getParams());
-            requiredByInterval.merge(iv, req, Math::max);
-        }
 
         Map<KLineInterval, List<KLine>> allKlinesByInterval = new HashMap<>();
         int mainRequired = requiredByInterval.getOrDefault(strategy.getInterval(), 50);
@@ -132,11 +125,22 @@ public class BacktestService {
 
         // 3. 执行模拟交易
         return simulateTrades(strategy, indicatorConfigs, mainKlines, allKlinesByInterval, config,
-                mainRequired, requiredByInterval);
+                mainRequired);
     }
 
-    private KLineInterval getEffectiveInterval(StrategyIndicatorConfig config, Strategy strategy) {
-        return config.getInterval() != null ? config.getInterval() : strategy.getInterval();
+    /**
+     * 从 BacktestBarProvider 获取 ATR 计算所需的 K 线窗口。
+     * 优先使用 atrInterval，若该周期无数据则回退到主周期。
+     */
+    private List<KLine> getAtrBars(BacktestBarProvider barProvider,
+                                   KLineInterval atrInterval,
+                                   KLineInterval primaryInterval,
+                                   int maxKlineHistory) {
+        List<KLine> bars = barProvider.getBars(atrInterval, Math.min(50 * 3 + 10, maxKlineHistory));
+        if (bars.isEmpty() && !atrInterval.equals(primaryInterval)) {
+            bars = barProvider.getBars(primaryInterval, Math.min(50 * 3 + 10, maxKlineHistory));
+        }
+        return bars;
     }
 
     private BacktestResultVO simulateTrades(
@@ -145,8 +149,7 @@ public class BacktestService {
             List<KLine> klines,
             Map<KLineInterval, List<KLine>> allKlinesByInterval,
             BacktestConfigDTO config,
-            int mainRequiredDataPoints,
-            Map<KLineInterval, Integer> requiredByInterval) {
+            int mainRequiredDataPoints) {
 
         int maxKlineHistory = properties.getEngine().getMaxKlineHistory();
         int warmup = properties.getEngine().getWarmupMultiplier();
@@ -175,101 +178,34 @@ public class BacktestService {
         int maxDrawdownDuration = 0;
         int currentDrawdownDuration = 0;
 
+        // 创建 BacktestBarProvider（预加载所有周期历史数据，单调指针 O(1) getBars）
+        BacktestBarProvider barProvider = new BacktestBarProvider(
+                allKlinesByInterval, strategy.getExchange(), strategy.getSymbol());
+
         // 滑动窗口模拟（以策略主周期为时间轴）
         // 起始索引取 warmupSize-1，确保首次评估时就能取到完整的预热窗口
         int mainWarmupSize = Math.min(mainRequiredDataPoints * warmup + 10, maxKlineHistory);
         int startIdx = Math.max(mainRequiredDataPoints, mainWarmupSize - 1);
 
-        // ── 次级周期单调推进指针 ────────────────────────────────────────────────────
-        // currentKline.getOpenTime() 严格单调递增，已收盘/已处理的右边界只会前进，
-        // 无需每轮从头全扫 ivList（O(n×m) → O(n+m)）。
-        Map<KLineInterval, Integer> secPointers = new HashMap<>();
-        for (KLineInterval iv : allKlinesByInterval.keySet()) {
-            if (!iv.equals(strategy.getInterval())) {
-                secPointers.put(iv, 0);
-            }
-        }
-
         for (int i = startIdx; i < klines.size(); i++) {
             KLine currentKline = klines.get(i);
 
-            // 仅处理回测时间范围内的K线
+            // 推进各周期指针到当前触发时间（单调递增，总复杂度 O(n+m)）
+            barProvider.advance(currentKline.getOpenTime(), strategy.getInterval());
+
+            // 仅处理回测时间范围内的K线（指针推进不受此限制）
             if (currentKline.getOpenTime() < config.getStartTime()) {
                 continue;
             }
 
-            // 构建多周期 K 线窗口，使用 warmupMultiplier 倍数预热，与 StrategyEngineService 一致
-            Map<KLineInterval, List<KLine>> klinesByInterval = new HashMap<>();
-            klinesByInterval.put(strategy.getInterval(), klines.subList(Math.max(0, i - mainWarmupSize + 1), i + 1));
-
-            long triggerOpenTime = currentKline.getOpenTime();
-
-            for (Map.Entry<KLineInterval, List<KLine>> e : allKlinesByInterval.entrySet()) {
-                KLineInterval secInterval = e.getKey();
-                if (secInterval.equals(strategy.getInterval())) continue;
-                List<KLine> ivList = e.getValue();
-                int req = requiredByInterval.getOrDefault(secInterval, 50);
-                int fetchSize = Math.min(req * warmup + 10, maxKlineHistory);
-
-                int ptr = secPointers.getOrDefault(secInterval, 0);
-
-                if (secInterval.getMillis() > strategy.getInterval().getMillis()) {
-                    // 高周期：推进已收盘指针（closeTime < triggerOpenTime）
-                    // 消除 Lookahead Bias：不纳入尚未完整收盘的 bar
-                    while (ptr < ivList.size()) {
-                        KLine k = ivList.get(ptr);
-                        if (k.getCloseTime() != null && k.getCloseTime() < triggerOpenTime) {
-                            ptr++;
-                        } else {
-                            break;
-                        }
-                    }
-                    secPointers.put(secInterval, ptr);
-                    // closedWindow = 最近 fetchSize 根已收盘高周期 bar（O(1) subList 视图）
-                    List<KLine> closedWindow = ivList.subList(Math.max(0, ptr - fetchSize), ptr);
-
-                    // ── buildPartialBar 优化：O(n²) → O(log n) ───────────────────────
-                    // 原实现传入 klines.subList(0, i+1)，buildPartialBar 内部每轮全扫 i+1 个元素，
-                    // 造成总扫描量 1+2+…+n = O(n²)（30天1m约 9 亿次操作）。
-                    // 优化：二分查找当前高周期的 periodStart 在主周期 klines 中的起始索引，
-                    // 仅传入本周期内的切片（最多 secInterval/primaryInterval 根，如 1h/1m=60 根），
-                    // 且切片已按 openTime 升序，buildPartialBar 无需再排序。
-                    long secIntervalMs = secInterval.getMillis();
-                    long periodStart = (triggerOpenTime / secIntervalMs) * secIntervalMs;
-                    int lo = 0, hi = i;
-                    while (lo < hi) {
-                        int mid = (lo + hi) >>> 1;
-                        if (klines.get(mid).getOpenTime() < periodStart) lo = mid + 1;
-                        else hi = mid;
-                    }
-                    KLine partialBar = KLinePartialBarBuilder.buildPartialBar(
-                            klines.subList(lo, i + 1),   // 仅含当前高周期内的主周期 bars，已升序
-                            secInterval,
-                            triggerOpenTime,
-                            strategy.getExchange(),
-                            strategy.getSymbol());
-
-                    List<KLine> windowWithPartial = new ArrayList<>(closedWindow);
-                    if (partialBar != null) {
-                        windowWithPartial.add(partialBar);
-                    }
-                    if (!windowWithPartial.isEmpty()) {
-                        klinesByInterval.put(secInterval, windowWithPartial);
-                    }
-                } else {
-                    // 小周期：推进已处理指针（openTime <= triggerOpenTime）
-                    while (ptr < ivList.size() && ivList.get(ptr).getOpenTime() <= triggerOpenTime) {
-                        ptr++;
-                    }
-                    secPointers.put(secInterval, ptr);
-                    // window = 最近 fetchSize 根小周期 bar（O(1) subList 视图）
-                    List<KLine> window = ivList.subList(Math.max(0, ptr - fetchSize), ptr);
-                    if (window.size() >= req) {
-                        klinesByInterval.put(secInterval, window);
-                    }
-                }
+            // 调用指标计算引擎（每周期取一次 bar，追加 PartialBar，计算所有指标）
+            List<IndicatorResult> results = indicatorEngine.computeAll(strategy, configs, barProvider);
+            if (!IndicatorCalculationEngine.hasEnoughData(results)) {
+                continue;
             }
-            Signal signal = signalGenerator.evaluate(strategy, configs, klinesByInterval);
+
+            // 生成信号（三阶段：前置过滤 → 投票加权 → 后置方向校验）
+            Signal signal = signalGenerator.evaluate(strategy, configs, results, List.of(currentKline));
 
             // 当前 bar 收盘价（用于权益计算与信号平仓）
             BigDecimal currentPrice = currentKline.getClose();
@@ -370,8 +306,7 @@ public class BacktestService {
                 boolean hasAtrPositionSizing = strategy.getAtrStopMultiplier() != null
                         && strategy.getAtrStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
                 if (hasAtrPositionSizing) {
-                    List<KLine> atrWindow = klinesByInterval.getOrDefault(
-                            effectiveAtrInterval, klinesByInterval.get(strategy.getInterval()));
+                    List<KLine> atrWindow = getAtrBars(barProvider, effectiveAtrInterval, strategy.getInterval(), maxKlineHistory);
                     BigDecimal atr14 = computeAtrFromList(atrWindow, 14);
                     BigDecimal atr50 = computeAtrFromList(atrWindow, 50);
                     if (atr14 != null && atr50 != null && atr14.compareTo(BigDecimal.ZERO) > 0) {
@@ -404,8 +339,7 @@ public class BacktestService {
                         && strategy.getAtrTakeProfitMultiplier().compareTo(BigDecimal.ZERO) > 0;
                 boolean hasPctTp   = strategy.getTakeProfitPct() != null;
 
-                List<KLine> atrWindow = klinesByInterval.getOrDefault(
-                        effectiveAtrInterval, klinesByInterval.get(strategy.getInterval()));
+                List<KLine> atrWindow = getAtrBars(barProvider, effectiveAtrInterval, strategy.getInterval(), maxKlineHistory);
 
                 if (hasTrailingStop) {
                     // 移动ATR止损：开仓时设置 INITIAL 止损，后续每根K线逐步推进状态机
@@ -486,8 +420,7 @@ public class BacktestService {
             // ── 移动ATR止损状态机：每根K线收盘后推进（与实盘 TradeExecutionService 一致）────
             // 在信号处理之后执行，新止损价在下一根K线的止损检查中生效
             if (inPosition && stopLossStage != null) {
-                List<KLine> atrWin = klinesByInterval.getOrDefault(
-                        effectiveAtrInterval, klinesByInterval.get(strategy.getInterval()));
+                List<KLine> atrWin = getAtrBars(barProvider, effectiveAtrInterval, strategy.getInterval(), maxKlineHistory);
                 BigDecimal atr = computeAtrFromList(atrWin, 14);
                 if (atr != null && atr.compareTo(BigDecimal.ZERO) > 0) {
                     BigDecimal closePrice = currentKline.getClose();
@@ -668,48 +601,10 @@ public class BacktestService {
     }
 
     /**
-     * 从主周期K线窗口内联计算 ATR（Wilder 平滑，period=14）。
-     * <p>
-     * 复用 TradeExecutionService 中相同的算法，避免跨服务依赖。
-     * 取 barIdx 前 period+1 根（含当前 bar）计算 True Range，再做 Wilder 平滑。
-     *
-     * @param klines  全量主周期K线（升序）
-     * @param barIdx  当前 bar 在 klines 中的索引
-     * @param period  ATR 周期（通常为 14）
-     * @return ATR 值；若数据不足则返回 null
-     */
-    private BigDecimal computeAtrFromWindow(List<KLine> klines, int barIdx, int period) {
-        // 取 period×3+1 根以确保 Wilder 平滑有足够预热数据
-        int from = Math.max(0, barIdx - period * 3);
-        List<KLine> window = klines.subList(from, barIdx + 1);
-        if (window.size() < 2) return null;
-
-        double[] trueRanges = new double[window.size() - 1];
-        for (int j = 1; j < window.size(); j++) {
-            KLine cur  = window.get(j);
-            KLine prev = window.get(j - 1);
-            double highLow   = cur.getHigh().doubleValue() - cur.getLow().doubleValue();
-            double highClose = Math.abs(cur.getHigh().doubleValue() - prev.getClose().doubleValue());
-            double lowClose  = Math.abs(cur.getLow().doubleValue()  - prev.getClose().doubleValue());
-            trueRanges[j - 1] = Math.max(highLow, Math.max(highClose, lowClose));
-        }
-
-        int calcPeriod = Math.min(period, trueRanges.length);
-        double atr = 0;
-        for (int j = 0; j < calcPeriod; j++) atr += trueRanges[j];
-        atr /= calcPeriod;
-        // Wilder 平滑
-        for (int j = calcPeriod; j < trueRanges.length; j++) {
-            atr = (atr * (period - 1) + trueRanges[j]) / period;
-        }
-        return BigDecimal.valueOf(atr);
-    }
-
-    /**
      * 从任意周期K线列表末尾计算 ATR（Wilder 平滑）。
      * 用于支持 atrInterval 时从非主周期K线窗口中取数。
      *
-     * @param klines 已按 openTime 升序排列的K线列表（来自 klinesByInterval）
+     * @param klines 已按 openTime 升序排列的K线列表（来自 BacktestBarProvider.getBars()）
      * @param period ATR 周期（通常为 14）
      * @return ATR 值；若数据不足则返回 null
      */

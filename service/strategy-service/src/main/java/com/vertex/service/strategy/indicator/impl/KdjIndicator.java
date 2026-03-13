@@ -3,7 +3,6 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -19,14 +18,6 @@ import java.util.Map;
  *   K = 2/3 * prevK + 1/3 * RSV
  *   D = 2/3 * prevD + 1/3 * K
  *   J = 3K - 2D
- * 信号:
- * <ul>
- *   <li>金叉（K 上穿 D）→ BUY</li>
- *   <li>死叉（K 下穿 D）且 K &gt; 80（超买区域）→ NEUTRAL（暂停买入，不反向做空）</li>
- *   <li>死叉（K 下穿 D）且 K ≤ 80（正常区域）→ SELL</li>
- *   <li>其他 → NEUTRAL</li>
- * </ul>
- * 超买区域死叉不给 SELL 分，避免在上升趋势中被振荡器反向信号带偏。
  * </p>
  */
 @Component
@@ -67,26 +58,15 @@ public class KdjIndicator implements TechnicalIndicator {
 
         double j = 3 * k - 2 * d;
 
-        // 判断金叉/死叉，超买区域（K > 80）死叉不给 SELL 分
-        SignalSuggestion suggestion;
-        if (prevK <= prevD && k > d) {
-            suggestion = SignalSuggestion.BUY;     // 金叉 → 买入
-        } else if (prevK >= prevD && k < d && k > 80) {
-            suggestion = SignalSuggestion.NEUTRAL; // 超买区域死叉 → 暂停买入，不反向做空
-        } else if (prevK >= prevD && k < d) {
-            suggestion = SignalSuggestion.SELL;    // 正常区域死叉 → 卖出信号
-        } else {
-            suggestion = SignalSuggestion.NEUTRAL;
-        }
-
         return IndicatorResult.builder()
                 .type(IndicatorType.KDJ)
                 .values(Map.of(
                         "k", round(k),
                         "d", round(d),
-                        "j", round(j)
+                        "j", round(j),
+                        "kPrev", round(prevK),
+                        "dPrev", round(prevD)
                 ))
-                .suggestion(suggestion)
                 .build();
     }
 

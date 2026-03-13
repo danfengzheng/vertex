@@ -3,7 +3,6 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -14,7 +13,6 @@ import java.util.Map;
  * 简单移动平均线 (SMA)
  * <p>
  * 参数: period (默认 20)
- * 信号: 价格 > SMA → BUY, 价格 < SMA → SELL, 否则 NEUTRAL
  * </p>
  */
 @Component
@@ -41,21 +39,9 @@ public class SimpleMovingAverage implements TechnicalIndicator {
                 .average()
                 .orElse(0);
 
-        double currentClose = klines.get(klines.size() - 1).getClose().doubleValue();
-
-        SignalSuggestion suggestion;
-        if (currentClose > sma * 1.001) {
-            suggestion = SignalSuggestion.BUY;
-        } else if (currentClose < sma * 0.999) {
-            suggestion = SignalSuggestion.SELL;
-        } else {
-            suggestion = SignalSuggestion.NEUTRAL;
-        }
-
         return IndicatorResult.builder()
                 .type(IndicatorType.MA)
                 .values(Map.of("ma" + period, round(sma)))
-                .suggestion(suggestion)
                 .build();
     }
 

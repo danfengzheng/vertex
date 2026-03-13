@@ -3,7 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
+
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -20,8 +20,6 @@ import java.util.Map;
  * 取值范围: -100 ~ 0
  * <br>
  * 参数: period (默认 14)
- * <br>
- * 信号: WR < -80 → BUY (超卖), WR > -20 → SELL (超买)
  * </p>
  */
 @Component
@@ -60,19 +58,9 @@ public class WilliamsRIndicator implements TechnicalIndicator {
         // %R = (最高价 - 收盘价) / (最高价 - 最低价) × (-100)
         double wr = range > 0 ? (highestHigh - currentClose) / range * (-100) : -50;
 
-        SignalSuggestion suggestion;
-        if (wr < -80) {
-            suggestion = SignalSuggestion.BUY;  // 超卖区
-        } else if (wr > -20) {
-            suggestion = SignalSuggestion.SELL; // 超买区
-        } else {
-            suggestion = SignalSuggestion.NEUTRAL;
-        }
-
         return IndicatorResult.builder()
                 .type(IndicatorType.WR)
                 .values(Map.of("wr" + period, round(wr)))
-                .suggestion(suggestion)
                 .build();
     }
 

@@ -3,7 +3,6 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -15,13 +14,6 @@ import java.util.Map;
  * <p>
  * 参数: period (默认 14)
  * 公式: RSI = 100 - 100/(1 + RS), RS = avgGain/avgLoss
- * 信号:
- * <ul>
- *   <li>RSI &lt; 30 → BUY（超卖，买入信号）</li>
- *   <li>RSI &gt; 70 → NEUTRAL（超买，暂停买入加分；不给 SELL 分，避免在趋势上行中反向做空）</li>
- *   <li>30 ≤ RSI ≤ 70 → NEUTRAL</li>
- * </ul>
- * RSI 作为单向过滤器：只在超卖时贡献 BUY 分，超买时退出市场观望而非反向。
  * </p>
  */
 @Component
@@ -81,19 +73,9 @@ public class RelativeStrengthIndex implements TechnicalIndicator {
             rsi = 100 - 100.0 / (1 + rs);
         }
 
-        SignalSuggestion suggestion;
-        if (rsi < 30) {
-            suggestion = SignalSuggestion.BUY;     // 超卖 → 买入信号
-        } else if (rsi > 70) {
-            suggestion = SignalSuggestion.NEUTRAL; // 超买 → 暂停买入，不反向做空
-        } else {
-            suggestion = SignalSuggestion.NEUTRAL;
-        }
-
         return IndicatorResult.builder()
                 .type(IndicatorType.RSI)
                 .values(Map.of("rsi" + period, round(rsi)))
-                .suggestion(suggestion)
                 .build();
     }
 

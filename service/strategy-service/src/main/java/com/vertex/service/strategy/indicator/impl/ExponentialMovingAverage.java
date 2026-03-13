@@ -3,7 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
+
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +15,6 @@ import java.util.Map;
  * <p>
  * 参数: period (默认 20)
  * 公式: EMA = 前一EMA + α * (close - 前一EMA), α = 2/(period+1)
- * 信号: 价格 > EMA → BUY, 价格 < EMA → SELL
  * </p>
  */
 @Component
@@ -48,21 +47,9 @@ public class ExponentialMovingAverage implements TechnicalIndicator {
             ema = close * multiplier + ema * (1 - multiplier);
         }
 
-        double currentClose = klines.get(klines.size() - 1).getClose().doubleValue();
-
-        SignalSuggestion suggestion;
-        if (currentClose > ema * 1.001) {
-            suggestion = SignalSuggestion.BUY;
-        } else if (currentClose < ema * 0.999) {
-            suggestion = SignalSuggestion.SELL;
-        } else {
-            suggestion = SignalSuggestion.NEUTRAL;
-        }
-
         return IndicatorResult.builder()
                 .type(IndicatorType.EMA)
                 .values(Map.of("ema" + period, round(ema)))
-                .suggestion(suggestion)
                 .build();
     }
 

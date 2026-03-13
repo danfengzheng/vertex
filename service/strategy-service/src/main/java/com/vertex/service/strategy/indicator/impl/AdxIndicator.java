@@ -3,7 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
+
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -24,10 +24,6 @@ import java.util.Map;
  * 5. 平滑 DX 得到 ADX
  * <br>
  * 参数: period(14), trendThreshold(25)
- * <br>
- * 信号: +DI > -DI 且 ADX > 阈值 → BUY (强多头趋势)
- *       -DI > +DI 且 ADX > 阈值 → SELL (强空头趋势)
- *       ADX ≤ 阈值 → NEUTRAL (趋势太弱，不宜交易)
  * </p>
  */
 @Component
@@ -137,16 +133,6 @@ public class AdxIndicator implements TechnicalIndicator {
             }
         }
 
-        // 信号判断
-        SignalSuggestion suggestion;
-        if (adx > trendThreshold && plusDi > minusDi) {
-            suggestion = SignalSuggestion.BUY;   // 强多头趋势
-        } else if (adx > trendThreshold && minusDi > plusDi) {
-            suggestion = SignalSuggestion.SELL;  // 强空头趋势
-        } else {
-            suggestion = SignalSuggestion.NEUTRAL; // 趋势不够强
-        }
-
         return IndicatorResult.builder()
                 .type(IndicatorType.ADX)
                 .values(Map.of(
@@ -154,7 +140,6 @@ public class AdxIndicator implements TechnicalIndicator {
                         "plusDi", round(plusDi),
                         "minusDi", round(minusDi)
                 ))
-                .suggestion(suggestion)
                 .build();
     }
 

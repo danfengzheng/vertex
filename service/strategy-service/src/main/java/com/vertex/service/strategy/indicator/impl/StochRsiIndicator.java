@@ -3,7 +3,6 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -21,8 +20,6 @@ import java.util.Map;
  * 3. K = SMA(StochRSI, kSmooth), D = SMA(K, dSmooth)
  * <br>
  * 参数: rsiPeriod(14), stochPeriod(14), kSmooth(3), dSmooth(3)
- * <br>
- * 信号: K上穿D 且 K < 20 → BUY (超卖区金叉), K下穿D 且 K > 80 → SELL (超买区死叉)
  * </p>
  */
 @Component
@@ -79,29 +76,20 @@ public class StochRsiIndicator implements TechnicalIndicator {
 
         // 取最后两个值判断交叉
         int last = dLine.length - 1;
-        int dStart = kStart + dSmooth - 1;
 
         double currentK = kLine[last];
         double currentD = dLine[last];
         double prevK = last > 0 ? kLine[last - 1] : currentK;
         double prevD = last > 0 ? dLine[last - 1] : currentD;
 
-        SignalSuggestion suggestion;
-        if (prevK <= prevD && currentK > currentD && currentK < 20) {
-            suggestion = SignalSuggestion.BUY;  // 超卖区金叉
-        } else if (prevK >= prevD && currentK < currentD && currentK > 80) {
-            suggestion = SignalSuggestion.SELL; // 超买区死叉
-        } else {
-            suggestion = SignalSuggestion.NEUTRAL;
-        }
-
         return IndicatorResult.builder()
                 .type(IndicatorType.STOCH_RSI)
                 .values(Map.of(
                         "stochRsiK", round(currentK),
-                        "stochRsiD", round(currentD)
+                        "stochRsiD", round(currentD),
+                        "stochRsiKPrev", round(prevK),
+                        "stochRsiDPrev", round(prevD)
                 ))
-                .suggestion(suggestion)
                 .build();
     }
 

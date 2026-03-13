@@ -3,7 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
+
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -14,15 +14,7 @@ import java.util.Map;
  * 成交量确认指标 (Volume Confirmation)
  * <p>
  * 通过对比当前成交量与近期平均成交量来判断是否放量，
- * 结合价格变动方向产生信号。
- * <br>
- * 放量 + 上涨 → BUY（趋势确认）
- * <br>
- * 放量 + 下跌 → SELL（趋势确认）
- * <br>
- * 缩量 → NEUTRAL（信号不可靠，不做判断）
- * <br>
- * 作为辅助指标与趋势指标组合使用，过滤缩量假突破。
+ * 结合价格变动方向产生信号。作为辅助指标与趋势指标组合使用，过滤缩量假突破。
  * </p>
  */
 @Component
@@ -66,16 +58,6 @@ public class VolConfirmIndicator implements TechnicalIndicator {
         // 成交量比率
         double volRatio = avgVolume > 0 ? currentVolume / avgVolume : 0;
 
-        // 信号判定：放量 + 价格方向
-        SignalSuggestion suggestion;
-        if (volRatio > volMultiplier && priceChange > 0) {
-            suggestion = SignalSuggestion.BUY;   // 放量上涨 → 多头确认
-        } else if (volRatio > volMultiplier && priceChange < 0) {
-            suggestion = SignalSuggestion.SELL;  // 放量下跌 → 空头确认
-        } else {
-            suggestion = SignalSuggestion.NEUTRAL; // 缩量 → 信号不可靠
-        }
-
         return IndicatorResult.builder()
                 .type(IndicatorType.VOL_CONFIRM)
                 .values(Map.of(
@@ -83,7 +65,6 @@ public class VolConfirmIndicator implements TechnicalIndicator {
                         "avgVolume", round(avgVolume),
                         "currentVolume", round(currentVolume)
                 ))
-                .suggestion(suggestion)
                 .build();
     }
 

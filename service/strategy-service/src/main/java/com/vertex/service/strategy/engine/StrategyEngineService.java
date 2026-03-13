@@ -12,8 +12,7 @@ import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.service.quote.store.KLineStore;
 import com.vertex.service.strategy.config.StrategyProperties;
-import com.vertex.service.strategy.indicator.IndicatorRegistry;
-import com.vertex.service.strategy.indicator.TechnicalIndicator;
+import com.vertex.service.strategy.indicator.IndicatorResult;
 import com.vertex.service.strategy.mapper.SignalMapper;
 import com.vertex.service.strategy.mapper.StrategyMapper;
 import com.vertex.service.strategy.store.SignalStore;
@@ -32,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 策略引擎服务（编排器）
  * <p>
- * 负责：加载策略 → 获取K线 → 计算指标 → 生成信号 → 双写存储 → WebSocket推送
+ * 负责：加载策略 → 创建 BarProvider → 调用指标计算引擎 → 生成信号 → 双写存储 → WebSocket推送
  * </p>
  */
 @Slf4j
@@ -45,7 +44,7 @@ public class StrategyEngineService {
     private final SignalStore signalStore;
     private final KLineStore klineStore;
     private final SignalGenerator signalGenerator;
-    private final IndicatorRegistry indicatorRegistry;
+    private final IndicatorCalculationEngine indicatorEngine;
     private final StrategyProperties properties;
 
     /** 信号推送服务（可选依赖，WebSocket 未配置时为 null） */
@@ -144,122 +143,28 @@ public class StrategyEngineService {
             return;
         }
 
-        // ── 第一步：预计算每个周期所有指标的最大 requiredDataPoints ──────────────────
-        // 与 BacktestService 保持一致（BacktestService 使用 requiredByInterval.merge(..., Math::max)）。
-        // 若某周期有多个指标（如 RSI+MACD），必须用最大值来确定窗口，否则窗口过小
-        // 导致 EMA 预热不足，与回测的滑动窗口产生偏差，进而出现信号不一致。
-        Map<KLineInterval, Integer> maxRequiredByInterval = new HashMap<>();
-        for (StrategyIndicatorConfig config : configs) {
-            KLineInterval iv = getEffectiveInterval(config, strategy);
-            TechnicalIndicator ind = indicatorRegistry.get(config.getIndicatorType());
-            int req = ind.requiredDataPoints(config.getParams());
-            maxRequiredByInterval.merge(iv, req, Math::max);
-        }
+        // 创建 LiveBarProvider（封装 K 线查询细节：onlyClosedKlines 过滤、翻转升序、触发时间锁定）
+        LiveBarProvider barProvider = new LiveBarProvider(
+                klineStore, properties,
+                strategy.getExchange(), strategy.getSymbol(),
+                triggeringKlineTime);
 
-        // 按周期分组获取 K线
-        Map<KLineInterval, List<KLine>> klinesByInterval = new HashMap<>();
-        boolean hasEnoughData = false;
-
-        for (StrategyIndicatorConfig config : configs) {
-            KLineInterval effectiveInterval = getEffectiveInterval(config, strategy);
-            if (!klinesByInterval.containsKey(effectiveInterval)) {
-                // 使用该周期所有指标中最大的 required（与回测对齐），而非仅当前指标的 required
-                int required = maxRequiredByInterval.getOrDefault(effectiveInterval, 50);
-                // 使用 warmupMultiplier 倍数多取历史K线，让 EMA/KDJ 等状态型指标充分预热，
-                // 避免因历史锚点不同导致与回测信号不一致
-                int warmup = properties.getEngine().getWarmupMultiplier();
-                int fetchSize = Math.min(required * warmup + 10, properties.getEngine().getMaxKlineHistory());
-
-                // 对于高于主周期的二级周期：将 endTime 前移一个周期，
-                // 确保只获取 closeTime < triggeringKlineTime 的已收盘 bar，
-                // 杜绝使用当前未收盘高周期 bar 的完整历史数据（Lookahead Bias）。
-                // 当前周期的实时状态将由 KLinePartialBarBuilder 从主周期 bars 聚合追加。
-                boolean isLargerSecondary = !effectiveInterval.equals(strategy.getInterval())
-                        && effectiveInterval.getMillis() > strategy.getInterval().getMillis();
-                Long endTime = triggeringKlineTime;
-                if (isLargerSecondary && triggeringKlineTime != null) {
-                    endTime = triggeringKlineTime - effectiveInterval.getMillis();
-                }
-
-                int querySize = properties.getEngine().isOnlyClosedKlines() ? fetchSize + 1 : fetchSize;
-                List<KLine> klines = klineStore.query(
-                        strategy.getExchange(), strategy.getSymbol(),
-                        effectiveInterval, null, endTime, querySize, false);
-
-                // 过滤未收盘K线，确保指标计算只使用已收盘数据（与回测一致）
-                if (properties.getEngine().isOnlyClosedKlines()) {
-                    klines = klines.stream()
-                            .filter(k -> Boolean.TRUE.equals(k.getClosed()))
-                            .toList();
-                }
-
-                // 截断到 fetchSize 根（保留降序头部=最新），与回测滑动窗口对齐。
-                if (klines.size() > fetchSize) {
-                    klines = klines.subList(0, fetchSize);
-                }
-
-                // 降序查询结果翻转为升序（时间从早到晚）
-                klines = new ArrayList<>(klines);
-                Collections.reverse(klines);
-
-                // 调试：记录实盘窗口范围，便于与回测滑动窗口核对
-                if (log.isDebugEnabled() && !klines.isEmpty()) {
-                    log.debug("[Signal] strategy='{}' interval={} window=[{} → {}] size={} fetchSize={}",
-                            strategy.getName(), effectiveInterval.getCode(),
-                            klines.get(0).getOpenTime(),
-                            klines.get(klines.size() - 1).getOpenTime(),
-                            klines.size(), fetchSize);
-                }
-
-                if (klines.size() < required) {
-                    log.debug("Insufficient data for interval {} in strategy '{}' ({}/{})",
-                            effectiveInterval, strategy.getName(), klines.size(), required);
-                } else {
-                    hasEnoughData = true;
-                }
-                klinesByInterval.put(effectiveInterval, klines);
-            } else {
-                hasEnoughData = true; // 之前已放入且不为空
-            }
-        }
-
-        if (!hasEnoughData) {
+        // 调用指标计算引擎：
+        //   1. 按周期统计最大 requiredDataPoints
+        //   2. 每个周期通过 barProvider 取一次 bar（warmupMultiplier 预热）
+        //   3. 为大周期追加 PartialBar（消除 Lookahead Bias）
+        //   4. 调用各指标 calculate()，汇总结果
+        List<IndicatorResult> results = indicatorEngine.computeAll(strategy, configs, barProvider);
+        if (!IndicatorCalculationEngine.hasEnoughData(results)) {
             log.debug("Strategy [{}] skipped: no interval has sufficient K-line data", strategy.getName());
             return;
         }
 
-        // ── 追加高周期 partial bar（从主周期已收盘 K 线实时聚合）──────────────────────
-        // 以触发 bar 为锚点，将主周期 bars 聚合成各高周期当前部分 bar，追加到末尾。
-        // 实盘与回测使用完全相同的逻辑，保证信号一致性，同时纳入当前周期成交量信息。
-        List<KLine> primaryKlines = klinesByInterval.get(strategy.getInterval());
-        if (primaryKlines != null && !primaryKlines.isEmpty()) {
-            long effectiveTriggerTime = triggeringKlineTime != null
-                    ? triggeringKlineTime
-                    : primaryKlines.get(primaryKlines.size() - 1).getOpenTime();
-            for (KLineInterval secInterval : new HashSet<>(klinesByInterval.keySet())) {
-                if (secInterval.equals(strategy.getInterval())) continue;
-                if (secInterval.getMillis() <= strategy.getInterval().getMillis()) continue;
+        // 获取主周期最近 bar（用于信号的 price / signalTime；barProvider 保持触发时间锁定）
+        List<KLine> primaryKlines = barProvider.getBars(strategy.getInterval(), 1);
 
-                KLine partialBar = KLinePartialBarBuilder.buildPartialBar(
-                        primaryKlines, secInterval, effectiveTriggerTime,
-                        strategy.getExchange(), strategy.getSymbol());
-
-                if (partialBar != null) {
-                    List<KLine> existing = klinesByInterval.get(secInterval);
-                    if (existing != null) {
-                        List<KLine> withPartial = new ArrayList<>(existing);
-                        withPartial.add(partialBar);
-                        klinesByInterval.put(secInterval, withPartial);
-                        log.debug("[Signal] strategy='{}' partial {} bar appended: openTime={} bars={}→{}",
-                                strategy.getName(), secInterval.getCode(),
-                                partialBar.getOpenTime(), existing.size(), withPartial.size());
-                    }
-                }
-            }
-        }
-
-        // 生成信号
-        Signal signal = signalGenerator.evaluate(strategy, configs, klinesByInterval);
+        // 生成信号（三阶段：前置硬性过滤 → 投票加权 → 后置方向校验）
+        Signal signal = signalGenerator.evaluate(strategy, configs, results, primaryKlines);
 
         // 移动ATR止损：每根K线收盘后触发（与信号无关，始终执行）
         if (tradeExecutionListener != null && strategy.getInitialStopMultiplier() != null
@@ -269,20 +174,10 @@ public class StrategyEngineService {
                 KLineInterval effectiveAtrInterval = strategy.getAtrInterval() != null
                         ? strategy.getAtrInterval() : strategy.getInterval();
 
-                // 如果该周期的 K 线尚未加载（主周期无指标使用时为空），则按需补充加载
-                if (!klinesByInterval.containsKey(effectiveAtrInterval)) {
-                    int fetchSize = Math.min(50, properties.getEngine().getMaxKlineHistory());
-                    List<KLine> atrKlines = klineStore.query(
-                            strategy.getExchange(), strategy.getSymbol(),
-                            effectiveAtrInterval, null, triggeringKlineTime, fetchSize + 1, false);
-                    if (atrKlines != null && !atrKlines.isEmpty()) {
-                        atrKlines = new ArrayList<>(atrKlines);
-                        Collections.reverse(atrKlines);
-                        klinesByInterval.put(effectiveAtrInterval, atrKlines);
-                    }
-                }
+                // barProvider 可按需获取任意周期的 bar（升序、已收盘）
+                List<KLine> atrKlines = barProvider.getBars(effectiveAtrInterval,
+                        Math.min(50, properties.getEngine().getMaxKlineHistory()));
 
-                List<KLine> atrKlines = klinesByInterval.get(effectiveAtrInterval);
                 if (atrKlines != null && !atrKlines.isEmpty()) {
                     BigDecimal atrValue = computeAtrFromKlines(atrKlines, 14);
                     if (atrValue != null) {

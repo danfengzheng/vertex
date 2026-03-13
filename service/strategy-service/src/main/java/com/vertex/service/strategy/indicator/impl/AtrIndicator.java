@@ -3,7 +3,6 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -17,7 +16,6 @@ import java.util.Map;
  * 公式:
  *   TR = max(High - Low, |High - prevClose|, |Low - prevClose|)
  *   ATR = Wilder 平滑 (prevATR * (period-1) + TR) / period
- * 信号: 始终 NEUTRAL（ATR 是波动率指标，非方向性）
  * </p>
  */
 @Component
@@ -72,7 +70,6 @@ public class AtrIndicator implements TechnicalIndicator {
                         "atr", round(atr),
                         "atrPercent", round(atrPercent)
                 ))
-                .suggestion(SignalSuggestion.NEUTRAL) // ATR 非方向性指标
                 .build();
     }
 

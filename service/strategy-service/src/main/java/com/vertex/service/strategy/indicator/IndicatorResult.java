@@ -19,7 +19,10 @@ public class IndicatorResult {
     /** 计算值，如 {"ma20": 95000.5} 或 {"macd": 1.2, "signal": 0.8, "histogram": 0.4} */
     private Map<String, Double> values;
 
-    /** 信号建议 */
+    /**
+     * @deprecated 指标不再负责方向判断，改由策略层通过 buyConditions/sellConditions 配置
+     */
+    @Deprecated
     private SignalSuggestion suggestion;
 
     public enum SignalSuggestion {

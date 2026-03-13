@@ -3,7 +3,6 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -24,10 +23,6 @@ import java.util.Map;
  * 4. 价格突破带时趋势翻转
  * <br>
  * 参数: period(10), multiplier(3.0)
- * <br>
- * 信号: SuperTrend 从上方翻转到下方 → BUY
- *       SuperTrend 从下方翻转到上方 → SELL
- *       未翻转 → NEUTRAL
  * </p>
  */
 @Component
@@ -141,25 +136,15 @@ public class SuperTrendIndicator implements TechnicalIndicator {
         boolean prevTrendUp = last > start ? trendUp[last - 1] : currentTrendUp;
         double superTrend = currentTrendUp ? finalLowerBand[last] : finalUpperBand[last];
 
-        // 信号判断：最后一根K线是否发生了趋势翻转
-        SignalSuggestion suggestion;
-        if (!prevTrendUp && currentTrendUp) {
-            suggestion = SignalSuggestion.BUY;  // 从下降翻转为上升
-        } else if (prevTrendUp && !currentTrendUp) {
-            suggestion = SignalSuggestion.SELL; // 从上升翻转为下降
-        } else {
-            suggestion = SignalSuggestion.NEUTRAL;
-        }
-
         return IndicatorResult.builder()
                 .type(IndicatorType.SUPERTREND)
                 .values(Map.of(
                         "superTrend", round(superTrend),
                         "trend", currentTrendUp ? 1.0 : -1.0,
+                        "prevTrend", prevTrendUp ? 1.0 : -1.0,
                         "upperBand", round(finalUpperBand[last]),
                         "lowerBand", round(finalLowerBand[last])
                 ))
-                .suggestion(suggestion)
                 .build();
     }
 

@@ -3,7 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
+
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -22,15 +22,6 @@ import java.util.Map;
  *       偏离超过此值视为"强弩之末"，不追入。</li>
  * </ul>
  *
- * <h3>信号逻辑（突破确认，非均值回归）</h3>
- * <ul>
- *   <li>BUY ：收盘价 &gt; VWAP 且正偏离 ∈ (0, deviationPct]%
- *       → 价格有效上破 VWAP，且尚未过度偏离（刚突破，不追高）</li>
- *   <li>SELL：收盘价 &lt; VWAP 且负偏离 ∈ [-deviationPct, 0)%
- *       → 价格有效下破 VWAP，且尚未过度偏离（刚跌穿，不追空）</li>
- *   <li>NEUTRAL：价格与 VWAP 齐平（deviation = 0），
- *       或偏离超过阈值（强弩之末，观望）</li>
- * </ul>
  */
 @Component
 public class VwapIndicator implements TechnicalIndicator {
@@ -72,25 +63,12 @@ public class VwapIndicator implements TechnicalIndicator {
         // deviation > 0 表示价格在 VWAP 上方，< 0 表示在下方，单位 %
         double deviation = vwap > 0 ? (currentClose - vwap) / vwap * 100 : 0;
 
-        SignalSuggestion suggestion;
-        if (deviation > 0 && deviation <= deviationPct) {
-            // 有效上破：价格刚突破 VWAP，偏离在阈值内，确认为买入信号
-            suggestion = SignalSuggestion.BUY;
-        } else if (deviation < 0 && deviation >= -deviationPct) {
-            // 有效下破：价格刚跌穿 VWAP，偏离在阈值内，确认为卖出信号
-            suggestion = SignalSuggestion.SELL;
-        } else {
-            // 价格与 VWAP 齐平，或偏离超过阈值（强弩之末），观望
-            suggestion = SignalSuggestion.NEUTRAL;
-        }
-
         return IndicatorResult.builder()
                 .type(IndicatorType.VWAP)
                 .values(Map.of(
                         "vwap",      round(vwap),
                         "deviation", round(deviation)
                 ))
-                .suggestion(suggestion)
                 .build();
     }
 
