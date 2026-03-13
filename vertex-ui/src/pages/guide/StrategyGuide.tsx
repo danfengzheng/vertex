@@ -166,10 +166,12 @@ const INDICATOR_DETAILS: IndicatorDetail[] = [
     ],
     filterMode: 'direction', filterModeDesc: '推荐方向校验',
     filterExamples: [
-      { desc: '价格在均线之上才允许做多', condition: '方向校验（无条件）→ 复合 BUY 时 MA 也须为 BUY', applyTo: '双向' },
+      { desc: '双向方向校验（推荐）：做多时价格须在均线上方，做空时须在均线下方',    condition: '方向校验（无条件）', applyTo: '双向' },
+      { desc: '仅多头过滤：只允许 BUY 信号，均线下方不开多（适合长多策略）',          condition: '方向校验（无条件）', applyTo: '仅买入' },
+      { desc: '⚠️ 数值条件须手动设市价阈值；字段命名：period=50 时 field 填 ma50',     condition: 'ma50 > 市价阈值（示意）', applyTo: '仅买入' },
     ],
     votingTip: '配合不同周期的 MA（20/50/200）做多均线排列确认，如 MA20 > MA50 > MA200 三线多头',
-    hardFilterTip: '使用方向校验模式：确保收盘价高于均线才允许买入，低于均线才允许卖出。可与 EMA 搭配同时过滤',
+    hardFilterTip: '使用方向校验模式：确保收盘价高于均线才允许买入，低于均线才允许卖出。可与 EMA 搭配同时过滤。字段命名：period=50 → ma50',
   },
   {
     code: 'EMA', nameZh: '指数移动平均线',
@@ -183,10 +185,12 @@ const INDICATOR_DETAILS: IndicatorDetail[] = [
     ],
     filterMode: 'direction', filterModeDesc: '推荐方向校验',
     filterExamples: [
-      { desc: '配合 MA 做多均线过滤，价格须在 EMA 之上', condition: '方向校验（无条件）', applyTo: '双向' },
+      { desc: '双向方向校验（推荐）：做多时价格须在 EMA 上方，做空时须在 EMA 下方',    condition: '方向校验（无条件）', applyTo: '双向' },
+      { desc: '仅多头过滤：只允许 BUY 信号（价格跌破 EMA 时不开多）',                   condition: '方向校验（无条件）', applyTo: '仅买入' },
+      { desc: '⚠️ 数值条件须手动设市价阈值；字段命名：period=21 时 field 填 ema21',     condition: 'ema21 > 市价阈值（示意）', applyTo: '仅买入' },
     ],
     votingTip: '短周期 EMA（9/21）适合短线；长周期 EMA（50/200）适合中长线',
-    hardFilterTip: '同 MA，使用方向校验模式。EMA 反应更快，可作为先行过滤器与 MA 配合使用',
+    hardFilterTip: '使用方向校验模式（同 MA）。EMA 反应更快，可作先行过滤器与 MA 配合使用。字段命名：period=21 → ema21，period=50 → ema50',
   },
   {
     code: 'RSI', nameZh: '相对强弱指数',
