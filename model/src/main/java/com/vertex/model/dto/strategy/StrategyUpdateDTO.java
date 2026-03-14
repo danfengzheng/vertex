@@ -27,6 +27,12 @@ public class StrategyUpdateDTO {
     private KLineInterval interval;
     private List<StrategyIndicatorConfig> indicatorConfigs;
 
+    /** 出场指标配置（可选，传空列表表示清除出场指标配置） */
+    private List<StrategyIndicatorConfig> exitIndicatorConfigs;
+
+    /** 最大持仓K线根数，超过后强制平仓（可选，null=不限） */
+    private Integer maxHoldingBars;
+
     // ─── 交易配置（可选） ───────────────────────────
     private Integer autoTrade;
     /** 自动交易最低信号强度门槛（0-100），null 时清空（代码默认 60） */

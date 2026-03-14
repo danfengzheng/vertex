@@ -6,6 +6,7 @@ import {
   InfoCircleOutlined,
   CheckCircleOutlined,
   WarningOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
@@ -204,13 +205,14 @@ const INDICATOR_DETAILS: IndicatorDetail[] = [
       '若将 RSI 加入投票，它只能贡献 BUY 加分，不会产生 SELL 加分',
       '使用方向校验硬过滤时，RSI 超买（>70）会返回 NEUTRAL → 导致硬过滤否决所有信号',
       '正确用法：使用数值条件，分别为 BUY/SELL 配置方向专属阈值',
+      '⚠️【出场特别注意】用作出场指标时，若想用 RSI>70 平多：必须使用投票模式（不开硬性过滤）+ sellConditions 配置 rsi14>70。RSI 单独作为 hardFilter 时无法产生复合 SELL，永远不会平多',
     ],
     filterMode: 'value', filterModeDesc: '必须使用数值条件（方向专属）',
     filterExamples: [
       { desc: '买入时要求超卖（period=14 时字段为 rsi14）',  condition: 'rsi14 < 30',  applyTo: '仅买入' },
       { desc: '卖出时要求超买（period=36 时字段改为 rsi36）', condition: 'rsi14 > 70',  applyTo: '仅卖出' },
     ],
-    votingTip: '在震荡行情中作为投票指标，超卖区贡献 BUY 加分；趋势行情中不建议作为主力指标',
+    votingTip: '在震荡行情中作为投票指标，超卖区贡献 BUY 加分；趋势行情中不建议作为主力指标。用于出场指标时需配置 sellConditions（rsi14>70）以主动产生 SELL 信号平多',
     hardFilterTip: '⚠️ 不可用方向校验模式（RSI 超买返回 NEUTRAL，会否决所有信号）。必须使用数值条件并设置 applyTo，分别配置超卖（<30，仅买入）和超买（>70，仅卖出）。⚠️ 注意字段名须与周期一致：period=36 → field 填 rsi36',
   },
   {
@@ -782,6 +784,205 @@ export const StrategyGuide = () => {
                   size="small"
                 />
               </Card>
+            ),
+          },
+
+          // ──────────────────── Tab 5: 出场配置指引 ─────────────────────────
+          {
+            key: 'exit',
+            label: <span><LogoutOutlined /> 出场配置</span>,
+            children: (
+              <div>
+                {/* 出场配置总览 */}
+                <Card
+                  size="small"
+                  title={<Text strong>出场方式总览</Text>}
+                  style={{ marginBottom: 16 }}
+                >
+                  <Row gutter={16}>
+                    <Col xs={24} md={8}>
+                      <Card
+                        size="small"
+                        style={{ borderLeft: '3px solid #ff4d4f', height: '100%' }}
+                        bodyStyle={{ padding: '10px 14px' }}
+                      >
+                        <Text strong style={{ color: '#ff4d4f' }}>① 止损 / 止盈</Text>
+                        <Paragraph style={{ fontSize: 12, marginTop: 6, marginBottom: 0 }}>
+                          固定百分比或 ATR 倍数，触发后立即平仓。优先级最高，出场后同一根K线不再判断指标。
+                        </Paragraph>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Card
+                        size="small"
+                        style={{ borderLeft: '3px solid #fa8c16', height: '100%' }}
+                        bodyStyle={{ padding: '10px 14px' }}
+                      >
+                        <Text strong style={{ color: '#fa8c16' }}>② 出场指标（exitIndicatorConfigs）</Text>
+                        <Paragraph style={{ fontSize: 12, marginTop: 6, marginBottom: 0 }}>
+                          独立于入场指标的出场信号组合。每根K线收盘后计算，
+                          信号为 SELL → 平多；信号为 BUY → 平空。可配置与入场完全不同的指标和周期。
+                        </Paragraph>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Card
+                        size="small"
+                        style={{ borderLeft: '3px solid #722ed1', height: '100%' }}
+                        bodyStyle={{ padding: '10px 14px' }}
+                      >
+                        <Text strong style={{ color: '#722ed1' }}>③ 时间止损（maxHoldingBars）</Text>
+                        <Paragraph style={{ fontSize: 12, marginTop: 6, marginBottom: 0 }}>
+                          持仓超过 N 根K线后强制平仓，避免仓位长期僵持。
+                          在出场指标之前判断，触发后不再评估指标出场。
+                        </Paragraph>
+                      </Card>
+                    </Col>
+                  </Row>
+                </Card>
+
+                {/* 出场指标配置说明 */}
+                <Card
+                  size="small"
+                  title={<Text strong>出场指标配置（exitIndicatorConfigs）详解</Text>}
+                  style={{ marginBottom: 16 }}
+                >
+                  <Alert
+                    type="info"
+                    showIcon
+                    message="核心原则：出场指标是独立的信号系统，不参与入场投票"
+                    description={
+                      <ul style={{ margin: '6px 0 0 0', paddingLeft: 20, fontSize: 12 }}>
+                        <li>出场信号与入场信号使用相同的投票机制（加权/硬性过滤），但完全独立配置</li>
+                        <li><Text strong>信号方向与入场相反：</Text>持多仓时 SELL 信号 = 平多；持空仓时 BUY 信号 = 平空</li>
+                        <li>不配置出场指标时，仅靠止损止盈和时间止损出场</li>
+                        <li>出场指标可使用与入场不同的时间周期（如入场用 1h，出场用 15m 更灵敏）</li>
+                      </ul>
+                    }
+                    style={{ marginBottom: 16 }}
+                  />
+                  <Row gutter={[16, 12]}>
+                    {/* 示例1：SuperTrend 翻转出场 */}
+                    <Col xs={24} md={12}>
+                      <Card size="small" style={{ background: '#fafafa' }}>
+                        <Space style={{ marginBottom: 8 }}>
+                          <Tag color="blue">示例 1</Tag>
+                          <Text strong style={{ fontSize: 13 }}>SuperTrend 趋势翻转出场</Text>
+                        </Space>
+                        <div style={{ fontSize: 12, color: '#555' }}>
+                          <div style={{ marginBottom: 4 }}><Text strong>适用：</Text>趋势跟踪策略，入场后跟随趋势，趋势反转时退出</div>
+                          <div style={{ marginBottom: 4 }}><Text strong>配置：</Text>添加 SUPERTREND 出场指标（权重 100 或硬性过滤）</div>
+                          <div style={{ marginBottom: 4 }}><Text strong>出场逻辑：</Text>
+                            <br />• 多头：SuperTrend 从 UP 翻到 DOWN → SELL → 平多
+                            <br />• 空头：SuperTrend 从 DOWN 翻到 UP → BUY → 平空
+                          </div>
+                          <div><Text strong>周期建议：</Text>可使用比入场周期更小的周期（如入场 4h，出场 1h）提高响应速度</div>
+                        </div>
+                      </Card>
+                    </Col>
+                    {/* 示例2：RSI 超买出场 */}
+                    <Col xs={24} md={12}>
+                      <Card size="small" style={{ background: '#fafafa' }}>
+                        <Space style={{ marginBottom: 8 }}>
+                          <Tag color="orange">示例 2</Tag>
+                          <Text strong style={{ fontSize: 13 }}>RSI 超买区出场（多头获利了结）</Text>
+                        </Space>
+                        <div style={{ fontSize: 12, color: '#555' }}>
+                          <div style={{ marginBottom: 4 }}><Text strong>适用：</Text>震荡策略，RSI 超买时主动获利了结多头</div>
+                          <div style={{ marginBottom: 4 }}><Text strong>正确配置：</Text>添加 RSI 出场指标，使用<Text strong>投票模式</Text>（不开启硬性过滤）</div>
+                          <div style={{ marginBottom: 4 }}><Text strong>sellConditions（平多触发）：</Text>
+                            <br />• 字段 <Text code>rsi14</Text>，条件 GT，阈值 <Text code>70</Text>
+                            <br />（RSI &gt; 70 → 投票为 SELL → 复合信号 SELL → 触发平多）
+                          </div>
+                          <Alert
+                            type="warning"
+                            showIcon={false}
+                            style={{ padding: '3px 8px', fontSize: 11, marginTop: 4 }}
+                            message={
+                              <>
+                                ⚠️ <Text strong>RSI 内部从不产生 SELL 信号</Text>（&gt;70 时返回 NEUTRAL）。
+                                必须用<Text strong>投票模式 + sellConditions</Text>配置出场条件，
+                                不可用硬性过滤方向校验（RSI 单独作为 hardFilter 时无法产生复合 SELL）。
+                              </>
+                            }
+                          />
+                        </div>
+                      </Card>
+                    </Col>
+                    {/* 示例3：MACD 死叉出场 */}
+                    <Col xs={24} md={12}>
+                      <Card size="small" style={{ background: '#fafafa' }}>
+                        <Space style={{ marginBottom: 8 }}>
+                          <Tag color="purple">示例 3</Tag>
+                          <Text strong style={{ fontSize: 13 }}>MACD 死叉出场</Text>
+                        </Space>
+                        <div style={{ fontSize: 12, color: '#555' }}>
+                          <div style={{ marginBottom: 4 }}><Text strong>适用：</Text>中期趋势策略，MACD 死叉时退出多头</div>
+                          <div style={{ marginBottom: 4 }}><Text strong>配置：</Text>添加 MACD 出场指标（权重 100 或硬性过滤）</div>
+                          <div style={{ marginBottom: 4 }}><Text strong>出场逻辑：</Text>
+                            <br />• MACD 柱状图由正翻负（死叉）→ 产生 SELL → 平多
+                            <br />• 硬性过滤：<Text code>histogramPrev</Text> &gt; <Text code>0</Text>（仅卖出），<Text code>histogram</Text> &lt; <Text code>0</Text>（仅卖出）
+                          </div>
+                        </div>
+                      </Card>
+                    </Col>
+                    {/* 示例4：多指标综合出场 */}
+                    <Col xs={24} md={12}>
+                      <Card size="small" style={{ background: '#fafafa' }}>
+                        <Space style={{ marginBottom: 8 }}>
+                          <Tag color="green">示例 4</Tag>
+                          <Text strong style={{ fontSize: 13 }}>SuperTrend + KDJ 综合出场</Text>
+                        </Space>
+                        <div style={{ fontSize: 12, color: '#555' }}>
+                          <div style={{ marginBottom: 4 }}><Text strong>适用：</Text>需要同时满足趋势翻转 + 超买信号才出场</div>
+                          <div style={{ marginBottom: 4 }}><Text strong>配置：</Text>
+                            <br />• SuperTrend：硬性过滤（方向校验），趋势翻转才允许出场
+                            <br />• KDJ：投票指标（权重 100），k &gt; d 死叉作为出场确认
+                          </div>
+                          <div><Text strong>效果：</Text>SuperTrend 翻转作为前置条件，KDJ 死叉作为出场确认，两者同时满足才平仓，减少误出场</div>
+                        </div>
+                      </Card>
+                    </Col>
+                  </Row>
+                </Card>
+
+                {/* 时间止损说明 */}
+                <Card
+                  size="small"
+                  title={<Text strong>时间止损（maxHoldingBars）配置指引</Text>}
+                >
+                  <Row gutter={16}>
+                    <Col xs={24} md={14}>
+                      <Alert
+                        type="warning"
+                        showIcon
+                        message="时间止损：持仓超过 N 根K线后强制平仓"
+                        description={
+                          <ul style={{ margin: '6px 0 0 0', paddingLeft: 20, fontSize: 12 }}>
+                            <li>主要用途：防止仓位长期僵持，控制机会成本</li>
+                            <li>判断顺序：止损/止盈 → 时间止损 → 指标出场</li>
+                            <li>时间止损触发后，同一根K线不再评估指标出场</li>
+                            <li>留空（不设置）表示不限制持仓时间</li>
+                          </ul>
+                        }
+                        style={{ marginBottom: 12 }}
+                      />
+                    </Col>
+                    <Col xs={24} md={10}>
+                      <Card size="small" style={{ background: '#fafafa' }}>
+                        <Text strong style={{ fontSize: 12 }}>推荐参数参考：</Text>
+                        <div style={{ marginTop: 8, fontSize: 12, color: '#555' }}>
+                          <div style={{ marginBottom: 4 }}>• <Text strong>1m K线</Text>：60-240（1-4 小时）</div>
+                          <div style={{ marginBottom: 4 }}>• <Text strong>5m K线</Text>：24-96（2-8 小时）</div>
+                          <div style={{ marginBottom: 4 }}>• <Text strong>15m K线</Text>：16-48（4-12 小时）</div>
+                          <div style={{ marginBottom: 4 }}>• <Text strong>1h K线</Text>：6-24（6-24 小时）</div>
+                          <div>• <Text strong>4h K线</Text>：3-10（12-40 小时）</div>
+                        </div>
+                      </Card>
+                    </Col>
+                  </Row>
+                </Card>
+              </div>
             ),
           },
         ]}

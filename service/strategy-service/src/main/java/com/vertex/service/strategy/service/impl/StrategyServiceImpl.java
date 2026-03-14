@@ -55,6 +55,9 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setSymbol(dto.getSymbol());
         strategy.setInterval(dto.getInterval());
         strategy.setIndicatorConfigs(JSON.toJSONString(dto.getIndicatorConfigs()));
+        strategy.setExitIndicatorConfigs(dto.getExitIndicatorConfigs() != null && !dto.getExitIndicatorConfigs().isEmpty()
+                ? JSON.toJSONString(dto.getExitIndicatorConfigs()) : null);
+        strategy.setMaxHoldingBars(dto.getMaxHoldingBars());
         strategy.setEnabled(0); // 默认禁用
         // 交易配置
         strategy.setAutoTrade(dto.getAutoTrade());
@@ -127,6 +130,12 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setTrailingActivationMultiplier(dto.getTrailingActivationMultiplier());
         strategy.setTrailingDistanceMultiplier(dto.getTrailingDistanceMultiplier());
         strategy.setAtrInterval(dto.getAtrInterval());
+        // 出场配置：传 null=不改；传空列表=清除；传非空列表=更新
+        if (dto.getExitIndicatorConfigs() != null) {
+            strategy.setExitIndicatorConfigs(dto.getExitIndicatorConfigs().isEmpty()
+                    ? null : JSON.toJSONString(dto.getExitIndicatorConfigs()));
+        }
+        strategy.setMaxHoldingBars(dto.getMaxHoldingBars());
 
         strategyMapper.updateById(strategy);
     }
@@ -165,6 +174,8 @@ public class StrategyServiceImpl implements IStrategyService {
         copy.setSymbol(source.getSymbol());
         copy.setInterval(source.getInterval());
         copy.setIndicatorConfigs(source.getIndicatorConfigs());
+        copy.setExitIndicatorConfigs(source.getExitIndicatorConfigs());
+        copy.setMaxHoldingBars(source.getMaxHoldingBars());
         copy.setEnabled(0); // 副本默认禁用，需用户确认后再启用
 
         // 交易配置
@@ -337,10 +348,13 @@ public class StrategyServiceImpl implements IStrategyService {
 
     private StrategyVO toVO(Strategy strategy) {
         StrategyVO vo = new StrategyVO();
-        BeanUtil.copyProperties(strategy, vo, "indicatorConfigs");
+        BeanUtil.copyProperties(strategy, vo, "indicatorConfigs", "exitIndicatorConfigs");
         // JSON 字符串 → List 反序列化
         vo.setIndicatorConfigs(
                 JSON.parseArray(strategy.getIndicatorConfigs(), StrategyIndicatorConfig.class));
+        vo.setExitIndicatorConfigs(
+                JSON.parseArray(strategy.getExitIndicatorConfigs(), StrategyIndicatorConfig.class));
+        vo.setMaxHoldingBars(strategy.getMaxHoldingBars());
         return vo;
     }
 }

@@ -90,6 +90,10 @@ export interface StrategyVO {
   symbol: string;
   interval: KLineInterval;
   indicatorConfigs: StrategyIndicatorConfig[];
+  /** 出场指标配置（与入场独立，为空时跳过指标出场） */
+  exitIndicatorConfigs?: StrategyIndicatorConfig[];
+  /** 最大持仓K线根数（时间止损，null=不限） */
+  maxHoldingBars?: number | null;
   enabled: number;
   /** 是否自动交易 0-否 1-是 */
   autoTrade: number;
@@ -162,6 +166,10 @@ export interface StrategyCreateDTO {
   symbol: string;
   interval: KLineInterval;
   indicatorConfigs: StrategyIndicatorConfig[];
+  /** 出场指标配置（可选，为空则仅使用止损止盈方式平仓） */
+  exitIndicatorConfigs?: StrategyIndicatorConfig[];
+  /** 最大持仓K线根数（时间止损，null=不限） */
+  maxHoldingBars?: number | null;
   autoTrade?: number;
   tradeMode?: TradeMode;
   executionMode?: ExecutionMode;
@@ -195,6 +203,10 @@ export interface StrategyUpdateDTO {
   symbol?: string;
   interval?: KLineInterval;
   indicatorConfigs?: StrategyIndicatorConfig[];
+  /** 出场指标配置（传空列表=清除出场指标配置） */
+  exitIndicatorConfigs?: StrategyIndicatorConfig[];
+  /** 最大持仓K线根数（时间止损，null=不限） */
+  maxHoldingBars?: number | null;
   autoTrade?: number;
   tradeMode?: TradeMode;
   executionMode?: ExecutionMode;
@@ -259,7 +271,7 @@ export interface TradeRecord {
   quantity: string;
   profit: string;
   profitPercent: string;
-  /** 平仓原因：SIGNAL | STOP_LOSS | TAKE_PROFIT | END_OF_BACKTEST */
+  /** 平仓原因：SIGNAL | STOP_LOSS | TAKE_PROFIT | MAX_BARS | INDICATOR_EXIT | END_OF_BACKTEST */
   exitReason?: string;
 }
 

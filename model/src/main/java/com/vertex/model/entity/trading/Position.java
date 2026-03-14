@@ -87,6 +87,11 @@ public class Position extends BaseEntity {
     /** 最新资金费率（合约专用） */
     private BigDecimal fundingRate;
 
+    // ─── 出场条件追踪字段 ───────────────────────────────────────────
+
+    /** 开仓后经历的K线根数（时间止损用，每根K线+1，null/0=未统计） */
+    private Integer openBarCount;
+
     // ─── 移动止损追踪字段（仅策略启用移动ATR止损时使用） ────────────
 
     /** 当前止损阶段：INITIAL / BREAKEVEN / TRAILING */

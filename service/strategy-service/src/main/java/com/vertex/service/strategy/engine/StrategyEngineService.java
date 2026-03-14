@@ -192,6 +192,35 @@ public class StrategyEngineService {
             }
         }
 
+        // ── 出场条件评估（每根K线收盘后检查，与入场信号无关） ─────────────────
+        // autoTrade=1 时才有实仓需要管理；此块在 NEUTRAL 返回之前执行，确保 barCount 每根K线都更新
+        if (tradeExecutionListener != null && strategy.getAutoTrade() != null && strategy.getAutoTrade() == 1) {
+            List<StrategyIndicatorConfig> exitConfigs = parseExitConfigs(strategy);
+            SignalType exitSignalType = SignalType.NEUTRAL;
+            int exitStrength = 0;
+
+            if (!exitConfigs.isEmpty()) {
+                try {
+                    List<IndicatorResult> exitResults = indicatorEngine.computeAll(strategy, exitConfigs, barProvider);
+                    if (IndicatorCalculationEngine.hasEnoughData(exitResults)) {
+                        Signal exitSignal = signalGenerator.evaluate(strategy, exitConfigs, exitResults, primaryKlines);
+                        exitSignalType = exitSignal.getSignalType();
+                        exitStrength = exitSignal.getSignalStrength() != null ? exitSignal.getSignalStrength() : 0;
+                    }
+                } catch (Exception e) {
+                    log.error("Exit indicator evaluation failed for strategy [{}]: {}",
+                            strategy.getName(), e.getMessage(), e);
+                }
+            }
+
+            try {
+                tradeExecutionListener.onExitConditionCheck(strategy, exitSignalType, exitStrength);
+            } catch (Exception e) {
+                log.error("Exit condition check failed for strategy [{}]: {}",
+                        strategy.getName(), e.getMessage(), e);
+            }
+        }
+
         // 跳过 NEUTRAL 信号，不写库不推送
         if (signal.getSignalType() == SignalType.NEUTRAL) {
             return;
@@ -281,9 +310,19 @@ public class StrategyEngineService {
         return true;
     }
 
-    /** 解析指标配置 JSON */
+    /** 解析入场指标配置 JSON */
     private List<StrategyIndicatorConfig> parseConfigs(Strategy strategy) {
         return JSON.parseArray(strategy.getIndicatorConfigs(), StrategyIndicatorConfig.class);
+    }
+
+    /** 解析出场指标配置 JSON；未配置时返回空列表 */
+    private List<StrategyIndicatorConfig> parseExitConfigs(Strategy strategy) {
+        if (strategy.getExitIndicatorConfigs() == null || strategy.getExitIndicatorConfigs().isBlank()) {
+            return Collections.emptyList();
+        }
+        List<StrategyIndicatorConfig> configs = JSON.parseArray(
+                strategy.getExitIndicatorConfigs(), StrategyIndicatorConfig.class);
+        return configs != null ? configs : Collections.emptyList();
     }
 
     /** 获取指标的有效周期（有自定义则用自定义，否则用策略默认） */

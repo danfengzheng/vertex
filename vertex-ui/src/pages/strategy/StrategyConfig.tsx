@@ -404,6 +404,9 @@ export const StrategyConfig = () => {
   // 指标配置联动
   const [indicatorTypes, setIndicatorTypes] = useState<(IndicatorType | undefined)[]>([]);
   const [hardFilters, setHardFilters] = useState<boolean[]>([]);
+  // 出场指标配置联动
+  const [exitIndicatorTypes, setExitIndicatorTypes] = useState<(IndicatorType | undefined)[]>([]);
+  const [exitHardFilters, setExitHardFilters] = useState<boolean[]>([]);
 
   // 自动交易
   const [autoTradeEnabled, setAutoTradeEnabled] = useState(false);
@@ -453,9 +456,11 @@ export const StrategyConfig = () => {
     setEditingId(null);
     setEditingRecord(null);
     form.resetFields();
-    form.setFieldsValue({ indicatorConfigs: [{}], autoTrade: 0, positionSizing: 'FIXED' });
+    form.setFieldsValue({ indicatorConfigs: [{}], exitIndicatorConfigs: [], autoTrade: 0, positionSizing: 'FIXED' });
     setIndicatorTypes([undefined]);
     setHardFilters([false]);
+    setExitIndicatorTypes([]);
+    setExitHardFilters([]);
     setAutoTradeEnabled(false);
     setPositionSizingMode('FIXED');
     setModalVisible(true);
@@ -467,6 +472,9 @@ export const StrategyConfig = () => {
     // 先更新所有 UI 状态，让条件渲染（filterConditions Form.List）在正确的 hardFilters 下挂载
     setIndicatorTypes(record.indicatorConfigs.map((c) => c.indicatorType));
     setHardFilters(record.indicatorConfigs.map((c) => !!c.hardFilter));
+    const exitConfigs = record.exitIndicatorConfigs ?? [];
+    setExitIndicatorTypes(exitConfigs.map((c) => c.indicatorType));
+    setExitHardFilters(exitConfigs.map((c) => !!c.hardFilter));
     setAutoTradeEnabled(record.autoTrade === 1);
     setPositionSizingMode(record.positionSizing || 'FIXED');
     // 更新已选账户的市场类型
@@ -497,6 +505,14 @@ export const StrategyConfig = () => {
             applyTo: fc.applyTo ?? undefined,
           })),
         })),
+        exitIndicatorConfigs: (record.exitIndicatorConfigs ?? []).map((config) => ({
+          ...config,
+          filterConditions: config.filterConditions?.map((fc) => ({
+            ...fc,
+            applyTo: fc.applyTo ?? undefined,
+          })),
+        })),
+        maxHoldingBars: record.maxHoldingBars ?? undefined,
         autoTrade: record.autoTrade ?? 0,
         minSignalStrength: record.minSignalStrength,
         tradeMode: record.tradeMode,
@@ -578,7 +594,7 @@ export const StrategyConfig = () => {
           'feeRate', 'atrStopMultiplier', 'atrTakeProfitMultiplier',
           'initialStopMultiplier', 'breakevenActivationMultiplier',
           'trailingActivationMultiplier', 'trailingDistanceMultiplier',
-          'atrInterval',
+          'atrInterval', 'maxHoldingBars',
         ] as const;
         const payload: Record<string, unknown> = { id: editingId, ...values };
         CLEARABLE_FIELDS.forEach((key) => {
@@ -970,6 +986,197 @@ export const StrategyConfig = () => {
             )}
           </Form.List>
 
+          <Divider>{t('text.strategy.exitIndicators')}</Divider>
+
+          <Form.List name="exitIndicatorConfigs">
+            {(fields, { add, remove }) => (
+              <>
+                {fields.map((field, index) => (
+                  <Card
+                    key={field.key}
+                    size="small"
+                    style={{ marginBottom: 12 }}
+                    extra={
+                      <Space>
+                        <Tooltip title={t('text.strategy.hardFilterTip')}>
+                          <Space size={4}>
+                            <span style={{ fontSize: 12, color: exitHardFilters[index] ? '#fa8c16' : undefined }}>
+                              {t('text.strategy.hardFilter')}
+                            </span>
+                            <Form.Item name={[field.name, 'hardFilter']} valuePropName="checked" noStyle>
+                              <Switch
+                                size="small"
+                                onChange={(checked) => {
+                                  setExitHardFilters((prev) => {
+                                    const next = [...prev];
+                                    next[index] = checked;
+                                    return next;
+                                  });
+                                }}
+                              />
+                            </Form.Item>
+                          </Space>
+                        </Tooltip>
+                        <Button
+                          type="link"
+                          danger
+                          size="small"
+                          onClick={() => {
+                            remove(field.name);
+                            setExitIndicatorTypes((prev) => prev.filter((_, i) => i !== index));
+                            setExitHardFilters((prev) => prev.filter((_, i) => i !== index));
+                          }}
+                        >
+                          {t('common.delete')}
+                        </Button>
+                      </Space>
+                    }
+                  >
+                    <Space align="start" wrap>
+                      <Form.Item
+                        name={[field.name, 'indicatorType']}
+                        label={t('text.strategy.indicatorType')}
+                        rules={[{ required: true, message: t('placeholder.common.select') }]}
+                      >
+                        <Select
+                          placeholder={t('placeholder.common.select')}
+                          style={{ width: 220 }}
+                          options={INDICATOR_OPTIONS}
+                          onChange={(val: IndicatorType) => {
+                            setExitIndicatorTypes((prev) => {
+                              const next = [...prev];
+                              next[index] = val;
+                              return next;
+                            });
+                          }}
+                        />
+                      </Form.Item>
+
+                      {!exitHardFilters[index] && (
+                        <>
+                          <Form.Item
+                            name={[field.name, 'weight']}
+                            label={t('text.strategy.weight')}
+                            initialValue={50}
+                            rules={[{ required: true }]}
+                          >
+                            <InputNumber min={1} max={100} style={{ width: 80 }} />
+                          </Form.Item>
+
+                          <Form.Item
+                            name={[field.name, 'penaltyWeight']}
+                            label={t('text.strategy.penaltyWeight')}
+                            initialValue={0}
+                            tooltip={t('text.strategy.penaltyWeightTip')}
+                          >
+                            <InputNumber min={0} max={100} style={{ width: 80 }} />
+                          </Form.Item>
+                        </>
+                      )}
+
+                      <Form.Item
+                        name={[field.name, 'interval']}
+                        label={t('text.strategy.indicatorInterval')}
+                      >
+                        <Select
+                          allowClear
+                          placeholder={t('text.strategy.useDefault')}
+                          style={{ width: 120 }}
+                          options={INTERVAL_OPTIONS}
+                        />
+                      </Form.Item>
+
+                      <IndicatorParamsFields type={exitIndicatorTypes[index]} prefix={[field.name]} />
+                    </Space>
+
+                    {/* 数值条件区域：仅在硬性过滤模式下显示 */}
+                    {exitHardFilters[index] && (
+                      <div style={{ marginTop: 8 }}>
+                        <Divider plain style={{ margin: '6px 0', fontSize: 12 }}>
+                          {t('text.strategy.filterConditions')}
+                          <span style={{ color: '#999', marginLeft: 8, fontWeight: 'normal' }}>
+                            {t('text.strategy.filterConditionsTip')}
+                          </span>
+                        </Divider>
+                        <Form.List name={[field.name, 'filterConditions']}>
+                          {(condFields, { add: addCond, remove: removeCond }) => (
+                            <>
+                              {condFields.map((condField) => (
+                                <Space key={condField.key} style={{ marginBottom: 6, display: 'flex' }} align="center">
+                                  <Form.Item name={[condField.name, 'field']} noStyle>
+                                    <AutoComplete
+                                      style={{ width: 150 }}
+                                      placeholder={t('placeholder.strategy.filterField')}
+                                      options={getIndicatorValueFields(
+                                        exitIndicatorTypes[index] as IndicatorType,
+                                        form.getFieldValue(['exitIndicatorConfigs', field.name, 'params']),
+                                      ).map((f) => ({ value: f }))}
+                                      filterOption={(input, opt) =>
+                                        (opt?.value ?? '').toLowerCase().includes(input.toLowerCase())
+                                      }
+                                    />
+                                  </Form.Item>
+                                  <Form.Item name={[condField.name, 'op']} noStyle initialValue="GT">
+                                    <Select style={{ width: 70 }} options={FILTER_OP_OPTIONS} />
+                                  </Form.Item>
+                                  <Form.Item name={[condField.name, 'threshold']} noStyle>
+                                    <InputNumber style={{ width: 100 }} placeholder="0" step={0.1} />
+                                  </Form.Item>
+                                  <Form.Item name={[condField.name, 'applyTo']} noStyle>
+                                    <Select
+                                      style={{ width: 90 }}
+                                      placeholder={t('text.strategy.filterApplyToBoth')}
+                                      allowClear
+                                      options={FILTER_APPLY_TO_OPTIONS}
+                                    />
+                                  </Form.Item>
+                                  <Button
+                                    type="link"
+                                    danger
+                                    size="small"
+                                    onClick={() => removeCond(condField.name)}
+                                  >
+                                    {t('common.delete')}
+                                  </Button>
+                                </Space>
+                              ))}
+                              {condFields.length === 0 && (
+                                <div style={{ color: '#999', fontSize: 12, marginBottom: 6 }}>
+                                  {t('text.strategy.filterConditionsEmpty')}
+                                </div>
+                              )}
+                              <Button
+                                size="small"
+                                type="dashed"
+                                onClick={() => addCond({ op: 'GT' })}
+                                icon={<PlusOutlined />}
+                              >
+                                {t('text.strategy.addCondition')}
+                              </Button>
+                            </>
+                          )}
+                        </Form.List>
+                      </div>
+                    )}
+                  </Card>
+                ))}
+
+                <Button
+                  type="dashed"
+                  onClick={() => {
+                    add({});
+                    setExitIndicatorTypes((prev) => [...prev, undefined]);
+                    setExitHardFilters((prev) => [...prev, false]);
+                  }}
+                  block
+                  icon={<PlusOutlined />}
+                >
+                  {t('text.strategy.addExitIndicator')}
+                </Button>
+              </>
+            )}
+          </Form.List>
+
           <Divider>{t('text.trading.title')}</Divider>
 
           <Form.Item
@@ -1146,6 +1353,14 @@ export const StrategyConfig = () => {
                   tooltip={t('text.trading.feeRateTip')}
                 >
                   <InputNumber min={0} max={0.1} step={0.0001} style={{ width: 160 }} placeholder="0.001" />
+                </Form.Item>
+
+                <Form.Item
+                  name="maxHoldingBars"
+                  label={t('text.trading.maxHoldingBars')}
+                  tooltip={t('text.trading.maxHoldingBarsTip')}
+                >
+                  <InputNumber min={1} step={1} style={{ width: 140 }} placeholder={t('text.trading.unlimited')} />
                 </Form.Item>
               </Space>
 

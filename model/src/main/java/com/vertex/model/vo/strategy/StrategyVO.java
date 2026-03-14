@@ -32,6 +32,10 @@ public class StrategyVO implements Serializable {
     private String symbol;
     private KLineInterval interval;
     private List<StrategyIndicatorConfig> indicatorConfigs;
+    /** 出场指标配置 */
+    private List<StrategyIndicatorConfig> exitIndicatorConfigs;
+    /** 最大持仓K线根数，超过后强制平仓，null=不限 */
+    private Integer maxHoldingBars;
     private Integer enabled;
 
     // ─── 交易配置 ───────────────────────────────────

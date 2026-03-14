@@ -2,6 +2,7 @@ package com.vertex.api.trading;
 
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.Signal;
+import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
 
 import java.math.BigDecimal;
@@ -36,6 +37,22 @@ public interface ITradeExecutionListener {
      * @param klines   主周期K线（升序），用于获取当前收盘价
      */
     default void onKLineClose(Strategy strategy, BigDecimal atrValue, List<KLine> klines) {
+        // 默认空实现：未启用交易时无需处理
+    }
+
+    /**
+     * 每根K线收盘后检查出场条件（时间止损 + 指标出场）。
+     * <p>
+     * 仅当 autoTrade=1 时由 StrategyEngineService 调用，与 K 线收盘事件联动。
+     * 实现方需：① 更新各持仓的 openBarCount；② 检查 maxHoldingBars 时间止损；
+     * ③ 根据 exitSignalType 判断方向并调用平仓。
+     * </p>
+     *
+     * @param strategy        策略配置（含 maxHoldingBars 与 minSignalStrength）
+     * @param exitSignalType  出场指标评估结果（NEUTRAL=无出场信号；SELL=多头平仓；BUY=空头平仓）
+     * @param signalStrength  出场信号强度（0-100）
+     */
+    default void onExitConditionCheck(Strategy strategy, SignalType exitSignalType, int signalStrength) {
         // 默认空实现：未启用交易时无需处理
     }
 }

@@ -3,6 +3,7 @@ package com.vertex.service.order.service;
 import com.vertex.api.trading.ITradeExecutionListener;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.Signal;
+import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.service.order.service.impl.TradeExecutionService;
 
@@ -44,6 +45,15 @@ public class TradeExecutionListenerImpl implements ITradeExecutionListener {
             tradeExecutionService.updateTrailingStops(strategy, atrValue, klines);
         } catch (Exception e) {
             log.error("Trailing stop update failed for strategy [{}]: {}", strategy.getName(), e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void onExitConditionCheck(Strategy strategy, SignalType exitSignalType, int signalStrength) {
+        try {
+            tradeExecutionService.processExitConditions(strategy, exitSignalType, signalStrength);
+        } catch (Exception e) {
+            log.error("Exit condition check failed for strategy [{}]: {}", strategy.getName(), e.getMessage(), e);
         }
     }
 }

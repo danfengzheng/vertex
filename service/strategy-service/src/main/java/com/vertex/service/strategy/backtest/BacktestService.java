@@ -63,9 +63,18 @@ public class BacktestService {
             throw new BizException(GlobalError.STRATEGY_CONFIG_ERROR);
         }
 
+        // 解析出场指标配置（可为空，为空时跳过指标出场评估）
+        List<StrategyIndicatorConfig> exitConfigs = parseExitConfigs(strategy);
+
         // 2. 按周期计算所需数据量，加载多周期K线（与 StrategyEngineService 一致）
         Map<KLineInterval, Integer> requiredByInterval =
                 indicatorEngine.computeMaxRequired(strategy, indicatorConfigs);
+        // 合并出场配置的周期需求，确保 K 线全部预加载
+        if (!exitConfigs.isEmpty()) {
+            Map<KLineInterval, Integer> exitRequired = indicatorEngine.computeMaxRequired(strategy, exitConfigs);
+            exitRequired.forEach((iv, req) ->
+                    requiredByInterval.merge(iv, req, Math::max));
+        }
         Set<KLineInterval> allIntervals = new HashSet<>(requiredByInterval.keySet());
         allIntervals.add(strategy.getInterval());
 
@@ -124,7 +133,7 @@ public class BacktestService {
         }
 
         // 3. 执行模拟交易
-        return simulateTrades(strategy, indicatorConfigs, mainKlines, allKlinesByInterval, config,
+        return simulateTrades(strategy, indicatorConfigs, exitConfigs, mainKlines, allKlinesByInterval, config,
                 mainRequired);
     }
 
@@ -146,6 +155,7 @@ public class BacktestService {
     private BacktestResultVO simulateTrades(
             Strategy strategy,
             List<StrategyIndicatorConfig> configs,
+            List<StrategyIndicatorConfig> exitConfigs,
             List<KLine> klines,
             Map<KLineInterval, List<KLine>> allKlinesByInterval,
             BacktestConfigDTO config,
@@ -169,6 +179,8 @@ public class BacktestService {
         // 移动ATR止损状态（null = 未启用）
         StopLossStage stopLossStage = null;
         BigDecimal highestPrice    = null; // LONG 极值追踪
+        // 出场条件：开仓后经历的K线计数（时间止损用）
+        int openBarCount = 0;
 
         List<TradeRecord> trades = new ArrayList<>();
         List<EquityPoint> equityCurve = new ArrayList<>();
@@ -253,9 +265,98 @@ public class BacktestService {
                     takeProfitPrice = null;
                     stopLossStage  = null;
                     highestPrice   = null;
+                    openBarCount   = 0;
                     closedByStopOrTp = true;
                     // 止损/止盈当根 K 线权益以出场价结算
                     currentPrice = exitPrice;
+                }
+            }
+
+            // ── 出场条件检查（时间止损 + 指标出场，SL/TP 触发后跳过） ─────────────────
+            // 入场/信号平仓门槛：与实盘 StrategyEngineService.meetsStrengthThreshold() 默认 60 保持一致
+            int minStrength = (strategy.getMinSignalStrength() != null && strategy.getMinSignalStrength() > 0)
+                    ? strategy.getMinSignalStrength() : 60;
+            // 独立出场指标门槛：与实盘 TradeExecutionService.processExitConditions() 完全一致，默认 0
+            int exitIndicatorMinStrength = (strategy.getMinSignalStrength() != null && strategy.getMinSignalStrength() > 0)
+                    ? strategy.getMinSignalStrength() : 0;
+            if (inPosition && !closedByStopOrTp) {
+                openBarCount++;
+
+                // 时间止损：超过最大持仓K线数强制平仓
+                if (strategy.getMaxHoldingBars() != null && openBarCount >= strategy.getMaxHoldingBars()) {
+                    BigDecimal exitValue = position.multiply(currentPrice);
+                    BigDecimal fee = exitValue.multiply(config.getFeeRate());
+                    BigDecimal netValue = exitValue.subtract(fee);
+                    BigDecimal cost = position.multiply(entryPrice);
+                    BigDecimal profit = netValue.subtract(cost);
+                    BigDecimal profitPct = cost.compareTo(BigDecimal.ZERO) > 0
+                            ? profit.divide(cost, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+                            : BigDecimal.ZERO;
+
+                    trades.add(TradeRecord.builder()
+                            .entryTime(entryTime)
+                            .exitTime(currentKline.getOpenTime())
+                            .type("LONG")
+                            .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
+                            .exitPrice(currentPrice.setScale(8, RoundingMode.HALF_UP))
+                            .quantity(position.setScale(8, RoundingMode.HALF_UP))
+                            .profit(profit.setScale(2, RoundingMode.HALF_UP))
+                            .profitPercent(profitPct.setScale(2, RoundingMode.HALF_UP))
+                            .exitReason("MAX_BARS")
+                            .build());
+
+                    capital         = capital.add(netValue);
+                    position        = BigDecimal.ZERO;
+                    inPosition      = false;
+                    stopLossPrice   = null;
+                    takeProfitPrice = null;
+                    stopLossStage   = null;
+                    highestPrice    = null;
+                    openBarCount    = 0;
+                    closedByStopOrTp = true; // 当根K线已平仓，阻止信号重新开仓
+                }
+
+                // 指标出场（exitConfigs 不为空且当前仍持仓时）
+                if (inPosition && !exitConfigs.isEmpty()) {
+                    List<IndicatorResult> exitResults = indicatorEngine.computeAll(strategy, exitConfigs, barProvider);
+                    if (IndicatorCalculationEngine.hasEnoughData(exitResults)) {
+                        Signal exitSignal = signalGenerator.evaluate(strategy, exitConfigs, exitResults,
+                                List.of(currentKline));
+                        if (exitSignal.getSignalType() == SignalType.SELL
+                                && exitSignal.getSignalStrength() != null
+                                && exitSignal.getSignalStrength() >= exitIndicatorMinStrength) {
+                            BigDecimal exitValue = position.multiply(currentPrice);
+                            BigDecimal fee = exitValue.multiply(config.getFeeRate());
+                            BigDecimal netValue = exitValue.subtract(fee);
+                            BigDecimal cost = position.multiply(entryPrice);
+                            BigDecimal profit = netValue.subtract(cost);
+                            BigDecimal profitPct = cost.compareTo(BigDecimal.ZERO) > 0
+                                    ? profit.divide(cost, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+                                    : BigDecimal.ZERO;
+
+                            trades.add(TradeRecord.builder()
+                                    .entryTime(entryTime)
+                                    .exitTime(currentKline.getOpenTime())
+                                    .type("LONG")
+                                    .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
+                                    .exitPrice(currentPrice.setScale(8, RoundingMode.HALF_UP))
+                                    .quantity(position.setScale(8, RoundingMode.HALF_UP))
+                                    .profit(profit.setScale(2, RoundingMode.HALF_UP))
+                                    .profitPercent(profitPct.setScale(2, RoundingMode.HALF_UP))
+                                    .exitReason("INDICATOR_EXIT")
+                                    .build());
+
+                            capital         = capital.add(netValue);
+                            position        = BigDecimal.ZERO;
+                            inPosition      = false;
+                            stopLossPrice   = null;
+                            takeProfitPrice = null;
+                            stopLossStage   = null;
+                            highestPrice    = null;
+                            openBarCount    = 0;
+                            closedByStopOrTp = true; // 当根K线已平仓，阻止信号重新开仓
+                        }
+                    }
                 }
             }
 
@@ -290,9 +391,7 @@ public class BacktestService {
             }
 
             // 根据信号执行交易（止损/止盈出场后本根 K 线不再重新开仓）
-            // 最低信号强度门槛：与实盘 StrategyEngineService.meetsStrengthThreshold() 保持一致
-            int minStrength = (strategy.getMinSignalStrength() != null && strategy.getMinSignalStrength() > 0)
-                    ? strategy.getMinSignalStrength() : 60;
+            // minStrength（入场/SELL信号平仓）已在出场条件块中声明，默认 60 与实盘保持一致
             if (!inPosition && !closedByStopOrTp && signal.getSignalType() == SignalType.BUY
                     && signal.getSignalStrength() != null && signal.getSignalStrength() >= minStrength) {
                 // 开仓
@@ -324,6 +423,7 @@ public class BacktestService {
                 entryPrice = currentPrice;
                 entryTime  = currentKline.getOpenTime();
                 inPosition = true;
+                openBarCount = 0; // 开仓时重置 K 线计数
 
                 // ── 计算止损止盈（优先级：移动ATR止损 > 固定ATR > 固定%，与实盘 TradeExecutionService 一致）──
                 stopLossPrice   = null;
@@ -415,6 +515,7 @@ public class BacktestService {
                 takeProfitPrice = null;
                 stopLossStage   = null;
                 highestPrice    = null;
+                openBarCount    = 0;
             }
 
             // ── 移动ATR止损状态机：每根K线收盘后推进（与实盘 TradeExecutionService 一致）────
@@ -633,5 +734,15 @@ public class BacktestService {
             atr = (atr * (period - 1) + trueRanges[j]) / period;
         }
         return BigDecimal.valueOf(atr);
+    }
+
+    /** 解析出场指标配置 JSON；未配置时返回空列表 */
+    private List<StrategyIndicatorConfig> parseExitConfigs(Strategy strategy) {
+        if (strategy.getExitIndicatorConfigs() == null || strategy.getExitIndicatorConfigs().isBlank()) {
+            return Collections.emptyList();
+        }
+        List<StrategyIndicatorConfig> configs = JSON.parseArray(
+                strategy.getExitIndicatorConfigs(), StrategyIndicatorConfig.class);
+        return configs != null ? configs : Collections.emptyList();
     }
 }

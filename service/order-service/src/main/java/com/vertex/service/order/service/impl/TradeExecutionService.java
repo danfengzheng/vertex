@@ -815,6 +815,62 @@ public class TradeExecutionService {
         }
     }
 
+    // ─── 出场条件处理 ─────────────────────────────────────────────────
+
+    /**
+     * 处理出场条件：时间止损 + 指标出场。
+     * <p>
+     * 每根K线收盘后由 {@link com.vertex.service.order.service.TradeExecutionListenerImpl#onExitConditionCheck} 触发。
+     * <ul>
+     *   <li>更新各持仓的 openBarCount（开仓后经历的K线根数）</li>
+     *   <li>检查 maxHoldingBars 时间止损，超过则强制平仓</li>
+     *   <li>根据 exitSignalType 判断方向：多头+SELL 或 空头+BUY 则平仓</li>
+     * </ul>
+     * </p>
+     *
+     * @param strategy        策略配置（含 maxHoldingBars、minSignalStrength）
+     * @param exitSignalType  出场指标评估结果（NEUTRAL=无信号；SELL=多头出场；BUY=空头出场）
+     * @param signalStrength  出场信号强度（0-100）
+     */
+    public void processExitConditions(Strategy strategy, SignalType exitSignalType, int signalStrength) {
+        List<Position> openPositions = positionManagementService.findOpenPositionsByStrategy(strategy.getId());
+        if (openPositions.isEmpty()) return;
+
+        int minStrength = (strategy.getMinSignalStrength() != null && strategy.getMinSignalStrength() > 0)
+                ? strategy.getMinSignalStrength() : 0;
+
+        for (Position pos : openPositions) {
+            try {
+                // 1. 更新持仓K线计数
+                int barCount = (pos.getOpenBarCount() != null ? pos.getOpenBarCount() : 0) + 1;
+                pos.setOpenBarCount(barCount);
+                positionManagementService.updateStopLossTakeProfit(pos);
+
+                // 2. 时间止损：超过最大持仓K线数强制平仓
+                if (strategy.getMaxHoldingBars() != null && barCount >= strategy.getMaxHoldingBars()) {
+                    log.info("[出场-时间止损] positionId={} side={} barCount={} maxBars={}",
+                            pos.getId(), pos.getSide(), barCount, strategy.getMaxHoldingBars());
+                    executeClose(pos);
+                    continue;
+                }
+
+                // 3. 指标出场：NEUTRAL 信号时跳过；方向需与持仓方向匹配
+                if (exitSignalType == SignalType.NEUTRAL) continue;
+                boolean isLong = pos.getSide() == PositionSide.LONG;
+                boolean shouldExit = (isLong && exitSignalType == SignalType.SELL)
+                        || (!isLong && exitSignalType == SignalType.BUY);
+
+                if (shouldExit && signalStrength >= minStrength) {
+                    log.info("[出场-指标] positionId={} side={} signal={} strength={}",
+                            pos.getId(), pos.getSide(), exitSignalType, signalStrength);
+                    executeClose(pos);
+                }
+            } catch (Exception e) {
+                log.error("[Exit] Error processing exit for position {}: {}", pos.getId(), e.getMessage(), e);
+            }
+        }
+    }
+
     /** INITIAL → BREAKEVEN：价格突破 entry + breakevenActivationMultiplier × ATR */
     private void evaluateBreakeven(Position position, Strategy strategy,
                                    BigDecimal currentPrice, BigDecimal atrValue, boolean isShort) {

@@ -36,6 +36,12 @@ public class StrategyCreateDTO {
     @NotEmpty(message = "指标配置不能为空")
     private List<StrategyIndicatorConfig> indicatorConfigs;
 
+    /** 出场指标配置（可选，为空则仅使用止损止盈方式平仓） */
+    private List<StrategyIndicatorConfig> exitIndicatorConfigs;
+
+    /** 最大持仓K线根数，超过后强制平仓（可选，null=不限） */
+    private Integer maxHoldingBars;
+
     // ─── 交易配置（可选） ───────────────────────────
     /** 是否开启自动交易 */
     private Integer autoTrade;
