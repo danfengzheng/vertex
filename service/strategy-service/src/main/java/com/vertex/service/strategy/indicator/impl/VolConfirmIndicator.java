@@ -3,7 +3,6 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -34,16 +33,11 @@ public class VolConfirmIndicator implements TechnicalIndicator {
     @Override
     public IndicatorResult calculate(List<KLine> klines, Map<String, Object> params) {
         int period = getIntParam(params, "period", 20);
-        double volMultiplier = getDoubleParam(params, "volMultiplier", 1.5);
 
         int size = klines.size();
         KLine current = klines.get(size - 1);
-        KLine prev = klines.get(size - 2);
 
         double currentVolume = current.getVolume().doubleValue();
-        double currentClose = current.getClose().doubleValue();
-        double prevClose = prev.getClose().doubleValue();
-        double priceChange = currentClose - prevClose;
 
         // 计算近 period 根K线的平均成交量（不含当前K线）
         int startIdx = Math.max(0, size - 1 - period);

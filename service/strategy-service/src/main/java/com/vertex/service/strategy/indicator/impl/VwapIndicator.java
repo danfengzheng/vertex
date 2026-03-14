@@ -3,7 +3,6 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -39,9 +38,6 @@ public class VwapIndicator implements TechnicalIndicator {
 
     @Override
     public IndicatorResult calculate(List<KLine> klines, Map<String, Object> params) {
-        // 有效突破偏离阈值（%），默认 0.2%，可通过 params 配置
-        double deviationPct = getParam(params, "deviationPct", 0.2);
-
         double cumulativeTPV = 0; // Σ(典型价格 × 成交量)
         double cumulativeVol = 0; // Σ(成交量)
 

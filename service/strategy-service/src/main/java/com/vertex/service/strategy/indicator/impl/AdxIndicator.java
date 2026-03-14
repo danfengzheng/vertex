@@ -3,7 +3,6 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -43,7 +42,6 @@ public class AdxIndicator implements TechnicalIndicator {
     @Override
     public IndicatorResult calculate(List<KLine> klines, Map<String, Object> params) {
         int period = getParam(params, "period", 14);
-        int trendThreshold = getParam(params, "trendThreshold", 25);
 
         int n = klines.size();
         double[] highs = new double[n];
