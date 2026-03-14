@@ -3,6 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
+import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -136,6 +137,16 @@ public class SuperTrendIndicator implements TechnicalIndicator {
         boolean prevTrendUp = last > start ? trendUp[last - 1] : currentTrendUp;
         double superTrend = currentTrendUp ? finalLowerBand[last] : finalUpperBand[last];
 
+        // 信号判断：最后一根K线是否发生了趋势翻转（向后兼容）
+        SignalSuggestion suggestion;
+        if (!prevTrendUp && currentTrendUp) {
+            suggestion = SignalSuggestion.BUY;  // 从下降翻转为上升
+        } else if (prevTrendUp && !currentTrendUp) {
+            suggestion = SignalSuggestion.SELL; // 从上升翻转为下降
+        } else {
+            suggestion = SignalSuggestion.NEUTRAL;
+        }
+
         return IndicatorResult.builder()
                 .type(IndicatorType.SUPERTREND)
                 .values(Map.of(
@@ -145,6 +156,7 @@ public class SuperTrendIndicator implements TechnicalIndicator {
                         "upperBand", round(finalUpperBand[last]),
                         "lowerBand", round(finalLowerBand[last])
                 ))
+                .suggestion(suggestion)
                 .build();
     }
 

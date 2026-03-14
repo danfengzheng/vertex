@@ -3,6 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
+import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -52,6 +53,20 @@ public class VolConfirmIndicator implements TechnicalIndicator {
         // 成交量比率
         double volRatio = avgVolume > 0 ? currentVolume / avgVolume : 0;
 
+        // 信号判定：放量 + 价格方向（向后兼容）
+        double priceChange = size >= 2
+                ? klines.get(size - 1).getClose().doubleValue() - klines.get(size - 2).getClose().doubleValue()
+                : 0;
+        double volMultiplier = getDoubleParam(params, "volMultiplier", 1.5);
+        SignalSuggestion suggestion;
+        if (volRatio > volMultiplier && priceChange > 0) {
+            suggestion = SignalSuggestion.BUY;   // 放量上涨 → 多头确认
+        } else if (volRatio > volMultiplier && priceChange < 0) {
+            suggestion = SignalSuggestion.SELL;  // 放量下跌 → 空头确认
+        } else {
+            suggestion = SignalSuggestion.NEUTRAL; // 缩量 → 信号不可靠
+        }
+
         return IndicatorResult.builder()
                 .type(IndicatorType.VOL_CONFIRM)
                 .values(Map.of(
@@ -59,6 +74,7 @@ public class VolConfirmIndicator implements TechnicalIndicator {
                         "avgVolume", round(avgVolume),
                         "currentVolume", round(currentVolume)
                 ))
+                .suggestion(suggestion)
                 .build();
     }
 

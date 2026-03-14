@@ -3,6 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
+import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -59,12 +60,27 @@ public class VwapIndicator implements TechnicalIndicator {
         // deviation > 0 表示价格在 VWAP 上方，< 0 表示在下方，单位 %
         double deviation = vwap > 0 ? (currentClose - vwap) / vwap * 100 : 0;
 
+        // 信号判断（向后兼容：无 buyConditions/sellConditions 时使用）
+        double deviationPct = getParam(params, "deviationPct", 0.2);
+        SignalSuggestion suggestion;
+        if (deviation > 0 && deviation <= deviationPct) {
+            // 有效上破：价格刚突破 VWAP，偏离在阈值内，确认为买入信号
+            suggestion = SignalSuggestion.BUY;
+        } else if (deviation < 0 && deviation >= -deviationPct) {
+            // 有效下破：价格刚跌穿 VWAP，偏离在阈值内，确认为卖出信号
+            suggestion = SignalSuggestion.SELL;
+        } else {
+            // 价格与 VWAP 齐平，或偏离超过阈值（强弩之末），观望
+            suggestion = SignalSuggestion.NEUTRAL;
+        }
+
         return IndicatorResult.builder()
                 .type(IndicatorType.VWAP)
                 .values(Map.of(
                         "vwap",      round(vwap),
                         "deviation", round(deviation)
                 ))
+                .suggestion(suggestion)
                 .build();
     }
 

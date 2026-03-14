@@ -3,6 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
+import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -82,6 +83,16 @@ public class StochRsiIndicator implements TechnicalIndicator {
         double prevK = last > 0 ? kLine[last - 1] : currentK;
         double prevD = last > 0 ? dLine[last - 1] : currentD;
 
+        // 信号判断（向后兼容：无 buyConditions/sellConditions 时使用）
+        SignalSuggestion suggestion;
+        if (prevK <= prevD && currentK > currentD && currentK < 20) {
+            suggestion = SignalSuggestion.BUY;  // 超卖区金叉
+        } else if (prevK >= prevD && currentK < currentD && currentK > 80) {
+            suggestion = SignalSuggestion.SELL; // 超买区死叉
+        } else {
+            suggestion = SignalSuggestion.NEUTRAL;
+        }
+
         return IndicatorResult.builder()
                 .type(IndicatorType.STOCH_RSI)
                 .values(Map.of(
@@ -90,6 +101,7 @@ public class StochRsiIndicator implements TechnicalIndicator {
                         "stochRsiKPrev", round(prevK),
                         "stochRsiDPrev", round(prevD)
                 ))
+                .suggestion(suggestion)
                 .build();
     }
 

@@ -3,7 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-
+import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -67,12 +67,24 @@ public class ObvIndicator implements TechnicalIndicator {
         }
         obvSignal = signalCount > 0 ? obvSignal / signalCount : 0;
 
+        // 信号判断（向后兼容：无 buyConditions/sellConditions 时使用）
+        double diff = obvSignal != 0 ? (obv - obvSignal) / Math.abs(obvSignal) * 100 : 0;
+        SignalSuggestion suggestion;
+        if (diff > 1.0) {
+            suggestion = SignalSuggestion.BUY;   // OBV 显著高于信号线 → 资金净流入
+        } else if (diff < -1.0) {
+            suggestion = SignalSuggestion.SELL;  // OBV 显著低于信号线 → 资金净流出
+        } else {
+            suggestion = SignalSuggestion.NEUTRAL; // OBV ≈ 信号线 → 方向不明
+        }
+
         return IndicatorResult.builder()
                 .type(IndicatorType.OBV)
                 .values(Map.of(
                         "obv", round(obv),
                         "obvSignal", round(obvSignal)
                 ))
+                .suggestion(suggestion)
                 .build();
     }
 

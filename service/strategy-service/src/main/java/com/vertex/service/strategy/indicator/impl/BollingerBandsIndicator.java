@@ -3,6 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
+import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -56,6 +57,17 @@ public class BollingerBandsIndicator implements TechnicalIndicator {
 
         double upperBand = sma + multiplier * stdDev;
         double lowerBand = sma - multiplier * stdDev;
+        double currentClose = klines.get(klines.size() - 1).getClose().doubleValue();
+
+        // 信号判断：价格跌破下轨 → 超卖买入，突破上轨 → 超买卖出（向后兼容）
+        SignalSuggestion suggestion;
+        if (currentClose < lowerBand) {
+            suggestion = SignalSuggestion.BUY;
+        } else if (currentClose > upperBand) {
+            suggestion = SignalSuggestion.SELL;
+        } else {
+            suggestion = SignalSuggestion.NEUTRAL;
+        }
 
         return IndicatorResult.builder()
                 .type(IndicatorType.BOLL)
@@ -65,6 +77,7 @@ public class BollingerBandsIndicator implements TechnicalIndicator {
                         "lower", round(lowerBand),
                         "stdDev", round(stdDev)
                 ))
+                .suggestion(suggestion)
                 .build();
     }
 

@@ -3,6 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
+import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -42,6 +43,7 @@ public class AdxIndicator implements TechnicalIndicator {
     @Override
     public IndicatorResult calculate(List<KLine> klines, Map<String, Object> params) {
         int period = getParam(params, "period", 14);
+        int trendThreshold = getParam(params, "trendThreshold", 25);
 
         int n = klines.size();
         double[] highs = new double[n];
@@ -131,6 +133,16 @@ public class AdxIndicator implements TechnicalIndicator {
             }
         }
 
+        // 信号判断（向后兼容：无 buyConditions/sellConditions 时使用）
+        SignalSuggestion suggestion;
+        if (adx > trendThreshold && plusDi > minusDi) {
+            suggestion = SignalSuggestion.BUY;   // 强多头趋势
+        } else if (adx > trendThreshold && minusDi > plusDi) {
+            suggestion = SignalSuggestion.SELL;  // 强空头趋势
+        } else {
+            suggestion = SignalSuggestion.NEUTRAL; // 趋势不够强
+        }
+
         return IndicatorResult.builder()
                 .type(IndicatorType.ADX)
                 .values(Map.of(
@@ -138,6 +150,7 @@ public class AdxIndicator implements TechnicalIndicator {
                         "plusDi", round(plusDi),
                         "minusDi", round(minusDi)
                 ))
+                .suggestion(suggestion)
                 .build();
     }
 

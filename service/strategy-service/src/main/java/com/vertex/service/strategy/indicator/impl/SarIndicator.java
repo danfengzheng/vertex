@@ -3,7 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
-
+import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -110,12 +110,23 @@ public class SarIndicator implements TechnicalIndicator {
             sar = currentSar;
         }
 
+        // 信号判断：最后一根K线是否发生了趋势翻转（向后兼容）
+        SignalSuggestion suggestion;
+        if (!prevTrendUp && trendUp) {
+            suggestion = SignalSuggestion.BUY;  // 从下降反转为上升
+        } else if (prevTrendUp && !trendUp) {
+            suggestion = SignalSuggestion.SELL; // 从上升反转为下降
+        } else {
+            suggestion = SignalSuggestion.NEUTRAL;
+        }
+
         return IndicatorResult.builder()
                 .type(IndicatorType.SAR)
                 .values(Map.of(
                         "sar", round(currentSar),
                         "trend", trendUp ? 1.0 : -1.0
                 ))
+                .suggestion(suggestion)
                 .build();
     }
 

@@ -3,6 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
+import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -58,6 +59,18 @@ public class KdjIndicator implements TechnicalIndicator {
 
         double j = 3 * k - 2 * d;
 
+        // 判断金叉/死叉，超买区域（K > 80）死叉不给 SELL 分（向后兼容）
+        SignalSuggestion suggestion;
+        if (prevK <= prevD && k > d) {
+            suggestion = SignalSuggestion.BUY;     // 金叉 → 买入
+        } else if (prevK >= prevD && k < d && k > 80) {
+            suggestion = SignalSuggestion.NEUTRAL; // 超买区域死叉 → 暂停买入，不反向做空
+        } else if (prevK >= prevD && k < d) {
+            suggestion = SignalSuggestion.SELL;    // 正常区域死叉 → 卖出信号
+        } else {
+            suggestion = SignalSuggestion.NEUTRAL;
+        }
+
         return IndicatorResult.builder()
                 .type(IndicatorType.KDJ)
                 .values(Map.of(
@@ -67,6 +80,7 @@ public class KdjIndicator implements TechnicalIndicator {
                         "kPrev", round(prevK),
                         "dPrev", round(prevD)
                 ))
+                .suggestion(suggestion)
                 .build();
     }
 

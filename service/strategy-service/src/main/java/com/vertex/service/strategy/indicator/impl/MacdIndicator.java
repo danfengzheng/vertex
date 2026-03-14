@@ -3,6 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
+import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -71,6 +72,16 @@ public class MacdIndicator implements TechnicalIndicator {
         double macdValue = macdLine[macdLine.length - 1];
         double signalValue = signalLine[signalLine.length - 1];
 
+        // 信号判断（向后兼容：无 buyConditions/sellConditions 时使用）
+        SignalSuggestion suggestion;
+        if (prevHistogram <= 0 && currentHistogram > 0) {
+            suggestion = SignalSuggestion.BUY;  // 金叉
+        } else if (prevHistogram >= 0 && currentHistogram < 0) {
+            suggestion = SignalSuggestion.SELL; // 死叉
+        } else {
+            suggestion = SignalSuggestion.NEUTRAL;
+        }
+
         return IndicatorResult.builder()
                 .type(IndicatorType.MACD)
                 .values(Map.of(
@@ -79,6 +90,7 @@ public class MacdIndicator implements TechnicalIndicator {
                         "histogram", round(currentHistogram),
                         "histogramPrev", round(prevHistogram)
                 ))
+                .suggestion(suggestion)
                 .build();
     }
 

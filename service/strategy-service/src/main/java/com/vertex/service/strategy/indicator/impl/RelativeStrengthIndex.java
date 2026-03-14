@@ -3,6 +3,7 @@ package com.vertex.service.strategy.indicator.impl;
 import com.vertex.model.entity.quote.KLine;
 import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
+import com.vertex.service.strategy.indicator.IndicatorResult.SignalSuggestion;
 import com.vertex.service.strategy.indicator.TechnicalIndicator;
 import org.springframework.stereotype.Component;
 
@@ -73,9 +74,18 @@ public class RelativeStrengthIndex implements TechnicalIndicator {
             rsi = 100 - 100.0 / (1 + rs);
         }
 
+        // 信号判断（向后兼容：无 buyConditions/sellConditions 时使用）
+        SignalSuggestion suggestion;
+        if (rsi < 30) {
+            suggestion = SignalSuggestion.BUY;     // 超卖 → 买入信号
+        } else {
+            suggestion = SignalSuggestion.NEUTRAL;
+        }
+
         return IndicatorResult.builder()
                 .type(IndicatorType.RSI)
                 .values(Map.of("rsi" + period, round(rsi)))
+                .suggestion(suggestion)
                 .build();
     }
 
