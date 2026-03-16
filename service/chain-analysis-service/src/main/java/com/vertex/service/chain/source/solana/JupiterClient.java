@@ -14,7 +14,15 @@ import java.math.BigDecimal;
  * Jupiter 价格 API 客户端
  * <p>
  * 获取 Solana 代币的 USD 价格和流动性数据。
- * Jupiter Price API v4 无需 API Key。
+ * <p>
+ * ⚠️ 注意：此类目前未被任何 DataSource 实例化（SolanaChainDataSource 未使用 Jupiter）。
+ * 若未来需要启用，请先更新以下废弃端点：
+ * <ul>
+ *   <li>旧（废弃）: {@code https://price.jup.ag/v4} — Jupiter 无 v4，price.jup.ag 域名已废弃</li>
+ *   <li>新: {@code https://lite-api.jup.ag/price/v2}（免费，无需 Key）
+ *       或 {@code https://api.jup.ag/price/v3}（需 API Key，推荐）</li>
+ *   <li>Token 列表: 原 {@code token.jup.ag/strict} 已废弃 → 改为 {@code https://api.jup.ag/tokens/v2}</li>
+ * </ul>
  */
 @Slf4j
 public class JupiterClient {

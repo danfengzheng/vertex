@@ -14,8 +14,15 @@ import java.util.List;
 /**
  * PancakeSwap V3 Subgraph GraphQL 客户端
  * <p>
- * 通过 The Graph 查询 BNB Chain 上最新创建的 PancakeSwap V3 交易对，
- * 获取流动性、交易量、价格等市场数据。
+ * ⚠️ 注意：此类目前未被任何 DataSource 实例化（BnbChainDataSource 已改为 Four.meme + DexScreener）。
+ * 若未来需要启用，请先更新以下废弃端点：
+ * <ul>
+ *   <li>旧（废弃）: {@code https://api.thegraph.com/subgraphs/name/pancakeswap/exchange-v3-bsc}
+ *       — The Graph 托管服务已于 2024-06-12 停止</li>
+ *   <li>新（需 Graph API Key）: {@code https://gateway.thegraph.com/api/{api-key}/subgraphs/id/Hv1GncLY5docZoGtXjo4kwbTvxm3MAhVZqBZE4sUT9eZ}</li>
+ *   <li>或使用 Subgraph Studio 测试端点: {@code https://api.studio.thegraph.com/query/{id}/exchange-v3-bsc/v0.0.0}</li>
+ *   <li>官方文档: https://developer.pancakeswap.finance/apis/subgraph</li>
+ * </ul>
  */
 @Slf4j
 public class PancakeSwapClient {

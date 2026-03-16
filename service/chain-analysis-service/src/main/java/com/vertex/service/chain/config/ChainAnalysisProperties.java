@@ -67,10 +67,17 @@ public class ChainAnalysisProperties {
         private String heliusApiKey = "";
         /** Helius RPC URL（含 API Key） */
         private String heliusRpcUrl = "https://mainnet.helius-rpc.com";
-        /** Jupiter 价格/代币 API */
-        private String jupiterApiUrl = "https://price.jup.ag/v4";
-        /** Pump.fun 新币列表 API */
-        private String pumpfunApiUrl = "https://frontend-api.pump.fun";
+        /**
+         * Jupiter 价格 API（当前未使用，预留配置）
+         * 旧: price.jup.ag/v4（无此版本，域名废弃）
+         * 新: lite-api.jup.ag/price/v2（免费）或 api.jup.ag/price/v3（需 Key）
+         */
+        private String jupiterApiUrl = "https://lite-api.jup.ag/price/v2";
+        /**
+         * Pump.fun 新币列表 API
+         * 官方最新版为 frontend-api-v3，v1 路径兼容仍存活
+         */
+        private String pumpfunApiUrl = "https://frontend-api-v3.pump.fun";
         /** 新币扫描时间窗口（分钟） */
         private int scanWindowMinutes = 30;
         /** 最小流动性 USD 过滤阈值 */
