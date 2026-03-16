@@ -1,8 +1,6 @@
 package com.vertex.model.entity.chain;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
 import com.vertex.common.core.base.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -31,6 +29,7 @@ public class ChainTokenMetrics extends BaseEntity {
     private Integer holderCount;
 
     /** 最近1小时交易数 */
+    @TableField(value = "tx_count_1h", updateStrategy = FieldStrategy.ALWAYS)
     private Integer txCount1h;
 
     /** 流动性添加次数 */
@@ -53,19 +52,24 @@ public class ChainTokenMetrics extends BaseEntity {
     private BigDecimal liquidityUsd;
 
     /** 24h USD 成交量 */
+    @TableField(value = "volume_24h_usd", updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal volume24hUsd;
 
     /** 1h 价格变化百分比 */
+    @TableField(value = "price_change_1h_pct", updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal priceChange1hPct;
 
     /** 24h 价格变化百分比 */
+    @TableField(value = "price_change_24h_pct", updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal priceChange24hPct;
 
     /** 1h 买入压力比例（买入/总交易） 0-100 */
+    @TableField(value = "buy_pressure_1h", updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal buyPressure1h;
 
     // ─── 代币经济指标 ─────────────────────────────
     /** Top10 持仓集中度百分比 */
+    @TableField(value = "top10_holder_pct", updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal top10HolderPct;
 
     /** 部署者持仓百分比 */
