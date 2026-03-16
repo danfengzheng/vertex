@@ -7,6 +7,7 @@ import {
   CheckCircleOutlined,
   WarningOutlined,
   LogoutOutlined,
+  FireOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
@@ -982,6 +983,195 @@ export const StrategyGuide = () => {
                     </Col>
                   </Row>
                 </Card>
+              </div>
+            ),
+          },
+          // ──────────────────── Tab 6: 山寨币潜力筛选 ──────────────────────
+          {
+            key: 'altcoin',
+            label: <span><FireOutlined /> 山寨币筛选</span>,
+            children: (
+              <div>
+                {/* 功能概述 */}
+                <Alert
+                  type="info"
+                  showIcon
+                  icon={<FireOutlined />}
+                  message="山寨币潜力筛选 — 不限代币年龄，专注当下动量与潜力"
+                  description="通过 Binance Alpha 和 BSC DEX 趋势两个渠道，持续发掘具有上涨潜力的山寨币。与新币监控不同，本功能不要求代币是新发行的，只要当下有足够的动量和基本面支撑，就会被纳入候选。"
+                  style={{ marginBottom: 20 }}
+                />
+
+                {/* 两个数据源介绍 */}
+                <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+                  <Col xs={24} md={12}>
+                    <Card
+                      size="small"
+                      title={<Space><Tag color="gold">🅰 Binance Alpha</Tag><Text strong>官方精选池</Text></Space>}
+                      style={{ borderLeft: '4px solid #faad14', height: '100%' }}
+                    >
+                      <Paragraph style={{ fontSize: 13, marginBottom: 12 }}>
+                        Binance Alpha 是币安官方维护的潜力代币观察列表，上榜代币经过初步审核，
+                        具有<Text strong>潜在上所预期</Text>。系统每次扫描时自动抓取最新列表，
+                        通过 DexScreener 补充实时行情，并对已存在代币持续更新评分。
+                      </Paragraph>
+                      <div style={{ background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 6, padding: '10px 14px', fontSize: 12 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 8, color: '#d48806' }}>📊 评分逻辑（筛选模式）</div>
+                        <div style={{ color: '#555', lineHeight: '22px' }}>
+                          <div>• <Text strong>新颖度</Text>：换手率（72h vol/流动性）越高得分越高，捕捉正在爆发的动量</div>
+                          <div>• <Text strong>市场分</Text>：价格动量（24h涨幅）+ 买盘强度（买/总交易比）</div>
+                          <div>• <Text strong>链上分</Text>：持有者数量和集中度</div>
+                          <div>• <Text strong>代币经济</Text>：流动性规模和 LP 锁定情况</div>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 12, fontSize: 12, color: '#8c8c8c' }}>
+                        <Badge status="processing" text="已存在代币每次扫描都会刷新评分（筛选模式）" />
+                      </div>
+                    </Card>
+                  </Col>
+                  <Col xs={24} md={12}>
+                    <Card
+                      size="small"
+                      title={<Space><Tag color="green">📈 BSC 趋势筛选</Tag><Text strong>DEX 高换手精选</Text></Space>}
+                      style={{ borderLeft: '4px solid #52c41a', height: '100%' }}
+                    >
+                      <Paragraph style={{ fontSize: 13, marginBottom: 12 }}>
+                        通过 DexScreener 实时扫描 BSC 链所有代币，按<Text strong> 72h 换手率（成交量/流动性比）</Text>
+                        降序排列，筛选出当下交易最活跃、资金流入最旺盛的代币。
+                        同时过滤市值过小（&lt;10万U）或过大（&gt;5000万U）的代币，聚焦中小盘潜力区间。
+                      </Paragraph>
+                      <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6, padding: '10px 14px', fontSize: 12 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 8, color: '#389e0d' }}>🔍 入选过滤条件</div>
+                        <div style={{ color: '#555', lineHeight: '22px' }}>
+                          <div>• 市值区间：<Text code>$10万 ~ $5000万</Text>（可配置）</div>
+                          <div>• 最低换手率：<Text code>vol/liquidity ≥ 0.3</Text>（72h）</div>
+                          <div>• 最低流动性：<Text code>$1万</Text>以上（防低流动性操控）</div>
+                          <div>• 24h 价格动量：正向优先排序</div>
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 12, fontSize: 12, color: '#8c8c8c' }}>
+                        <Badge status="success" text="每次扫描取前 50 名，持续滚动更新" />
+                      </div>
+                    </Card>
+                  </Col>
+                </Row>
+
+                {/* 使用流程 */}
+                <Card
+                  size="small"
+                  title={<Text strong>📌 使用流程</Text>}
+                  style={{ marginBottom: 16 }}
+                >
+                  <Row gutter={[12, 12]}>
+                    {[
+                      {
+                        step: '① 开启配置',
+                        color: '#1677ff',
+                        content: (
+                          <div style={{ fontSize: 12, color: '#555' }}>
+                            在 <Text code>application.yaml</Text> 中启用对应数据源：
+                            <pre style={{ background: '#f5f5f5', padding: '8px 12px', borderRadius: 6, marginTop: 8, fontSize: 11, lineHeight: '18px' }}>
+{`vertex.chain:
+  binance-alpha:
+    enabled: true           # 开启 Alpha 筛选
+    min-market-cap-usd: 500000   # 最低市值 50万U
+    min-liquidity-usd: 10000     # 最低流动性 1万U
+  bsc-trending:
+    enabled: true           # 开启趋势筛选
+    min-volume-liquidity-ratio: 0.3
+    min-market-cap-usd: 100000
+    max-market-cap-usd: 50000000`}
+                            </pre>
+                          </div>
+                        ),
+                      },
+                      {
+                        step: '② 触发扫描',
+                        color: '#52c41a',
+                        content: (
+                          <div style={{ fontSize: 12, color: '#555', lineHeight: '22px' }}>
+                            <div>• 点击「链上分析 → 代币列表」页面右上角的<Tag>立即扫描</Tag>按钮</div>
+                            <div>• 或等待系统定时扫描（默认每 10 分钟）</div>
+                            <div style={{ marginTop: 6, color: '#8c8c8c' }}>
+                              扫描后 3 秒自动刷新列表，新代币会出现在列表中
+                            </div>
+                          </div>
+                        ),
+                      },
+                      {
+                        step: '③ 查看筛选结果',
+                        color: '#722ed1',
+                        content: (
+                          <div style={{ fontSize: 12, color: '#555', lineHeight: '22px' }}>
+                            <div>• 在代币列表的<Text strong>「来源」</Text>下拉中选择 <Tag color="gold">🅰 Alpha</Tag> 或 <Tag color="green">📈 趋势筛选</Tag></div>
+                            <div>• 按<Text strong>综合评分</Text>降序查看最具潜力的代币</div>
+                            <div>• 点击「详情」查看完整指标（价格动量、换手率、持有者分布等）</div>
+                          </div>
+                        ),
+                      },
+                      {
+                        step: '④ 配置告警',
+                        color: '#fa8c16',
+                        content: (
+                          <div style={{ fontSize: 12, color: '#555', lineHeight: '22px' }}>
+                            <div>• 进入「链上分析 → 告警规则」创建规则，设置最低评分阈值（建议 ≥ 65）</div>
+                            <div>• 满足条件时通过 Telegram 推送提醒</div>
+                            <div>• 链可选择 BNB 以覆盖两个 BSC 数据源</div>
+                          </div>
+                        ),
+                      },
+                    ].map(({ step, color, content }) => (
+                      <Col xs={24} md={12} key={step}>
+                        <Card size="small" style={{ borderLeft: `3px solid ${color}`, height: '100%' }} bodyStyle={{ padding: '10px 14px' }}>
+                          <Text strong style={{ color, display: 'block', marginBottom: 8 }}>{step}</Text>
+                          {content}
+                        </Card>
+                      </Col>
+                    ))}
+                  </Row>
+                </Card>
+
+                {/* 评分等级说明 */}
+                <Card
+                  size="small"
+                  title={<Text strong>🏆 评分等级参考</Text>}
+                  style={{ marginBottom: 16 }}
+                >
+                  <Row gutter={[8, 8]}>
+                    {[
+                      { grade: 'S', range: '80-100', color: '#52c41a', desc: '各维度全面优异，动量强劲，强烈关注' },
+                      { grade: 'A', range: '65-79',  color: '#1677ff', desc: '大部分指标良好，具备明显上涨动能，值得关注' },
+                      { grade: 'B', range: '50-64',  color: '#faad14', desc: '中等水平，可持续观察，等待动量确认' },
+                      { grade: 'C', range: '35-49',  color: '#ff7a45', desc: '指标偏弱，暂时观望' },
+                      { grade: 'D', range: '0-34',   color: '#ff4d4f', desc: '指标较差，不建议关注' },
+                    ].map(({ grade, range, color, desc }) => (
+                      <Col xs={24} sm={12} md={8} key={grade}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#fafafa', borderRadius: 6, border: `1px solid ${color}22` }}>
+                          <span style={{ fontSize: 24, fontWeight: 800, color, minWidth: 28 }}>{grade}</span>
+                          <div>
+                            <div style={{ fontSize: 11, color: '#8c8c8c' }}>{range} 分</div>
+                            <div style={{ fontSize: 12, color: '#333' }}>{desc}</div>
+                          </div>
+                        </div>
+                      </Col>
+                    ))}
+                  </Row>
+                </Card>
+
+                {/* 注意事项 */}
+                <Alert
+                  type="warning"
+                  showIcon
+                  message="风险提示"
+                  description={
+                    <ul style={{ margin: '6px 0 0 0', paddingLeft: 20, fontSize: 12, lineHeight: '22px' }}>
+                      <li>山寨币风险极高，本工具仅提供数据参考，<Text strong>不构成投资建议</Text></li>
+                      <li>Binance Alpha 入选不代表一定会上线币安交易所</li>
+                      <li>高换手率可能由机器人刷量造成，需结合持有者分布和流动性综合判断</li>
+                      <li>建议配合链上浏览器（BSCScan）人工复核合约安全性后再做决策</li>
+                    </ul>
+                  }
+                />
               </div>
             ),
           },
