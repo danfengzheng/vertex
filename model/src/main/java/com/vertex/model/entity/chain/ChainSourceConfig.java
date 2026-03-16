@@ -49,7 +49,8 @@ public class ChainSourceConfig extends BaseEntity {
     private Double minVolumeLiquidityRatio;
 
     /** 1h 价格最低涨幅（仅 bnb_trending 使用） */
-    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    // MyBatis Plus 自动转换 minPriceChange1hPct -> min_price_change1h_pct，与列名不符，需显式指定
+    @TableField(value = "min_price_change_1h_pct", updateStrategy = FieldStrategy.ALWAYS)
     private Double minPriceChange1hPct;
 
     /** 每次 API 拉取数量（仅 bnb_alpha 使用） */
