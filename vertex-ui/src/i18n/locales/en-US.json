@@ -285,7 +285,8 @@
       "dataSourceBnbPrimary": "BSC New",
       "dataSourceBnbAlpha": "Alpha",
       "dataSourceBnbTrending": "Trending",
-      "dataSourceSol": "Solana"
+      "dataSourceSol": "Solana",
+      "sourceConfigTitle": "Screening Config"
     },
     "trading": {
       "title": "Trading",

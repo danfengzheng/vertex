@@ -1,13 +1,14 @@
 package com.vertex.service.chain.source.bnb;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.vertex.api.chain.IChainSourceConfigService;
+import com.vertex.model.entity.chain.ChainSourceConfig;
 import com.vertex.service.chain.config.ChainAnalysisProperties;
 import com.vertex.service.chain.source.ChainDataSource;
 import com.vertex.service.chain.source.NewTokenRawData;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -36,7 +37,6 @@ import java.util.Set;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(prefix = "vertex.chain.bsc-trending", name = "enabled", havingValue = "true")
 public class BscTrendingDataSource implements ChainDataSource {
 
     private static final Set<String> QUOTE_SYMBOLS = Set.of(
@@ -44,13 +44,16 @@ public class BscTrendingDataSource implements ChainDataSource {
     );
 
     private final ChainAnalysisProperties properties;
+    private final IChainSourceConfigService sourceConfigService;
     private final DexScreenerClient dexScreenerClient;
     private final BscScanClient bscScanClient;
 
     public BscTrendingDataSource(
             ChainAnalysisProperties properties,
+            IChainSourceConfigService sourceConfigService,
             @Qualifier("chainOkHttpClient") OkHttpClient httpClient) {
         this.properties = properties;
+        this.sourceConfigService = sourceConfigService;
         ChainAnalysisProperties.Bnb bnbCfg = properties.getBnb();
         this.dexScreenerClient = new DexScreenerClient(httpClient);
         this.bscScanClient = new BscScanClient(httpClient, bnbCfg.getBscscanApiUrl(), bnbCfg.getBscscanApiKey());
@@ -78,9 +81,26 @@ public class BscTrendingDataSource implements ChainDataSource {
 
     @Override
     public List<NewTokenRawData> fetchNewTokens(int scanWindowMinutes) {
+        // 从数据库读取运行时开关，优先使用数据库配置，回退到 YAML 默认值
+        ChainSourceConfig dbCfg = sourceConfigService.getBySourceId("bnb_trending");
+        if (dbCfg != null && !Integer.valueOf(1).equals(dbCfg.getEnabled())) {
+            log.debug("[BscTrending] Disabled by runtime config, skipping scan");
+            return Collections.emptyList();
+        }
         ChainAnalysisProperties.BscTrending cfg = properties.getBscTrending();
+
+        // 合并 DB 配置与 YAML 默认值
+        // maxMarketCapUsd 用 Double（可为 null）：null 表示用户明确选择"不限上限"
+        int limit = (dbCfg != null && dbCfg.getScanLimit() != null) ? dbCfg.getScanLimit() : cfg.getLimit();
+        double minLiq = (dbCfg != null && dbCfg.getMinLiquidityUsd() != null) ? dbCfg.getMinLiquidityUsd() : cfg.getMinLiquidityUsd();
+        double minMcap = (dbCfg != null && dbCfg.getMinMarketCapUsd() != null) ? dbCfg.getMinMarketCapUsd() : cfg.getMinMarketCapUsd();
+        // DB 中 maxMarketCapUsd=null 表示不限上限；DB 未初始化时回退 YAML 默认值
+        Double maxMcap = (dbCfg != null) ? dbCfg.getMaxMarketCapUsd() : cfg.getMaxMarketCapUsd();
+        double minRatio = (dbCfg != null && dbCfg.getMinVolumeLiquidityRatio() != null) ? dbCfg.getMinVolumeLiquidityRatio() : cfg.getMinVolumeLiquidityRatio();
+        double minChange1h = (dbCfg != null && dbCfg.getMinPriceChange1hPct() != null) ? dbCfg.getMinPriceChange1hPct() : cfg.getMinPriceChange1hPct();
+
         try {
-            List<JSONObject> pairs = dexScreenerClient.fetchTrendingPairs("bsc", cfg.getLimit() * 3);
+            List<JSONObject> pairs = dexScreenerClient.fetchTrendingPairs("bsc", limit * 3);
             if (pairs.isEmpty()) {
                 log.info("[BscTrending] No trending pairs returned");
                 return Collections.emptyList();
@@ -90,9 +110,9 @@ public class BscTrendingDataSource implements ChainDataSource {
             List<NewTokenRawData> result = new ArrayList<>();
 
             for (JSONObject pair : pairs) {
-                if (result.size() >= cfg.getLimit()) break;
+                if (result.size() >= limit) break;
                 try {
-                    NewTokenRawData data = buildFromPair(pair, cfg, hasBscKey);
+                    NewTokenRawData data = buildFromPair(pair, minLiq, minMcap, maxMcap, minRatio, minChange1h, hasBscKey);
                     if (data != null) result.add(data);
                 } catch (Exception e) {
                     log.warn("[BscTrending] Failed to process pair: {}", e.getMessage());
@@ -109,7 +129,9 @@ public class BscTrendingDataSource implements ChainDataSource {
 
     // ─── 构建 NewTokenRawData ─────────────────────────────
 
-    private NewTokenRawData buildFromPair(JSONObject pair, ChainAnalysisProperties.BscTrending cfg, boolean hasBscKey) {
+    private NewTokenRawData buildFromPair(JSONObject pair,
+            double minLiquidityUsd, double minMarketCapUsd, Double maxMarketCapUsd,
+            double minVolumeLiquidityRatio, double minPriceChange1hPct, boolean hasBscKey) {
         JSONObject base = pair.getJSONObject("baseToken");
         if (base == null) return null;
 
@@ -122,13 +144,14 @@ public class BscTrendingDataSource implements ChainDataSource {
         // 流动性过滤
         JSONObject liquidity = pair.getJSONObject("liquidity");
         BigDecimal liquidityUsd = liquidity != null ? liquidity.getBigDecimal("usd") : null;
-        if (liquidityUsd == null || liquidityUsd.doubleValue() < cfg.getMinLiquidityUsd()) return null;
+        if (liquidityUsd == null || liquidityUsd.doubleValue() < minLiquidityUsd) return null;
 
-        // 市值过滤
+        // 市值过滤（maxMarketCapUsd=null 表示不限上限）
         BigDecimal marketCapUsd = pair.getBigDecimal("marketCap");
         if (marketCapUsd != null) {
             double mcap = marketCapUsd.doubleValue();
-            if (mcap < cfg.getMinMarketCapUsd() || mcap > cfg.getMaxMarketCapUsd()) return null;
+            if (mcap < minMarketCapUsd) return null;
+            if (maxMarketCapUsd != null && mcap > maxMarketCapUsd) return null;
         }
 
         // 换手率过滤（volume24h / liquidity）
@@ -136,13 +159,13 @@ public class BscTrendingDataSource implements ChainDataSource {
         BigDecimal volume24h = volume != null ? volume.getBigDecimal("h24") : null;
         if (volume24h != null && liquidityUsd.doubleValue() > 0) {
             double ratio = volume24h.doubleValue() / liquidityUsd.doubleValue();
-            if (ratio < cfg.getMinVolumeLiquidityRatio()) return null;
+            if (ratio < minVolumeLiquidityRatio) return null;
         }
 
         // 1h 价格涨幅过滤
         JSONObject priceChange = pair.getJSONObject("priceChange");
         BigDecimal priceChange1h = priceChange != null ? priceChange.getBigDecimal("h1") : null;
-        if (priceChange1h != null && priceChange1h.doubleValue() < cfg.getMinPriceChange1hPct()) return null;
+        if (priceChange1h != null && priceChange1h.doubleValue() < minPriceChange1hPct) return null;
 
         BigDecimal priceChange24h = priceChange != null ? priceChange.getBigDecimal("h24") : null;
         BigDecimal priceUsd = parseBigDecimal(pair.getString("priceUsd"));

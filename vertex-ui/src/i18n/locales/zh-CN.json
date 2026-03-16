@@ -285,7 +285,8 @@
       "dataSourceBnbPrimary": "BSC 新币",
       "dataSourceBnbAlpha": "Alpha",
       "dataSourceBnbTrending": "趋势筛选",
-      "dataSourceSol": "Solana"
+      "dataSourceSol": "Solana",
+      "sourceConfigTitle": "筛选配置"
     },
     "trading": {
       "title": "交易管理",

@@ -1,13 +1,14 @@
 package com.vertex.service.chain.source.bnb;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.vertex.api.chain.IChainSourceConfigService;
+import com.vertex.model.entity.chain.ChainSourceConfig;
 import com.vertex.service.chain.config.ChainAnalysisProperties;
 import com.vertex.service.chain.source.ChainDataSource;
 import com.vertex.service.chain.source.NewTokenRawData;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -31,7 +32,6 @@ import java.util.Set;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(prefix = "vertex.chain.binance-alpha", name = "enabled", havingValue = "true")
 public class BinanceAlphaDataSource implements ChainDataSource {
 
     /** 跳过主流大盘稳定币符号 */
@@ -40,13 +40,16 @@ public class BinanceAlphaDataSource implements ChainDataSource {
     );
 
     private final ChainAnalysisProperties properties;
+    private final IChainSourceConfigService sourceConfigService;
     private final BinanceAlphaClient alphaClient;
     private final DexScreenerClient dexScreenerClient;
 
     public BinanceAlphaDataSource(
             ChainAnalysisProperties properties,
+            IChainSourceConfigService sourceConfigService,
             @Qualifier("chainOkHttpClient") OkHttpClient httpClient) {
         this.properties = properties;
+        this.sourceConfigService = sourceConfigService;
         ChainAnalysisProperties.BinanceAlpha cfg = properties.getBinanceAlpha();
         this.alphaClient = new BinanceAlphaClient(httpClient, cfg.getApiUrl());
         this.dexScreenerClient = new DexScreenerClient(httpClient);
@@ -74,9 +77,18 @@ public class BinanceAlphaDataSource implements ChainDataSource {
 
     @Override
     public List<NewTokenRawData> fetchNewTokens(int scanWindowMinutes) {
+        // 从数据库读取运行时开关，优先使用数据库配置，回退到 YAML 默认值
+        ChainSourceConfig dbCfg = sourceConfigService.getBySourceId("bnb_alpha");
+        if (dbCfg != null && !Integer.valueOf(1).equals(dbCfg.getEnabled())) {
+            log.debug("[BinanceAlpha] Disabled by runtime config, skipping scan");
+            return Collections.emptyList();
+        }
         ChainAnalysisProperties.BinanceAlpha cfg = properties.getBinanceAlpha();
         try {
-            List<JSONObject> alphaTokens = alphaClient.fetchAllTokens(cfg.getPageSize(), cfg.getPageSize());
+            int pageSize = (dbCfg != null && dbCfg.getPageSize() != null) ? dbCfg.getPageSize() : cfg.getPageSize();
+            double minMcap = (dbCfg != null && dbCfg.getMinMarketCapUsd() != null) ? dbCfg.getMinMarketCapUsd() : cfg.getMinMarketCapUsd();
+            double minLiq = (dbCfg != null && dbCfg.getMinLiquidityUsd() != null) ? dbCfg.getMinLiquidityUsd() : cfg.getMinLiquidityUsd();
+            List<JSONObject> alphaTokens = alphaClient.fetchAllTokens(pageSize, pageSize);
             if (alphaTokens.isEmpty()) {
                 log.info("[BinanceAlpha] No tokens returned from API");
                 return Collections.emptyList();
@@ -87,7 +99,7 @@ public class BinanceAlphaDataSource implements ChainDataSource {
 
             for (JSONObject token : alphaTokens) {
                 try {
-                    NewTokenRawData data = buildFromAlpha(token, cfg);
+                    NewTokenRawData data = buildFromAlpha(token, minMcap, minLiq);
                     if (data != null) result.add(data);
                 } catch (Exception e) {
                     log.warn("[BinanceAlpha] Failed to process token {}: {}", token.getString("symbol"), e.getMessage());
@@ -104,7 +116,7 @@ public class BinanceAlphaDataSource implements ChainDataSource {
 
     // ─── 构建 NewTokenRawData ─────────────────────────────
 
-    private NewTokenRawData buildFromAlpha(JSONObject token, ChainAnalysisProperties.BinanceAlpha cfg) {
+    private NewTokenRawData buildFromAlpha(JSONObject token, double minMarketCapUsd, double minLiquidityUsd) {
         // 只处理 BSC 链代币
         String network = token.getString("network");
         if (network != null && !network.equalsIgnoreCase("BSC") && !network.equalsIgnoreCase("BNB")) {
@@ -123,11 +135,11 @@ public class BinanceAlphaDataSource implements ChainDataSource {
 
         // 市值过滤
         double marketCapUsd = parseDouble(token, "marketCap", "market_cap", "marketCapUsd");
-        if (marketCapUsd > 0 && marketCapUsd < cfg.getMinMarketCapUsd()) return null;
+        if (marketCapUsd > 0 && marketCapUsd < minMarketCapUsd) return null;
 
         // 流动性过滤
         double liquidityUsd = parseDouble(token, "liquidity", "liquidityUsd");
-        if (liquidityUsd > 0 && liquidityUsd < cfg.getMinLiquidityUsd()) return null;
+        if (liquidityUsd > 0 && liquidityUsd < minLiquidityUsd) return null;
 
         // 尝试通过 DexScreener 补充更详细的市场数据
         NewTokenRawData enriched = enrichWithDexScreener(contractAddress, symbol, token, marketCapUsd, liquidityUsd);

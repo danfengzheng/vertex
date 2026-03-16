@@ -110,6 +110,34 @@ export interface AlertRuleUpdateDTO extends AlertRuleCreateDTO {
   id: string;
 }
 
+/** 数据源配置 VO */
+export interface ChainSourceConfigVO {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  enabled: number;
+  minMarketCapUsd: number | null;
+  maxMarketCapUsd: number | null;
+  minLiquidityUsd: number | null;
+  minVolumeLiquidityRatio: number | null;
+  minPriceChange1hPct: number | null;
+  pageSize: number | null;
+  scanLimit: number | null;
+}
+
+/** 更新数据源配置参数 */
+export interface ChainSourceConfigUpdateDTO {
+  id: string;
+  enabled: number;
+  minMarketCapUsd?: number | null;
+  maxMarketCapUsd?: number | null;
+  minLiquidityUsd?: number | null;
+  minVolumeLiquidityRatio?: number | null;
+  minPriceChange1hPct?: number | null;
+  pageSize?: number | null;
+  scanLimit?: number | null;
+}
+
 // ─── API ─────────────────────────────────────────
 
 /** 链上新币 API */
@@ -156,4 +184,15 @@ export const alertRuleApi = {
   /** 禁用 */
   disable: (id: string): Promise<ApiResponse<void>> =>
     request.post(`/chain/alert-rule/${id}/disable`),
+};
+
+/** 数据源配置 API */
+export const sourceConfigApi = {
+  /** 查询所有数据源配置 */
+  listAll: (): Promise<ApiResponse<ChainSourceConfigVO[]>> =>
+    request.get('/chain/source-config'),
+
+  /** 更新数据源配置 */
+  update: (data: ChainSourceConfigUpdateDTO): Promise<ApiResponse<void>> =>
+    request.put('/chain/source-config', data),
 };

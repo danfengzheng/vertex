@@ -214,6 +214,11 @@ export const MainLayout = () => {
           icon: <BellOutlined />,
           label: t('text.chain.alertRuleTitle'),
         },
+        {
+          key: '/chain/source-config',
+          icon: <SettingOutlined />,
+          label: t('text.chain.sourceConfigTitle'),
+        },
       ],
     },
     {

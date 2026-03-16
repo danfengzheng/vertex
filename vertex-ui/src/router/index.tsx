@@ -17,6 +17,7 @@ import { PositionMonitor } from '../pages/trading/PositionMonitor';
 import { PnlAnalysis } from '../pages/trading/PnlAnalysis';
 import { TokenList } from '../pages/chain/TokenList';
 import { AlertConfig } from '../pages/chain/AlertConfig';
+import { SourceConfig } from '../pages/chain/SourceConfig';
 
 export const AppRouter = () => {
   return (
@@ -79,6 +80,9 @@ export const AppRouter = () => {
         } />
         <Route path="chain/alerts" element={
           <PermissionGuard path="/chain/alerts"><AlertConfig /></PermissionGuard>
+        } />
+        <Route path="chain/source-config" element={
+          <PermissionGuard path="/chain/source-config"><SourceConfig /></PermissionGuard>
         } />
 
         {/* 使用指南（无权限码，所有已登录用户可访问） */}
