@@ -100,6 +100,7 @@ public class ChainTokenServiceImpl implements IChainTokenService {
                 .volume24hUsd(metrics != null ? metrics.getVolume24hUsd() : null)
                 .holderCount(metrics != null ? metrics.getHolderCount() : null)
                 .createTime(token.getCreateTime())
+                .dataSource(token.getDataSource())
                 .build();
     }
 
@@ -120,6 +121,7 @@ public class ChainTokenServiceImpl implements IChainTokenService {
         vo.setStatus(token.getStatus());
         vo.setAlerted(token.getAlerted());
         vo.setCreateTime(token.getCreateTime());
+        vo.setDataSource(token.getDataSource());
 
         // 详情字段
         vo.setDecimals(token.getDecimals());
@@ -165,6 +167,8 @@ public class ChainTokenServiceImpl implements IChainTokenService {
                 .eq(query.getStatus() != null, ChainToken::getStatus, query.getStatus())
                 .ge(query.getDeployTimeFrom() != null, ChainToken::getDeployTime, query.getDeployTimeFrom())
                 .le(query.getDeployTimeTo() != null, ChainToken::getDeployTime, query.getDeployTimeTo())
+                .eq(query.getDataSource() != null && !query.getDataSource().isBlank(),
+                        ChainToken::getDataSource, query.getDataSource())
                 .eq(ChainToken::getDeleted, 0)
                 .orderByDesc(ChainToken::getScore)
                 .orderByDesc(ChainToken::getCreateTime);

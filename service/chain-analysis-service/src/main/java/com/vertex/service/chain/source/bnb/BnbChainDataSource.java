@@ -225,6 +225,7 @@ public class BnbChainDataSource implements ChainDataSource {
                 .bondingCurveProgress(bondingPct > 0 ? bondingPct : null)
                 .replyCount(replyCount)
                 .launchpadName("four.meme")
+                .dataSource("bnb_primary")
                 .build();
     }
 
@@ -318,6 +319,7 @@ public class BnbChainDataSource implements ChainDataSource {
                 .bondingCurveProgress(null)  // DexScreener 代币已上 DEX，无 bonding curve
                 .replyCount(null)
                 .launchpadName(null)
+                .dataSource("bnb_primary")
                 .build();
     }
 

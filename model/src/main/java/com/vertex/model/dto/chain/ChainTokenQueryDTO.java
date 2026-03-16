@@ -28,4 +28,7 @@ public class ChainTokenQueryDTO extends PageQuery {
 
     /** 部署时间止（毫秒时间戳） */
     private Long deployTimeTo;
+
+    /** 数据来源过滤：bnb_primary / bnb_alpha / bnb_trending 等 */
+    private String dataSource;
 }

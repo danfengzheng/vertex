@@ -37,4 +37,6 @@ public class ChainTokenVO implements Serializable {
     private BigDecimal volume24hUsd;
     private Integer holderCount;
     private LocalDateTime createTime;
+    /** 数据来源标识：bnb_primary / bnb_alpha / bnb_trending 等 */
+    private String dataSource;
 }

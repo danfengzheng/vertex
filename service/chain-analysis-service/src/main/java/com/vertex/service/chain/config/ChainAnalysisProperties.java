@@ -30,6 +30,12 @@ public class ChainAnalysisProperties {
     /** Solana 配置 */
     private Solana solana = new Solana();
 
+    /** Binance Alpha 山寨币筛选配置 */
+    private BinanceAlpha binanceAlpha = new BinanceAlpha();
+
+    /** BSC DEX 动量趋势筛选配置 */
+    private BscTrending bscTrending = new BscTrending();
+
     /** Telegram 告警配置（复用现有 Bot Token） */
     private Telegram telegram = new Telegram();
 
@@ -69,6 +75,42 @@ public class ChainAnalysisProperties {
         private int scanWindowMinutes = 30;
         /** 最小流动性 USD 过滤阈值 */
         private double minLiquidityUsd = 500.0;
+    }
+
+    // ─── Binance Alpha ────────────────────────────────────
+
+    @Data
+    public static class BinanceAlpha {
+        /** 是否启用 Binance Alpha 筛选数据源 */
+        private boolean enabled = false;
+        /** Binance Alpha API 地址 */
+        private String apiUrl = "https://www.binance.com";
+        /** 每次拉取的代币数量 */
+        private int pageSize = 50;
+        /** 最低市值 USD 过滤阈值 */
+        private double minMarketCapUsd = 500_000.0;
+        /** 最低流动性 USD 过滤阈值 */
+        private double minLiquidityUsd = 10_000.0;
+    }
+
+    // ─── BSC Trending ─────────────────────────────────────
+
+    @Data
+    public static class BscTrending {
+        /** 是否启用 BSC DEX 动量趋势筛选 */
+        private boolean enabled = false;
+        /** 最低 24h 成交量/流动性 比值（高换手率=活跃） */
+        private double minVolumeLiquidityRatio = 0.3;
+        /** 最低流动性 USD */
+        private double minLiquidityUsd = 5_000.0;
+        /** 最低市值 USD */
+        private double minMarketCapUsd = 100_000.0;
+        /** 最高市值 USD（过滤大盘币，只看中小盘） */
+        private double maxMarketCapUsd = 50_000_000.0;
+        /** 1h 价格涨跌幅过滤：不低于此值（负数允许微跌） */
+        private double minPriceChange1hPct = 0.0;
+        /** 每次扫描最多处理的代币数量 */
+        private int limit = 50;
     }
 
     // ─── Telegram ─────────────────────────────────────────

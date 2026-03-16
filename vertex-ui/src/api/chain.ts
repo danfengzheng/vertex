@@ -8,6 +8,7 @@ import type { ApiResponse, PageResult, PageQuery } from '../types/api';
 // ─── 类型定义 ─────────────────────────────────────
 
 export type ChainCode = 'BNB' | 'SOL' | 'ALL';
+export type DataSource = 'bnb_primary' | 'bnb_alpha' | 'bnb_trending' | 'SOL';
 export type TokenStatus = 'PENDING' | 'SCORED' | 'ALERTED' | 'IGNORED';
 
 /** 链上新币列表 VO */
@@ -31,6 +32,7 @@ export interface ChainTokenVO {
   volume24hUsd: string | null;
   holderCount: number | null;
   createTime: string;
+  dataSource: DataSource | null;
 }
 
 /** 链上新币详情 VO */
@@ -85,6 +87,7 @@ export interface ChainTokenQueryDTO extends PageQuery {
   status?: TokenStatus;
   deployTimeFrom?: number;
   deployTimeTo?: number;
+  dataSource?: DataSource;
 }
 
 /** 创建告警规则参数 */

@@ -16,6 +16,7 @@ import {
   ChainTokenQueryDTO,
   ChainCode,
   TokenStatus,
+  DataSource,
 } from '../../api/chain';
 import { formatTimestamp } from '../../utils/date';
 import type { TablePaginationConfig } from 'antd';
@@ -80,6 +81,7 @@ export const TokenList = () => {
   const [filterSymbol, setFilterSymbol] = useState('');
   const [filterMinScore, setFilterMinScore] = useState<number | null>(null);
   const [filterStatus, setFilterStatus] = useState<TokenStatus | undefined>();
+  const [filterDataSource, setFilterDataSource] = useState<DataSource | undefined>();
 
   const fetchTokens = useCallback(async () => {
     setLoading(true);
@@ -104,6 +106,7 @@ export const TokenList = () => {
       symbol: filterSymbol || undefined,
       minScore: filterMinScore ?? undefined,
       status: filterStatus,
+      dataSource: filterDataSource,
     });
   };
 
@@ -112,6 +115,7 @@ export const TokenList = () => {
     setFilterSymbol('');
     setFilterMinScore(null);
     setFilterStatus(undefined);
+    setFilterDataSource(undefined);
     setQuery({ pageNum: 1, pageSize: 20 });
   };
 
@@ -155,6 +159,22 @@ export const TokenList = () => {
       render: (v: string) => (
         <Tag color={v === 'BNB' ? 'gold' : 'purple'}>{v}</Tag>
       ),
+    },
+    {
+      title: '来源',
+      dataIndex: 'dataSource',
+      key: 'dataSource',
+      width: 100,
+      render: (v: DataSource | null) => {
+        if (!v) return '-';
+        const cfg: Record<string, { label: string; color: string }> = {
+          bnb_primary:  { label: '新币', color: 'default' },
+          bnb_alpha:    { label: '🅰 Alpha', color: 'blue' },
+          bnb_trending: { label: '📈 趋势', color: 'volcano' },
+        };
+        const c = cfg[v] || { label: v, color: 'default' };
+        return <Tag color={c.color}>{c.label}</Tag>;
+      },
     },
     {
       title: t('text.chain.symbol'),
@@ -305,6 +325,20 @@ export const TokenList = () => {
               { label: 'SCORED', value: 'SCORED' },
               { label: 'ALERTED', value: 'ALERTED' },
               { label: 'IGNORED', value: 'IGNORED' },
+            ]}
+          />
+        </Col>
+        <Col>
+          <Select
+            placeholder="数据来源"
+            style={{ width: 130 }}
+            allowClear
+            value={filterDataSource}
+            onChange={v => setFilterDataSource(v)}
+            options={[
+              { label: '新币发现', value: 'bnb_primary' },
+              { label: '🅰 Binance Alpha', value: 'bnb_alpha' },
+              { label: '📈 BSC趋势', value: 'bnb_trending' },
             ]}
           />
         </Col>

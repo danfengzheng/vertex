@@ -169,6 +169,7 @@ public class SolanaChainDataSource implements ChainDataSource {
                 .bondingCurveProgress(bondingPct)
                 .replyCount(replyCount)
                 .launchpadName("pump.fun")
+                .dataSource("SOL")
                 .build();
     }
 

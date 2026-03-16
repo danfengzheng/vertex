@@ -75,6 +75,13 @@ public class NewTokenRawData {
     /** 是否通过 Pump.fun 上市 */
     private Boolean pumpFunListed;
 
+    // ── 来源标识 ──────────────────────────────────────────
+    /**
+     * 数据来源标识，对应 {@link com.vertex.service.chain.source.ChainDataSource#sourceId()}。
+     * e.g. "bnb_primary"(four.meme/dexscreener), "bnb_alpha"(Binance Alpha), "bnb_trending"(BSC动量)
+     */
+    private String dataSource;
+
     // ── 一级市场专属指标 ──────────────────────────────────
     /**
      * Bonding curve 填充进度（0-100%）。

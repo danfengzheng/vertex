@@ -136,6 +136,57 @@ public class DexScreenerClient {
     }
 
     /**
+     * 查询 BSC 上有动量/趋势的代币交易对（不限制创建时间）
+     * <p>
+     * 实现策略：
+     * <ol>
+     *   <li>调用 {@code /token-profiles/latest/v1} 获取近期活跃代币地址列表（chainId=bsc）</li>
+     *   <li>逐一查询每个代币的交易对详情</li>
+     *   <li>按 volume24h/liquidityUsd 比值（换手率）降序排列，优先返回最活跃的代币</li>
+     * </ol>
+     *
+     * @param chainId  链标识（bsc）
+     * @param limit    最多返回的交易对数量
+     */
+    public List<JSONObject> fetchTrendingPairs(String chainId, int limit) {
+        try {
+            // 扩大到 72 小时窗口，覆盖更多潜力币
+            List<JSONObject> profiles = fetchLatestPairs(chainId, 72);
+            if (profiles.isEmpty()) return Collections.emptyList();
+
+            List<JSONObject> allPairs = new ArrayList<>();
+            int maxLookup = Math.min(profiles.size(), 30);
+            for (int i = 0; i < maxLookup; i++) {
+                String tokenAddress = profiles.get(i).getString("tokenAddress");
+                if (tokenAddress == null || tokenAddress.isBlank()) continue;
+                List<JSONObject> pairs = fetchTokenPairs(chainId, tokenAddress);
+                allPairs.addAll(pairs);
+            }
+
+            // 按换手率（volume24h/liquidity）降序排序
+            allPairs.sort((a, b) -> Double.compare(volumeLiquidityRatio(b), volumeLiquidityRatio(a)));
+
+            return allPairs.subList(0, Math.min(limit, allPairs.size()));
+        } catch (Exception e) {
+            log.warn("[DexScreener] fetchTrendingPairs failed for {}: {}", chainId, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    private double volumeLiquidityRatio(JSONObject pair) {
+        try {
+            JSONObject vol = pair.getJSONObject("volume");
+            JSONObject liq = pair.getJSONObject("liquidity");
+            if (vol == null || liq == null) return 0;
+            double v24h = vol.getDoubleValue("h24");
+            double liquidity = liq.getDoubleValue("usd");
+            return liquidity > 0 ? v24h / liquidity : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
      * 按 pair 地址直接查询单个交易对详情
      */
     public JSONObject fetchPairDetail(String chainId, String pairAddress) {

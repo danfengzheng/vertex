@@ -77,4 +77,7 @@ public class ChainToken extends BaseEntity {
 
     /** 原始元数据 JSON */
     private String rawMeta;
+
+    /** 数据来源标识：bnb_primary / bnb_alpha / bnb_trending / SOL 等 */
+    private String dataSource;
 }

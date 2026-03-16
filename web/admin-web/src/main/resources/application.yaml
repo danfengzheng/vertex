@@ -106,6 +106,22 @@ vertex:
       helius-api-key: f42ba6b9-d647-4305-afdd-cf3a236770cb
       scan-window-minutes: 30
       min-liquidity-usd: 500
+    # Binance Alpha 山寨币潜力筛选（enabled=false 默认关闭，按需开启）
+    binance-alpha:
+      enabled: false
+      api-url: https://www.binance.com
+      page-size: 50
+      min-market-cap-usd: 500000
+      min-liquidity-usd: 10000
+    # BSC DEX 趋势动量筛选（enabled=false 默认关闭，按需开启）
+    bsc-trending:
+      enabled: false
+      min-volume-liquidity-ratio: 0.3
+      min-liquidity-usd: 5000
+      min-market-cap-usd: 100000
+      max-market-cap-usd: 50000000
+      min-price-change-1h-pct: 0.0
+      limit: 50
     telegram:
       enabled: true
       bot-token: ${VERTEX_CHAIN_TG_BOT_TOKEN:8568350639:AAFb2uRyP705t29P53pfGnpspCxNxKagSx0}
