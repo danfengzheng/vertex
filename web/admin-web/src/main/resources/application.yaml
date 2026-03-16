@@ -108,14 +108,14 @@ vertex:
       min-liquidity-usd: 500
     # Binance Alpha 山寨币潜力筛选（enabled=false 默认关闭，按需开启）
     binance-alpha:
-      enabled: false
+      enabled: true
       api-url: https://www.binance.com
       page-size: 50
       min-market-cap-usd: 500000
       min-liquidity-usd: 10000
     # BSC DEX 趋势动量筛选（enabled=false 默认关闭，按需开启）
     bsc-trending:
-      enabled: false
+      enabled: true
       min-volume-liquidity-ratio: 0.3
       min-liquidity-usd: 5000
       min-market-cap-usd: 100000

@@ -87,7 +87,7 @@ public class SignalTelegramNotifier implements SignalNotifier {
                 signal.getPrice() != null ? signal.getPrice().stripTrailingZeros().toPlainString() : "N/A",
                 signal.getSignalStrength() != null ? signal.getSignalStrength() : 0,
                 signalTime,
-                escapeHtml(signal.getDescription() != null ? signal.getDescription() : "")
+                escapeHtml("")
         );
 
         String chatId = resolveUserChatId(signal.getCreateBy());
