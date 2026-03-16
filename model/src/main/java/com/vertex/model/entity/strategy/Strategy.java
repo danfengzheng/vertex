@@ -47,9 +47,11 @@ public class Strategy extends BaseEntity {
     private String indicatorConfigs;
 
     /** 出场指标配置 JSON (List<StrategyIndicatorConfig>)，为空时不启用指标出场 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String exitIndicatorConfigs;
 
     /** 最大持仓K线根数，超过后强制平仓，null=不限 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private Integer maxHoldingBars;
 
     /** 是否启用 0-禁用 1-启用 */
