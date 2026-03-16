@@ -4,10 +4,8 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
-import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
@@ -18,42 +16,41 @@ import java.util.List;
 /**
  * Binance Alpha 代币列表 HTTP 客户端
  * <p>
- * Binance Alpha 是币安针对早期阶段 Web3 项目的展示平台，
- * 上榜项目具备潜在上所可能性，是山寨币筛选的重要参考来源。
- * <p>
  * 接口文档（公开，无需 API Key）：
  * <pre>
- * POST https://www.binance.com/bapi/defi/v1/public/defi/token/page
- * Body: { "pageIndex": 1, "pageSize": 50 }
+ * GET https://www.binance.com/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list
+ * 无请求参数，一次性返回所有 Alpha 代币。
  *
  * 响应示例：
  * {
  *   "code": "000000",
- *   "data": {
- *     "rows": [
- *       {
- *         "tokenContractAddress": "0x...",
- *         "tokenName": "Example Token",
- *         "symbol": "EXP",
- *         "network": "BSC",
- *         "price": "0.0012",
- *         "priceChange24h": "8.5",
- *         "marketCap": "1200000",
- *         "volume24h": "500000",
- *         "liquidity": "150000",
- *         "holderCount": 3200
- *       }
- *     ],
- *     "total": 100
- *   }
+ *   "success": true,
+ *   "data": [
+ *     {
+ *       "tokenId": 175,
+ *       "alphaId": "ALPHA_175",
+ *       "symbol": "gorilla",
+ *       "name": "Gorilla",
+ *       "chainId": "56",
+ *       "chainName": "BSC",
+ *       "contractAddress": "0x...",
+ *       "price": "0.0012",
+ *       "percentChange24h": "8.5",
+ *       "marketCap": "1200000",
+ *       "volume24h": "500000",
+ *       "liquidity": "150000",
+ *       "holders": 3200,
+ *       "listingTime": 1710000000000
+ *     }
+ *   ]
  * }
  * </pre>
  */
 @Slf4j
 public class BinanceAlphaClient {
 
-    private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
-    private static final String TOKEN_PAGE_PATH = "/bapi/defi/v1/public/defi/token/page";
+    private static final String TOKEN_LIST_PATH =
+            "/bapi/defi/v1/public/wallet-direct/buw/wallet/cex/alpha/all/token/list";
 
     private final OkHttpClient httpClient;
     private final String baseUrl;
@@ -64,25 +61,18 @@ public class BinanceAlphaClient {
     }
 
     /**
-     * 分页获取 Binance Alpha 代币列表
+     * 获取所有 Binance Alpha 代币（接口一次性返回全量，无分页）
      *
-     * @param pageIndex 页码（从 1 开始）
-     * @param pageSize  每页数量
      * @return 代币 JSON 对象列表，失败返回空列表
      */
-    public List<JSONObject> fetchTokenPage(int pageIndex, int pageSize) {
+    public List<JSONObject> fetchAllTokens() {
+        String url = baseUrl + TOKEN_LIST_PATH;
         try {
-            String url = baseUrl + TOKEN_PAGE_PATH;
-            JSONObject body = new JSONObject();
-            body.put("pageIndex", pageIndex);
-            body.put("pageSize", pageSize);
-
             Request request = new Request.Builder()
                     .url(url)
                     .addHeader("Accept", "application/json")
-                    .addHeader("Content-Type", "application/json")
                     .addHeader("User-Agent", "Mozilla/5.0 (compatible; VertexBot/1.0)")
-                    .post(RequestBody.create(body.toJSONString(), JSON_MEDIA_TYPE))
+                    .get()
                     .build();
 
             try (Response response = httpClient.newCall(request).execute()) {
@@ -95,41 +85,23 @@ public class BinanceAlphaClient {
 
                 JSONObject resp = JSON.parseObject(rb.string());
                 if (resp == null || !"000000".equals(resp.getString("code"))) {
-                    log.warn("[BinanceAlpha] API returned non-success code: {}", resp);
+                    log.warn("[BinanceAlpha] API returned non-success response: {}", resp);
                     return Collections.emptyList();
                 }
 
-                JSONObject data = resp.getJSONObject("data");
-                if (data == null) return Collections.emptyList();
+                // data 字段为 JSONArray（全量列表，无分页）
+                JSONArray data = resp.getJSONArray("data");
+                if (data == null || data.isEmpty()) return Collections.emptyList();
 
-                JSONArray rows = data.getJSONArray("rows");
-                if (rows == null || rows.isEmpty()) return Collections.emptyList();
-
-                List<JSONObject> result = new ArrayList<>(rows.size());
-                for (int i = 0; i < rows.size(); i++) {
-                    result.add(rows.getJSONObject(i));
+                List<JSONObject> result = new ArrayList<>(data.size());
+                for (int i = 0; i < data.size(); i++) {
+                    result.add(data.getJSONObject(i));
                 }
                 return result;
             }
         } catch (Exception e) {
-            log.warn("[BinanceAlpha] fetchTokenPage failed: {}", e.getMessage());
+            log.warn("[BinanceAlpha] fetchAllTokens failed: {}", e.getMessage());
             return Collections.emptyList();
         }
-    }
-
-    /**
-     * 获取全部 Binance Alpha 代币（自动翻页，最多 maxTokens 个）
-     */
-    public List<JSONObject> fetchAllTokens(int pageSize, int maxTokens) {
-        List<JSONObject> all = new ArrayList<>();
-        int page = 1;
-        while (all.size() < maxTokens) {
-            List<JSONObject> pageData = fetchTokenPage(page, pageSize);
-            if (pageData.isEmpty()) break;
-            all.addAll(pageData);
-            if (pageData.size() < pageSize) break; // 最后一页
-            page++;
-        }
-        return all.size() > maxTokens ? all.subList(0, maxTokens) : all;
     }
 }

@@ -85,10 +85,10 @@ public class BinanceAlphaDataSource implements ChainDataSource {
         }
         ChainAnalysisProperties.BinanceAlpha cfg = properties.getBinanceAlpha();
         try {
-            int pageSize = (dbCfg != null && dbCfg.getPageSize() != null) ? dbCfg.getPageSize() : cfg.getPageSize();
             double minMcap = (dbCfg != null && dbCfg.getMinMarketCapUsd() != null) ? dbCfg.getMinMarketCapUsd() : cfg.getMinMarketCapUsd();
             double minLiq = (dbCfg != null && dbCfg.getMinLiquidityUsd() != null) ? dbCfg.getMinLiquidityUsd() : cfg.getMinLiquidityUsd();
-            List<JSONObject> alphaTokens = alphaClient.fetchAllTokens(pageSize, pageSize);
+            // 新 API 一次性返回全量代币，无需分页参数
+            List<JSONObject> alphaTokens = alphaClient.fetchAllTokens();
             if (alphaTokens.isEmpty()) {
                 log.info("[BinanceAlpha] No tokens returned from API");
                 return Collections.emptyList();
@@ -117,19 +117,20 @@ public class BinanceAlphaDataSource implements ChainDataSource {
     // ─── 构建 NewTokenRawData ─────────────────────────────
 
     private NewTokenRawData buildFromAlpha(JSONObject token, double minMarketCapUsd, double minLiquidityUsd) {
-        // 只处理 BSC 链代币
-        String network = token.getString("network");
-        if (network != null && !network.equalsIgnoreCase("BSC") && !network.equalsIgnoreCase("BNB")) {
+        // 只处理 BSC 链代币（新 API 字段：chainName，旧字段：network，兼容两者）
+        String chainName = firstNonNull(token.getString("chainName"), token.getString("network"));
+        if (chainName != null && !chainName.equalsIgnoreCase("BSC") && !chainName.equalsIgnoreCase("BNB")) {
             return null;
         }
 
         String contractAddress = firstNonNull(
-                token.getString("tokenContractAddress"),
                 token.getString("contractAddress"),
+                token.getString("tokenContractAddress"),
                 token.getString("address")
         );
         if (contractAddress == null || contractAddress.isBlank()) return null;
 
+        // 新 API symbol 字段为小写，统一转大写比较
         String symbol = firstNonNull(token.getString("symbol"), token.getString("tokenSymbol"));
         if (symbol != null && SKIP_SYMBOLS.contains(symbol.toUpperCase())) return null;
 
@@ -171,9 +172,11 @@ public class BinanceAlphaDataSource implements ChainDataSource {
                 })
                 .orElse(null);
 
-        String name = firstNonNull(alphaToken.getString("tokenName"), alphaToken.getString("name"), symbol);
+        String name = firstNonNull(alphaToken.getString("name"), alphaToken.getString("tokenName"), symbol);
         long deployTime = alphaToken.getLongValue("listingTime");
-        int holderCount = alphaToken.getIntValue("holderCount");
+        // 新 API 字段为 holders，兼容旧字段 holderCount
+        int holderCount = alphaToken.getIntValue("holders");
+        if (holderCount == 0) holderCount = alphaToken.getIntValue("holderCount");
 
         if (bestPair != null) {
             // DexScreener 数据质量更高
@@ -234,7 +237,9 @@ public class BinanceAlphaDataSource implements ChainDataSource {
             // DexScreener 无数据，降级使用 Alpha API 原始数据
             BigDecimal price = parseBigDecimal(firstNonNull(
                     alphaToken.getString("price"), alphaToken.getString("priceUsd")));
-            BigDecimal priceChange24h = alphaToken.getBigDecimal("priceChange24h");
+            // 新 API 字段为 percentChange24h，旧字段为 priceChange24h
+            BigDecimal priceChange24h = firstBigDecimal(
+                    alphaToken.getString("percentChange24h"), alphaToken.getString("priceChange24h"));
             BigDecimal volume24h = bigDecimalOf(parseDouble(alphaToken, "volume24h", "volume24hUsd"));
 
             return NewTokenRawData.builder()
@@ -301,6 +306,14 @@ public class BinanceAlphaDataSource implements ChainDataSource {
     private BigDecimal parseBigDecimal(String val) {
         if (val == null || val.isBlank()) return null;
         try { return new BigDecimal(val); } catch (Exception e) { return null; }
+    }
+
+    private BigDecimal firstBigDecimal(String... vals) {
+        for (String v : vals) {
+            BigDecimal bd = parseBigDecimal(v);
+            if (bd != null) return bd;
+        }
+        return null;
     }
 
     private String firstNonNull(String... vals) {
