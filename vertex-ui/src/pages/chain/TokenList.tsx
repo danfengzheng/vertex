@@ -16,6 +16,7 @@ import {
   ChainTokenQueryDTO,
   ChainCode,
   TokenStatus,
+  DataSource,
 } from '../../api/chain';
 import { formatTimestamp } from '../../utils/date';
 import type { TablePaginationConfig } from 'antd';
@@ -43,6 +44,14 @@ const STATUS_COLOR: Record<TokenStatus, string> = {
   SCORED: 'processing',
   ALERTED: 'success',
   IGNORED: 'error',
+};
+
+// 数据来源展示配置
+const DATA_SOURCE_CONFIG: Record<string, { label: string; icon: string; color: string; desc: string }> = {
+  bnb_primary: { label: 'BSC 新币',    icon: '🔵', color: 'blue',   desc: 'BSC 链实时新发代币' },
+  bnb_alpha:   { label: 'Alpha',       icon: '🅰',  color: 'gold',   desc: 'Binance Alpha 精选，具上所预期' },
+  bnb_trending:{ label: '趋势筛选',    icon: '📈', color: 'green',  desc: 'BSC DEX 高换手率潜力币' },
+  SOL:         { label: 'Solana',      icon: '🟣', color: 'purple', desc: 'Solana 链代币' },
 };
 
 // ─── 工具方法 ──────────────────────────────────────
@@ -77,6 +86,7 @@ export const TokenList = () => {
 
   // ─── 筛选状态 ────────────────────────────────────
   const [filterChain, setFilterChain] = useState<ChainCode | undefined>();
+  const [filterDataSource, setFilterDataSource] = useState<DataSource | undefined>();
   const [filterSymbol, setFilterSymbol] = useState('');
   const [filterMinScore, setFilterMinScore] = useState<number | null>(null);
   const [filterStatus, setFilterStatus] = useState<TokenStatus | undefined>();
@@ -101,6 +111,7 @@ export const TokenList = () => {
       pageNum: 1,
       pageSize: query.pageSize,
       chain: filterChain,
+      dataSource: filterDataSource,
       symbol: filterSymbol || undefined,
       minScore: filterMinScore ?? undefined,
       status: filterStatus,
@@ -109,6 +120,7 @@ export const TokenList = () => {
 
   const handleReset = () => {
     setFilterChain(undefined);
+    setFilterDataSource(undefined);
     setFilterSymbol('');
     setFilterMinScore(null);
     setFilterStatus(undefined);
@@ -155,6 +167,21 @@ export const TokenList = () => {
       render: (v: string) => (
         <Tag color={v === 'BNB' ? 'gold' : 'purple'}>{v}</Tag>
       ),
+    },
+    {
+      title: '来源',
+      dataIndex: 'dataSource',
+      key: 'dataSource',
+      width: 90,
+      render: (v: string | null) => {
+        const cfg = v ? DATA_SOURCE_CONFIG[v] : null;
+        if (!cfg) return <Tag>{v || '-'}</Tag>;
+        return (
+          <Tooltip title={cfg.desc}>
+            <Tag color={cfg.color}>{cfg.icon} {cfg.label}</Tag>
+          </Tooltip>
+        );
+      },
     },
     {
       title: t('text.chain.symbol'),
@@ -265,13 +292,28 @@ export const TokenList = () => {
         <Col>
           <Select
             placeholder={t('text.chain.chain')}
-            style={{ width: 100 }}
+            style={{ width: 90 }}
             allowClear
             value={filterChain}
             onChange={v => setFilterChain(v)}
             options={[
               { label: 'BNB', value: 'BNB' },
               { label: 'Solana', value: 'SOL' },
+            ]}
+          />
+        </Col>
+        <Col>
+          <Select
+            placeholder="来源"
+            style={{ width: 120 }}
+            allowClear
+            value={filterDataSource}
+            onChange={v => setFilterDataSource(v)}
+            options={[
+              { label: '🔵 BSC 新币',  value: 'bnb_primary' },
+              { label: '🅰 Alpha',      value: 'bnb_alpha' },
+              { label: '📈 趋势筛选',  value: 'bnb_trending' },
+              { label: '🟣 Solana',    value: 'SOL' },
             ]}
           />
         </Col>
@@ -335,7 +377,7 @@ export const TokenList = () => {
         loading={loading}
         dataSource={tokens}
         columns={columns}
-        scroll={{ x: 1100 }}
+        scroll={{ x: 1220 }}
         pagination={{
           current: query.pageNum,
           pageSize: query.pageSize,

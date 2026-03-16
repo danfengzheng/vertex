@@ -280,7 +280,12 @@
       "alertRuleName": "规则名称",
       "notifyChannels": "通知渠道",
       "conditions": "过滤条件",
-      "triggerScan": "立即扫描"
+      "triggerScan": "立即扫描",
+      "dataSource": "来源",
+      "dataSourceBnbPrimary": "BSC 新币",
+      "dataSourceBnbAlpha": "Alpha",
+      "dataSourceBnbTrending": "趋势筛选",
+      "dataSourceSol": "Solana"
     },
     "trading": {
       "title": "交易管理",

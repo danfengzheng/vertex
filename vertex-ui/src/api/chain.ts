@@ -9,11 +9,14 @@ import type { ApiResponse, PageResult, PageQuery } from '../types/api';
 
 export type ChainCode = 'BNB' | 'SOL' | 'ALL';
 export type TokenStatus = 'PENDING' | 'SCORED' | 'ALERTED' | 'IGNORED';
+/** 数据来源：bnb_primary=BSC主网新币, bnb_alpha=Binance Alpha, bnb_trending=BSC趋势筛选, SOL=Solana */
+export type DataSource = 'bnb_primary' | 'bnb_alpha' | 'bnb_trending' | 'SOL';
 
 /** 链上新币列表 VO */
 export interface ChainTokenVO {
   id: string;
   chain: ChainCode;
+  dataSource: DataSource | null;
   contractAddress: string;
   symbol: string;
   name: string;
@@ -80,6 +83,7 @@ export interface AlertRuleVO {
 /** 新币列表查询参数 */
 export interface ChainTokenQueryDTO extends PageQuery {
   chain?: ChainCode;
+  dataSource?: DataSource;
   symbol?: string;
   minScore?: number;
   status?: TokenStatus;
