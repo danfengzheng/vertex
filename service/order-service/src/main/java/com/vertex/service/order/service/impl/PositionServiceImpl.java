@@ -14,7 +14,7 @@ import com.vertex.model.vo.trading.PositionVO;
 import com.vertex.common.core.context.UserContext;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.service.order.mapper.PositionMapper;
-import com.vertex.service.strategy.mapper.StrategyMapper;
+import com.vertex.service.order.mapper.StrategyRefMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
 public class PositionServiceImpl implements IPositionService {
 
     private final PositionMapper positionMapper;
-    private final StrategyMapper strategyMapper;
+    private final StrategyRefMapper strategyMapper;
     private final PositionManagementService positionManagementService;
     private final PaperTradingService paperTradingService;
     private final TradeExecutionService tradeExecutionService;
