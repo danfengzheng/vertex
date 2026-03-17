@@ -12,7 +12,9 @@ import com.vertex.model.entity.trading.PositionSide;
 import com.vertex.model.entity.trading.PositionStatus;
 import com.vertex.model.vo.trading.PositionVO;
 import com.vertex.common.core.context.UserContext;
+import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.service.order.mapper.PositionMapper;
+import com.vertex.service.strategy.mapper.StrategyMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,7 +22,9 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -32,6 +36,7 @@ import java.util.stream.Collectors;
 public class PositionServiceImpl implements IPositionService {
 
     private final PositionMapper positionMapper;
+    private final StrategyMapper strategyMapper;
     private final PositionManagementService positionManagementService;
     private final PaperTradingService paperTradingService;
     private final TradeExecutionService tradeExecutionService;
@@ -45,7 +50,8 @@ public class PositionServiceImpl implements IPositionService {
         if (!UserContext.isAdmin() && !Objects.equals(position.getCreateBy(), UserContext.getUserId())) {
             throw new BizException(GlobalError.FORBIDDEN);
         }
-        return toVO(position);
+        String strategyName = resolveStrategyName(position.getStrategyId());
+        return toVO(position, strategyName);
     }
 
     @Override
@@ -68,8 +74,19 @@ public class PositionServiceImpl implements IPositionService {
                 .orderByDesc(Position::getCreateTime);
 
         Page<Position> result = positionMapper.selectPage(page, wrapper);
+
+        // 批量查策略名，避免 N+1
+        Set<Long> strategyIds = result.getRecords().stream()
+                .map(Position::getStrategyId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> strategyNameMap = strategyIds.isEmpty()
+                ? Map.of()
+                : strategyMapper.selectBatchIds(strategyIds).stream()
+                        .collect(Collectors.toMap(Strategy::getId, Strategy::getName, (a, b) -> a));
+
         List<PositionVO> records = result.getRecords().stream()
-                .map(this::toVO)
+                .map(p -> toVO(p, strategyNameMap.get(p.getStrategyId())))
                 .collect(Collectors.toList());
 
         return PageResult.of(result.getTotal(), records);
@@ -94,7 +111,14 @@ public class PositionServiceImpl implements IPositionService {
         tradeExecutionService.executeClose(position);
     }
 
-    private PositionVO toVO(Position position) {
+    /** 单条查询时解析策略名称 */
+    private String resolveStrategyName(Long strategyId) {
+        if (strategyId == null) return null;
+        Strategy strategy = strategyMapper.selectById(strategyId);
+        return strategy != null ? strategy.getName() : null;
+    }
+
+    private PositionVO toVO(Position position, String strategyName) {
         // 活跃持仓实时刷新当前价格和未实现盈亏
         BigDecimal currentPrice = position.getCurrentPrice();
         BigDecimal unrealizedPnl = position.getUnrealizedPnl();
@@ -124,6 +148,7 @@ public class PositionServiceImpl implements IPositionService {
         return PositionVO.builder()
                 .id(position.getId())
                 .strategyId(position.getStrategyId())
+                .strategyName(strategyName)
                 .accountId(position.getAccountId())
                 .exchange(position.getExchange())
                 .symbol(position.getSymbol())

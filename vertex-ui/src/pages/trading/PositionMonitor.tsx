@@ -12,6 +12,7 @@ import {
   MarketType,
   PositionQueryDTO,
 } from '../../api/trading';
+import { strategyApi, StrategyVO } from '../../api/strategy';
 
 export const PositionMonitor = () => {
   const { t } = useTranslation();
@@ -19,6 +20,13 @@ export const PositionMonitor = () => {
   const [positions, setPositions] = useState<PositionVO[]>([]);
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState<PositionQueryDTO>({ pageNum: 1, pageSize: 20 });
+  const [strategies, setStrategies] = useState<StrategyVO[]>([]);
+
+  useEffect(() => {
+    strategyApi.page({ pageNum: 1, pageSize: 200 }).then(res => {
+      setStrategies(res.data?.records || []);
+    }).catch(() => {});
+  }, []);
 
   const fetchPositions = useCallback(async () => {
     setLoading(true);
@@ -62,6 +70,13 @@ export const PositionMonitor = () => {
   };
 
   const columns = [
+    {
+      title: t('text.strategy.name'),
+      dataIndex: 'strategyName',
+      key: 'strategyName',
+      width: 150,
+      render: (val: string) => val || '-',
+    },
     {
       title: t('text.strategy.symbol'),
       dataIndex: 'symbol',
@@ -256,6 +271,15 @@ export const PositionMonitor = () => {
             { value: 'COINM', label: '币本位合约' },
           ]}
         />
+        <Select
+          allowClear
+          placeholder={t('text.strategy.name')}
+          style={{ width: 180 }}
+          showSearch
+          optionFilterProp="label"
+          onChange={(val) => setQuery({ ...query, strategyId: val, pageNum: 1 })}
+          options={strategies.map(s => ({ value: s.id, label: s.name }))}
+        />
         <Button icon={<ReloadOutlined />} onClick={fetchPositions}>{t('text.trading.refresh')}</Button>
       </div>
       <Table
@@ -263,7 +287,7 @@ export const PositionMonitor = () => {
         dataSource={positions}
         loading={loading}
         rowKey="id"
-        scroll={{ x: 1800 }}
+        scroll={{ x: 1950 }}
         pagination={{
           current: query.pageNum,
           pageSize: query.pageSize,
