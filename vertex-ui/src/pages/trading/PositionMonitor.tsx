@@ -23,7 +23,8 @@ export const PositionMonitor = () => {
   const [strategies, setStrategies] = useState<StrategyVO[]>([]);
 
   useEffect(() => {
-    strategyApi.page({ pageNum: 1, pageSize: 200 }).then(res => {
+    // 后端 pageSize 上限 100，策略数超过时可扩展为多页加载
+    strategyApi.page({ pageNum: 1, pageSize: 100 }).then(res => {
       setStrategies(res.data?.records || []);
     }).catch(() => {});
   }, []);
