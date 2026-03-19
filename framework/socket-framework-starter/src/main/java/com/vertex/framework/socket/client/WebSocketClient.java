@@ -94,7 +94,31 @@ public class WebSocketClient {
         var handshaker = WebSocketClientHandshakerFactory.newHandshaker(
                 uri, WebSocketVersion.V13, null, true, httpHeaders, config.getMaxFrameSize());
 
-        WebSocketClientHandler clientHandler = new WebSocketClientHandler(handshaker, messageListener);
+        // 包装 listener：在 IO 线程调用 onConnected() 之前，先将 state/session 迁移完毕。
+        // 否则 onConnectionReady() → resubscribeAll() → sendMessage() → isConnected() 会因
+        // state 仍为 RECONNECTING 而返回 false，导致重连后订阅消息被静默丢弃。
+        WebSocketClientHandler.WebSocketMessageListener wrappedListener =
+                new WebSocketClientHandler.WebSocketMessageListener() {
+            @Override
+            public void onConnected(SocketSession s) {
+                state = SocketConnectionState.CONNECTED;
+                session = s;
+                messageListener.onConnected(s);
+            }
+            @Override
+            public void onMessage(SocketSession s, String message) {
+                messageListener.onMessage(s, message);
+            }
+            @Override
+            public void onDisconnected(SocketSession s) {
+                messageListener.onDisconnected(s);
+            }
+            @Override
+            public void onError(SocketSession s, Throwable cause) {
+                messageListener.onError(s, cause);
+            }
+        };
+        WebSocketClientHandler clientHandler = new WebSocketClientHandler(handshaker, wrappedListener);
 
         // 获取策略（使用默认值 fallback）
         HeartbeatStrategy heartbeatStrategy = config.getHeartbeatStrategy() != null

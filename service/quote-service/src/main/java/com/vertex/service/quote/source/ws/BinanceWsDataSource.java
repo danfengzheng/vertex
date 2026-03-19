@@ -171,18 +171,22 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
 
     private void subscribeKline(String symbol, KLineInterval interval) {
         String topic = buildKlineTopic(symbol, interval);
+        boolean isNewTopic = !topicIntervalMap.containsKey(topic);
         topicIntervalMap.put(topic, interval);
         topicSymbolMap.put(topic, symbol);
-        getSubscriptionManager().subscribe(topic, null, (t, payload) -> {
-            try {
-                KLine kline = klineConverter.convert(symbol, interval, payload);
-                if (kline != null) {
-                    klineFlushOnNextHandler.submit(kline);
+        // 仅首次注册 listener，防止策略多次 enable/disable 后同一 topic 积累重复监听器
+        if (isNewTopic) {
+            getSubscriptionManager().subscribe(topic, null, (t, payload) -> {
+                try {
+                    KLine kline = klineConverter.convert(symbol, interval, payload);
+                    if (kline != null) {
+                        klineFlushOnNextHandler.submit(kline);
+                    }
+                } catch (Exception e) {
+                    log.error("[Binance] Error processing KLine for {}:{}", symbol, interval.getCode(), e);
                 }
-            } catch (Exception e) {
-                log.error("[Binance] Error processing KLine for {}:{}", symbol, interval.getCode(), e);
-            }
-        });
+            });
+        }
         if (connected) {
             scheduleBatchSubscribe();
         }

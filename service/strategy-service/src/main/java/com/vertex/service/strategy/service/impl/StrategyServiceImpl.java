@@ -299,21 +299,14 @@ public class StrategyServiceImpl implements IStrategyService {
             // 2. 收集策略所有用到的周期（含指标自定义周期）
             Set<KLineInterval> allIntervals = collectAllIntervals(strategy);
 
-            // 3. 逐一检查并订阅（日 K 以下由数据源合并为 trade，≥1D 按周期订阅 kline）
-            // 策略侧保持「按区间订阅」调用即可；<1D 的 K 线由聚合器 flush 后经 KLineEvent 驱动策略
+            // 3. 逐一订阅所需周期（直接调用，不跳过）
+            // subscribeKline/subscribeTrade 内部已做 listener 去重，重复调用不会积累重复监听器；
+            // 每次调用都会触发 scheduleBatchSubscribe() 把订阅重发给交易所，
+            // 确保 WebSocket 重连后订阅状态与交易所保持同步。
             for (KLineInterval iv : allIntervals) {
-                boolean alreadySubscribed = ds.getSubscriptions().stream()
-                        .anyMatch(sub -> strategy.getSymbol().equals(sub.get("symbol"))
-                                && iv.name().equals(sub.get("interval")));
-
-                if (!alreadySubscribed) {
-                    log.info("[AutoSubscribe] Subscribing {}:{} on {}",
-                            strategy.getSymbol(), iv.getCode(), ds.exchangeCode());
-                    ds.subscribe(strategy.getSymbol(), iv);
-                } else {
-                    log.info("[AutoSubscribe] Already subscribed to {}:{} on {}",
-                            strategy.getSymbol(), iv.getCode(), ds.exchangeCode());
-                }
+                log.info("[AutoSubscribe] Subscribing {}:{} on {}",
+                        strategy.getSymbol(), iv.getCode(), ds.exchangeCode());
+                ds.subscribe(strategy.getSymbol(), iv);
             }
         } catch (Exception e) {
             // 自动订阅失败不阻塞策略启用
