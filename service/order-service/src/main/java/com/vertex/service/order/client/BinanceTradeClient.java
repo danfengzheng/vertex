@@ -62,6 +62,8 @@ public class BinanceTradeClient {
      * Binance 极少修改 stepSize，无需 TTL 过期。
      */
     private final ConcurrentHashMap<String, BigDecimal> stepSizeCache = new ConcurrentHashMap<>();
+    /** 交易对 tickSize 缓存（binanceSymbol → tickSize，用于 LIMIT 价格对齐） */
+    private final ConcurrentHashMap<String, BigDecimal> tickSizeCache = new ConcurrentHashMap<>();
 
     /**
      * 下单
@@ -94,14 +96,24 @@ public class BinanceTradeClient {
                     quantity.toPlainString(), alignedQty.toPlainString(), binanceSymbol);
         }
 
+        // LIMIT 订单：按 PRICE_FILTER tickSize 向下截断价格（避免 Binance 精度拒单）
+        BigDecimal alignedPrice = price;
+        if ("LIMIT".equals(type) && price != null && price.compareTo(BigDecimal.ZERO) > 0) {
+            alignedPrice = alignToTickSize(binanceSymbol, price);
+            if (alignedPrice.compareTo(price) != 0) {
+                log.info("[Binance Trade] Price aligned by PRICE_FILTER: {} → {} ({})",
+                        price, alignedPrice, binanceSymbol);
+            }
+        }
+
         StringBuilder params = new StringBuilder();
         params.append("symbol=").append(binanceSymbol);
         params.append("&side=").append(side);
         params.append("&type=").append(type);
         params.append("&quantity=").append(alignedQty.stripTrailingZeros().toPlainString());
-        if ("LIMIT".equals(type) && price != null) {
+        if ("LIMIT".equals(type) && alignedPrice != null) {
             params.append("&timeInForce=GTC");
-            params.append("&price=").append(price.stripTrailingZeros().toPlainString());
+            params.append("&price=").append(alignedPrice.stripTrailingZeros().toPlainString());
         }
         params.append("&recvWindow=").append(properties.getBinance().getRecvWindow());
         params.append("&timestamp=").append(System.currentTimeMillis());
@@ -216,12 +228,15 @@ public class BinanceTradeClient {
      */
     public void preloadStepSizes(java.util.List<String> symbols) {
         if (symbols == null || symbols.isEmpty()) return;
-        log.info("[LOT_SIZE] Preloading stepSize for {} symbols: {}", symbols.size(), symbols);
+        log.info("[exchangeInfo] Preloading filters for {} symbols: {}", symbols.size(), symbols);
         symbols.forEach(s -> {
             String binanceSymbol = toBinanceSymbol(s);
-            stepSizeCache.computeIfAbsent(binanceSymbol, this::fetchStepSize);
+            if (!stepSizeCache.containsKey(binanceSymbol)) {
+                fetchAndCacheFilters(binanceSymbol);
+            }
         });
-        log.info("[LOT_SIZE] Preload done. Cache size={}", stepSizeCache.size());
+        log.info("[exchangeInfo] Preload done. stepSizeCache={}, tickSizeCache={}",
+                stepSizeCache.size(), tickSizeCache.size());
     }
 
     // ─── LOT_SIZE 对齐 ──────────────────────────────────────
@@ -248,26 +263,49 @@ public class BinanceTradeClient {
     }
 
     /**
-     * 查询并缓存交易对的 LOT_SIZE stepSize（公开接口，无需 API Key）。
+     * 按交易对 PRICE_FILTER tickSize 向下截断 LIMIT 价格。
+     * <p>
+     * 算法：floor(price / tickSize) * tickSize
+     * 若查询失败则返回原价格（不阻断下单，Binance 如拒绝将在 executeRequest 中抛出）。
      */
-    public BigDecimal getStepSize(String binanceSymbol) {
-        return stepSizeCache.computeIfAbsent(binanceSymbol, this::fetchStepSize);
+    private BigDecimal alignToTickSize(String binanceSymbol, BigDecimal price) {
+        BigDecimal tickSize = tickSizeCache.get(binanceSymbol);
+        if (tickSize == null) {
+            fetchAndCacheFilters(binanceSymbol);
+            tickSize = tickSizeCache.get(binanceSymbol);
+        }
+        if (tickSize == null || tickSize.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("[PRICE_FILTER] Cannot get tickSize for {}, using price as-is", binanceSymbol);
+            return price;
+        }
+        BigDecimal ticks = price.divide(tickSize, 0, RoundingMode.DOWN);
+        return ticks.multiply(tickSize).stripTrailingZeros();
     }
 
     /**
-     * 从 Binance exchangeInfo 获取 LOT_SIZE stepSize。
+     * 查询并缓存交易对的 LOT_SIZE stepSize（公开接口，无需 API Key）。
+     */
+    public BigDecimal getStepSize(String binanceSymbol) {
+        BigDecimal cached = stepSizeCache.get(binanceSymbol);
+        if (cached != null) return cached;
+        fetchAndCacheFilters(binanceSymbol);
+        return stepSizeCache.get(binanceSymbol);
+    }
+
+    /**
+     * 一次 exchangeInfo 请求同时缓存 LOT_SIZE(stepSize) 和 PRICE_FILTER(tickSize)。
      * <p>
      * 响应示例（部分）：
      * <pre>
      * {
      *   "filters": [
-     *     { "filterType": "LOT_SIZE", "minQty": "0.00010000",
-     *       "maxQty": "9000.00000000", "stepSize": "0.00010000" }
+     *     { "filterType": "LOT_SIZE",    "stepSize": "0.00010000" },
+     *     { "filterType": "PRICE_FILTER","tickSize":  "0.01000000" }
      *   ]
      * }
      * </pre>
      */
-    private BigDecimal fetchStepSize(String binanceSymbol) {
+    private void fetchAndCacheFilters(String binanceSymbol) {
         try {
             String url = properties.getBinance().getApiUrl()
                     + "/api/v3/exchangeInfo?symbol=" + binanceSymbol;
@@ -275,37 +313,42 @@ public class BinanceTradeClient {
 
             try (Response response = httpClient.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    log.warn("[LOT_SIZE] exchangeInfo request failed for {}: {}", binanceSymbol, response.code());
-                    return null;
+                    log.warn("[exchangeInfo] request failed for {}: {}", binanceSymbol, response.code());
+                    return;
                 }
                 ResponseBody rb = response.body();
-                if (rb == null) return null;
+                if (rb == null) return;
 
                 JSONObject body = JSON.parseObject(rb.string());
                 JSONArray symbols = body.getJSONArray("symbols");
-                if (symbols == null || symbols.isEmpty()) return null;
+                if (symbols == null || symbols.isEmpty()) return;
 
                 JSONObject symbolInfo = symbols.getJSONObject(0);
                 JSONArray filters = symbolInfo.getJSONArray("filters");
-                if (filters == null) return null;
+                if (filters == null) return;
 
                 for (int i = 0; i < filters.size(); i++) {
                     JSONObject filter = filters.getJSONObject(i);
-                    if ("LOT_SIZE".equals(filter.getString("filterType"))) {
+                    String filterType = filter.getString("filterType");
+                    if ("LOT_SIZE".equals(filterType)) {
                         String stepStr = filter.getString("stepSize");
                         if (stepStr != null) {
                             BigDecimal step = new BigDecimal(stepStr);
+                            stepSizeCache.put(binanceSymbol, step);
                             log.info("[LOT_SIZE] {} stepSize={}", binanceSymbol, step.toPlainString());
-                            return step;
+                        }
+                    } else if ("PRICE_FILTER".equals(filterType)) {
+                        String tickStr = filter.getString("tickSize");
+                        if (tickStr != null) {
+                            BigDecimal tick = new BigDecimal(tickStr);
+                            tickSizeCache.put(binanceSymbol, tick);
+                            log.info("[PRICE_FILTER] {} tickSize={}", binanceSymbol, tick.toPlainString());
                         }
                     }
                 }
-                log.warn("[LOT_SIZE] No LOT_SIZE filter found for {}", binanceSymbol);
-                return null;
             }
         } catch (Exception e) {
-            log.warn("[LOT_SIZE] Failed to fetch stepSize for {}: {}", binanceSymbol, e.getMessage());
-            return null;
+            log.warn("[exchangeInfo] Failed to fetch filters for {}: {}", binanceSymbol, e.getMessage());
         }
     }
 

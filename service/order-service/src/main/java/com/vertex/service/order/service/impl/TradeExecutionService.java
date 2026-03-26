@@ -366,10 +366,11 @@ public class TradeExecutionService {
                 log.info("[Futures] MarginType set: symbol={}, marginType={}", order.getSymbol(), marginType);
             }
         } catch (Exception e) {
-            // 清除缓存，下次开仓时重试
+            // 清除缓存确保下次重试，并向上抛出阻止以错误参数开仓
             leverageCache.remove(cacheKey);
             marginTypeCache.remove(cacheKey);
-            log.warn("[Futures] Account setup warning for {}: {}", order.getSymbol(), e.getMessage());
+            log.error("[Futures] Account setup failed for {}: {}", order.getSymbol(), e.getMessage(), e);
+            throw new BizException(GlobalError.TRADE_API_ERROR);
         }
     }
 
@@ -729,8 +730,19 @@ public class TradeExecutionService {
             return;
         }
 
-        Position position = positionManagementService.findOpenPosition(
-                order.getStrategyId(), order.getAccountId(), order.getExchange(), order.getSymbol());
+        // 合约开仓后，精准按方向查询持仓，避免同一 symbol 下 LONG/SHORT 并存时取到错误方向
+        MarketType mt = order.getMarketType();
+        boolean isFuturesOrder = mt != null && mt.isFutures();
+        Position position;
+        if (isFuturesOrder) {
+            PositionSide targetSide = order.getSide() == OrderSide.BUY ? PositionSide.LONG : PositionSide.SHORT;
+            position = positionManagementService.findOpenPosition(
+                    order.getStrategyId(), order.getAccountId(),
+                    order.getExchange(), order.getSymbol(), targetSide);
+        } else {
+            position = positionManagementService.findOpenPosition(
+                    order.getStrategyId(), order.getAccountId(), order.getExchange(), order.getSymbol());
+        }
         if (position == null) return;
 
         BigDecimal entryPrice = position.getEntryPrice();

@@ -50,14 +50,21 @@ public class StopLossTakeProfitTask {
                     continue;
                 }
 
-                // 更新当前价格和未实现盈亏
+                // 更新当前价格和未实现盈亏（区分 LONG/SHORT 方向）
                 position.setCurrentPrice(currentPrice);
                 if (position.getEntryPrice() != null
                         && position.getQuantity() != null
                         && position.getQuantity().compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal unrealizedPnl = currentPrice.subtract(position.getEntryPrice())
-                            .multiply(position.getQuantity())
-                            .setScale(10, RoundingMode.HALF_UP);
+                    boolean shortPos = position.getSide() == PositionSide.SHORT;
+                    // LONG：盈亏 = (当前价 - 入场价) × 数量
+                    // SHORT：盈亏 = (入场价 - 当前价) × 数量
+                    BigDecimal unrealizedPnl = shortPos
+                            ? position.getEntryPrice().subtract(currentPrice)
+                                    .multiply(position.getQuantity())
+                                    .setScale(10, RoundingMode.HALF_UP)
+                            : currentPrice.subtract(position.getEntryPrice())
+                                    .multiply(position.getQuantity())
+                                    .setScale(10, RoundingMode.HALF_UP);
                     position.setUnrealizedPnl(unrealizedPnl);
                 }
 

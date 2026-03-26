@@ -104,14 +104,19 @@ public class PaperTradingService {
         order.setFilledPrice(fillPrice);
 
         // 计算手续费（与回测逻辑对齐: fee = fillPrice * quantity * feeRate）
+        boolean isFutures = order.getMarketType() != null && order.getMarketType().isFutures();
         if (feeRate != null && feeRate.compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal fee = fillPrice.multiply(order.getQuantity())
                     .multiply(feeRate)
                     .setScale(10, RoundingMode.HALF_UP);
             order.setFee(fee);
 
-            // 买入时手续费从币数量中扣减（模拟实盘行为：交易所从买入的币中扣手续费）
-            if (order.getSide() == OrderSide.BUY) {
+            // 手续费对持仓数量的影响：
+            // 现货 BUY 开仓（非 reduceOnly）：交易所从买入的币中扣手续费，数量减少
+            // 合约（任意方向）/ 现货 SELL / reduceOnly 平仓：手续费为报价资产（USDT），不影响数量
+            // ⚠️ 合约 BUY+reduceOnly 若错误扣减数量会导致 closeShortPosition 判定为部分平仓，残余仓位无法关闭
+            boolean isSpotBuyOpen = !isFutures && order.getSide() == OrderSide.BUY && !order.isReduceOnly();
+            if (isSpotBuyOpen) {
                 BigDecimal feeInQty = order.getQuantity().multiply(feeRate)
                         .setScale(10, RoundingMode.DOWN);
                 order.setFilledQuantity(order.getQuantity().subtract(feeInQty));

@@ -456,7 +456,16 @@ public class PositionManagementService {
         position.setEntryPrice(order.getFilledPrice());
         position.setCurrentPrice(order.getFilledPrice());
         position.setUnrealizedPnl(BigDecimal.ZERO);
-        position.setRealizedPnl(BigDecimal.ZERO);
+
+        // 合约手续费以报价资产（USDT）计量，不从数量扣减。
+        // 开仓手续费记入初始已实现亏损，使 realizedPnl 从一开始就反映真实成本。
+        // 现货 BUY 的手续费已在 filledQuantity 中扣减（少收到的币），此处无需重复计入。
+        boolean isFutures = order.getMarketType() != null && order.getMarketType().isFutures();
+        BigDecimal openFee = order.getFee() != null ? order.getFee() : BigDecimal.ZERO;
+        position.setRealizedPnl(isFutures && openFee.compareTo(BigDecimal.ZERO) > 0
+                ? openFee.negate()
+                : BigDecimal.ZERO);
+
         position.setStatus(PositionStatus.OPEN);
         position.setTradeMode(order.getTradeMode());
         position.setMarketType(order.getMarketType());

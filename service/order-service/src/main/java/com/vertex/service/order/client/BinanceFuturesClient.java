@@ -43,6 +43,8 @@ public class BinanceFuturesClient {
 
     /** 交易对 stepSize 缓存（"USDM:BTCUSDT" → stepSize） */
     private final ConcurrentHashMap<String, BigDecimal> stepSizeCache = new ConcurrentHashMap<>();
+    /** 交易对 tickSize 缓存（"USDM:BTCUSDT" → tickSize，用于 LIMIT 价格对齐） */
+    private final ConcurrentHashMap<String, BigDecimal> tickSizeCache = new ConcurrentHashMap<>();
 
     // ─── 公开方法 ──────────────────────────────────────────
 
@@ -75,14 +77,23 @@ public class BinanceFuturesClient {
             log.info("[Futures] Quantity aligned by stepSize: {} → {} ({})", quantity, alignedQty, binanceSymbol);
         }
 
+        // LIMIT 订单：按 PRICE_FILTER tickSize 向下截断价格（避免 Binance 精度拒单）
+        BigDecimal alignedPrice = price;
+        if ("LIMIT".equals(type) && price != null && price.compareTo(BigDecimal.ZERO) > 0) {
+            alignedPrice = alignToTickSize(cacheKey, binanceSymbol, base, marketType, price);
+            if (alignedPrice.compareTo(price) != 0) {
+                log.info("[Futures] Price aligned by tickSize: {} → {} ({})", price, alignedPrice, binanceSymbol);
+            }
+        }
+
         StringBuilder params = new StringBuilder();
         params.append("symbol=").append(binanceSymbol);
         params.append("&side=").append(side);
         params.append("&type=").append(type);
         params.append("&quantity=").append(alignedQty.stripTrailingZeros().toPlainString());
-        if ("LIMIT".equals(type) && price != null) {
+        if ("LIMIT".equals(type) && alignedPrice != null) {
             params.append("&timeInForce=GTC");
-            params.append("&price=").append(price.stripTrailingZeros().toPlainString());
+            params.append("&price=").append(alignedPrice.stripTrailingZeros().toPlainString());
         }
         if (reduceOnly) {
             params.append("&reduceOnly=true");
@@ -146,9 +157,12 @@ public class BinanceFuturesClient {
         String binanceSymbol = toBinanceSymbol(symbol);
         String endpoint = marketType == MarketType.USDM ? "/fapi/v1/marginType" : "/dapi/v1/marginType";
 
+        // Binance API 保证金模式：ISOLATED 原样，CROSS → CROSSED（与 Binance 文档一致）
+        String binanceMarginType = marginType == MarginType.CROSS ? "CROSSED" : marginType.name();
+
         StringBuilder params = new StringBuilder();
         params.append("symbol=").append(binanceSymbol);
-        params.append("&marginType=").append(marginType.name());
+        params.append("&marginType=").append(binanceMarginType);
         params.append("&recvWindow=").append(properties.getBinance().getRecvWindow());
         params.append("&timestamp=").append(System.currentTimeMillis());
 
@@ -163,13 +177,33 @@ public class BinanceFuturesClient {
                 .addHeader("X-MBX-APIKEY", apiKey)
                 .build();
 
-        // Binance 若保证金模式与当前相同，返回 code=-4046 "No need to change margin type"，视为成功
-        try {
-            executeRequest(request, "setMarginType");
-            log.info("[Futures] MarginType set: symbol={}, marginType={}", binanceSymbol, marginType);
+        // Binance 若保证金模式与当前相同，返回 HTTP 400 + body: {"code":-4046,"msg":"..."}，视为成功
+        // 其他 4xx/5xx 错误必须向上抛出，不能静默吞掉
+        try (Response response = httpClient.newCall(request).execute()) {
+            String bodyStr = response.body() != null ? response.body().string() : "";
+            if (response.isSuccessful()) {
+                log.info("[Futures] MarginType set: symbol={}, marginType={}", binanceSymbol, binanceMarginType);
+            } else {
+                // 解析 Binance 业务错误码
+                int binanceCode = 0;
+                try {
+                    binanceCode = JSON.parseObject(bodyStr).getIntValue("code");
+                } catch (Exception ignored) { /* body 非 JSON 时忽略 */ }
+
+                if (binanceCode == -4046) {
+                    // -4046: "No need to change margin type." 保证金模式已是目标值，安全忽略
+                    log.debug("[Futures] MarginType already set to {} for {}, skipping", binanceMarginType, binanceSymbol);
+                } else {
+                    log.error("[Futures] setMarginType failed: symbol={}, marginType={}, code={}, body={}",
+                            binanceSymbol, binanceMarginType, response.code(), bodyStr);
+                    throw new BizException(GlobalError.TRADE_API_ERROR);
+                }
+            }
         } catch (BizException e) {
-            // 忽略 "no need to change" 错误，其他异常继续抛出
-            log.info("[Futures] MarginType already set or no change needed for {}, skipping", binanceSymbol);
+            throw e;
+        } catch (Exception e) {
+            log.error("[Futures] setMarginType error: {}", e.getMessage(), e);
+            throw new BizException(GlobalError.TRADE_API_ERROR);
         }
     }
 
@@ -257,8 +291,7 @@ public class BinanceFuturesClient {
 
     private BigDecimal alignToStepSize(String cacheKey, String binanceSymbol,
                                         String base, MarketType marketType, BigDecimal quantity) {
-        BigDecimal stepSize = stepSizeCache.computeIfAbsent(cacheKey,
-                k -> fetchStepSize(binanceSymbol, base, marketType));
+        BigDecimal stepSize = getOrFetchStepSize(cacheKey, binanceSymbol, base, marketType);
         if (stepSize == null || stepSize.compareTo(BigDecimal.ZERO) <= 0) {
             log.warn("[Futures LOT_SIZE] Cannot get stepSize for {}, using 8 decimal fallback", binanceSymbol);
             return quantity.setScale(8, RoundingMode.DOWN);
@@ -267,7 +300,21 @@ public class BinanceFuturesClient {
         return steps.multiply(stepSize).stripTrailingZeros();
     }
 
-    private BigDecimal fetchStepSize(String binanceSymbol, String base, MarketType marketType) {
+    private BigDecimal getOrFetchStepSize(String cacheKey, String binanceSymbol,
+                                           String base, MarketType marketType) {
+        BigDecimal cached = stepSizeCache.get(cacheKey);
+        if (cached != null) return cached;
+        // 一次 exchangeInfo 同时填充 stepSize 和 tickSize 两个缓存，减少网络请求
+        fetchAndCacheFilters(binanceSymbol, base, marketType);
+        return stepSizeCache.get(cacheKey);
+    }
+
+    /**
+     * 一次 exchangeInfo 请求同时缓存 LOT_SIZE(stepSize) 和 PRICE_FILTER(tickSize)。
+     * 两个缓存均以 "MARKETTYPE:SYMBOL" 为 key。
+     */
+    private void fetchAndCacheFilters(String binanceSymbol, String base, MarketType marketType) {
+        String cacheKey = marketType.name() + ":" + binanceSymbol;
         try {
             String infoEndpoint = marketType == MarketType.USDM
                     ? "/fapi/v1/exchangeInfo" : "/dapi/v1/exchangeInfo";
@@ -276,38 +323,70 @@ public class BinanceFuturesClient {
 
             try (Response response = httpClient.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    log.warn("[Futures LOT_SIZE] exchangeInfo failed for {}: {}", binanceSymbol, response.code());
-                    return null;
+                    log.warn("[Futures exchangeInfo] failed for {}: {}", binanceSymbol, response.code());
+                    return;
                 }
                 ResponseBody rb = response.body();
-                if (rb == null) return null;
+                if (rb == null) return;
 
                 JSONObject body = JSON.parseObject(rb.string());
                 JSONArray symbols = body.getJSONArray("symbols");
-                if (symbols == null || symbols.isEmpty()) return null;
+                if (symbols == null || symbols.isEmpty()) return;
 
                 JSONObject symbolInfo = symbols.getJSONObject(0);
                 JSONArray filters = symbolInfo.getJSONArray("filters");
-                if (filters == null) return null;
+                if (filters == null) return;
 
                 for (int i = 0; i < filters.size(); i++) {
                     JSONObject filter = filters.getJSONObject(i);
-                    if ("LOT_SIZE".equals(filter.getString("filterType"))) {
+                    String filterType = filter.getString("filterType");
+                    if ("LOT_SIZE".equals(filterType)) {
                         String stepStr = filter.getString("stepSize");
                         if (stepStr != null) {
                             BigDecimal step = new BigDecimal(stepStr);
+                            stepSizeCache.put(cacheKey, step);
                             log.info("[Futures LOT_SIZE] {} stepSize={}", binanceSymbol, step.toPlainString());
-                            return step;
+                        }
+                    } else if ("PRICE_FILTER".equals(filterType)) {
+                        String tickStr = filter.getString("tickSize");
+                        if (tickStr != null) {
+                            BigDecimal tick = new BigDecimal(tickStr);
+                            tickSizeCache.put(cacheKey, tick);
+                            log.info("[Futures PRICE_FILTER] {} tickSize={}", binanceSymbol, tick.toPlainString());
                         }
                     }
                 }
-                log.warn("[Futures LOT_SIZE] No LOT_SIZE filter for {}", binanceSymbol);
-                return null;
             }
         } catch (Exception e) {
-            log.warn("[Futures LOT_SIZE] Failed to fetch stepSize for {}: {}", binanceSymbol, e.getMessage());
-            return null;
+            log.warn("[Futures exchangeInfo] Failed to fetch filters for {}: {}", binanceSymbol, e.getMessage());
         }
+    }
+
+    // ─── PRICE_FILTER 对齐 ────────────────────────────────────
+
+    /**
+     * 按交易对 PRICE_FILTER tickSize 向下截断 LIMIT 价格。
+     * <p>
+     * 算法：floor(price / tickSize) * tickSize
+     * 例：price=42000.157, tickSize=0.1 → floor(420001.57) * 0.1 = 42000.1
+     * <p>
+     * tickSize 从 Binance {@code /fapi/v1/exchangeInfo} 查询并缓存，生命周期同 stepSize 缓存。
+     * 若查询失败则返回原价格（不阻断下单，Binance 如拒绝将在 executeRequest 中抛出）。
+     */
+    private BigDecimal alignToTickSize(String cacheKey, String binanceSymbol,
+                                        String base, MarketType marketType, BigDecimal price) {
+        BigDecimal tickSize = tickSizeCache.get(cacheKey);
+        if (tickSize == null) {
+            // 一次 exchangeInfo 同时填充 stepSize 和 tickSize（getOrFetchStepSize 可能已触发）
+            fetchAndCacheFilters(binanceSymbol, base, marketType);
+            tickSize = tickSizeCache.get(cacheKey);
+        }
+        if (tickSize == null || tickSize.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("[Futures PRICE_FILTER] Cannot get tickSize for {}, using price as-is", binanceSymbol);
+            return price;
+        }
+        BigDecimal ticks = price.divide(tickSize, 0, RoundingMode.DOWN);
+        return ticks.multiply(tickSize).stripTrailingZeros();
     }
 
     // ─── HTTP 辅助 ─────────────────────────────────────────
