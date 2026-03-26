@@ -81,10 +81,83 @@ function getIndicatorValueFields(
     case 'SUPERTREND': return ['trend', 'prevTrend', 'superTrend', 'upperBand', 'lowerBand'];
     case 'VOL_CONFIRM':return ['volRatio', 'currentVolume', 'avgVolume'];
     case 'OBV':        return ['obv', 'obvSignal'];
-    case 'DIVERGENCE': return ['bearishDivergence', 'bullishDivergence'];
+    case 'DIVERGENCE': return [
+      'bearishDivergence', 'bullishDivergence',
+      'bearishDivergenceForming', 'bullishDivergenceForming',
+      'bearishPressure', 'bullishPressure',
+    ];
     default:           return [];
   }
 }
+
+/**
+ * 投票模式下的买入 / 卖出条件列表（可复用于入场 & 出场指标）
+ * 满足全部条件时投 BUY / SELL 票；不配置时回退到指标内部 suggestion 逻辑。
+ */
+const VotingConditionsList = ({
+  listName,
+  conditionType,
+  fieldOptions,
+}: {
+  listName: (string | number)[];
+  conditionType: 'buy' | 'sell';
+  fieldOptions: string[];
+}) => {
+  const { t } = useTranslation();
+  return (
+    <Form.List name={listName}>
+      {(condFields, { add: addCond, remove: removeCond }) => (
+        <>
+          {condFields.map((condField) => (
+            <Space key={condField.key} style={{ marginBottom: 6, display: 'flex' }} align="center">
+              <Form.Item name={[condField.name, 'field']} noStyle>
+                <AutoComplete
+                  style={{ width: 160 }}
+                  placeholder={t('placeholder.strategy.filterField')}
+                  options={fieldOptions.map((f) => ({ value: f }))}
+                  filterOption={(input, opt) =>
+                    (opt?.value ?? '').toLowerCase().includes(input.toLowerCase())
+                  }
+                />
+              </Form.Item>
+              <Form.Item name={[condField.name, 'op']} noStyle initialValue="GTE">
+                <Select style={{ width: 70 }} options={FILTER_OP_OPTIONS} />
+              </Form.Item>
+              <Form.Item name={[condField.name, 'threshold']} noStyle>
+                <InputNumber style={{ width: 100 }} placeholder="0" step={0.1} />
+              </Form.Item>
+              <Button
+                type="link"
+                danger
+                size="small"
+                onClick={() => removeCond(condField.name)}
+              >
+                {t('common.delete')}
+              </Button>
+            </Space>
+          ))}
+          {condFields.length === 0 && (
+            <div style={{ color: '#999', fontSize: 12, marginBottom: 6 }}>
+              {t(conditionType === 'buy'
+                ? 'text.strategy.buyConditionsEmpty'
+                : 'text.strategy.sellConditionsEmpty')}
+            </div>
+          )}
+          <Button
+            size="small"
+            type="dashed"
+            onClick={() => addCond({ op: 'GTE' })}
+            icon={<PlusOutlined />}
+          >
+            {t(conditionType === 'buy'
+              ? 'text.strategy.addBuyCondition'
+              : 'text.strategy.addSellCondition')}
+          </Button>
+        </>
+      )}
+    </Form.List>
+  );
+};
 
 /** 根据指标类型渲染参数字段 */
 const IndicatorParamsFields = ({
@@ -999,6 +1072,44 @@ export const StrategyConfig = () => {
                         </Form.List>
                       </div>
                     )}
+
+                    {/* 投票条件：非硬性过滤器时显示 buyConditions / sellConditions */}
+                    {!hardFilters[index] && (
+                      <div style={{ marginTop: 8 }}>
+                        <Divider plain style={{ margin: '6px 0', fontSize: 12 }}>
+                          {t('text.strategy.votingConditions')}
+                          <span style={{ color: '#999', marginLeft: 8, fontWeight: 'normal' }}>
+                            {t('text.strategy.votingConditionsTip')}
+                          </span>
+                        </Divider>
+                        <div style={{ marginBottom: 10 }}>
+                          <span style={{ fontSize: 12, color: '#52c41a', marginBottom: 4, display: 'block' }}>
+                            ▲ {t('text.strategy.buyConditions')}
+                          </span>
+                          <VotingConditionsList
+                            listName={[field.name, 'buyConditions']}
+                            conditionType="buy"
+                            fieldOptions={getIndicatorValueFields(
+                              indicatorTypes[index] as IndicatorType,
+                              form.getFieldValue(['indicatorConfigs', field.name, 'params']),
+                            )}
+                          />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 12, color: '#ff4d4f', marginBottom: 4, display: 'block' }}>
+                            ▼ {t('text.strategy.sellConditions')}
+                          </span>
+                          <VotingConditionsList
+                            listName={[field.name, 'sellConditions']}
+                            conditionType="sell"
+                            fieldOptions={getIndicatorValueFields(
+                              indicatorTypes[index] as IndicatorType,
+                              form.getFieldValue(['indicatorConfigs', field.name, 'params']),
+                            )}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </Card>
                 ))}
 
@@ -1188,6 +1299,44 @@ export const StrategyConfig = () => {
                             </>
                           )}
                         </Form.List>
+                      </div>
+                    )}
+
+                    {/* 投票条件：非硬性过滤器时显示 buyConditions / sellConditions */}
+                    {!exitHardFilters[index] && (
+                      <div style={{ marginTop: 8 }}>
+                        <Divider plain style={{ margin: '6px 0', fontSize: 12 }}>
+                          {t('text.strategy.votingConditions')}
+                          <span style={{ color: '#999', marginLeft: 8, fontWeight: 'normal' }}>
+                            {t('text.strategy.votingConditionsTip')}
+                          </span>
+                        </Divider>
+                        <div style={{ marginBottom: 10 }}>
+                          <span style={{ fontSize: 12, color: '#52c41a', marginBottom: 4, display: 'block' }}>
+                            ▲ {t('text.strategy.buyConditions')}
+                          </span>
+                          <VotingConditionsList
+                            listName={[field.name, 'buyConditions']}
+                            conditionType="buy"
+                            fieldOptions={getIndicatorValueFields(
+                              exitIndicatorTypes[index] as IndicatorType,
+                              form.getFieldValue(['exitIndicatorConfigs', field.name, 'params']),
+                            )}
+                          />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 12, color: '#ff4d4f', marginBottom: 4, display: 'block' }}>
+                            ▼ {t('text.strategy.sellConditions')}
+                          </span>
+                          <VotingConditionsList
+                            listName={[field.name, 'sellConditions']}
+                            conditionType="sell"
+                            fieldOptions={getIndicatorValueFields(
+                              exitIndicatorTypes[index] as IndicatorType,
+                              form.getFieldValue(['exitIndicatorConfigs', field.name, 'params']),
+                            )}
+                          />
+                        </div>
                       </div>
                     )}
                   </Card>
