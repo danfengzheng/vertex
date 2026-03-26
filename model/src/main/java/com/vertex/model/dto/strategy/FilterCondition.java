@@ -28,7 +28,7 @@ import java.io.Serializable;
  *   <li>MA: ma20 / ma50 / ma200（随 period 变化）</li>
  *   <li>EMA: ema20 / ema50 / ema200</li>
  *   <li>RSI: rsi14（随 period 变化）</li>
- *   <li>MACD: macd / signal / histogram</li>
+ *   <li>MACD: macd / signal / histogram / histogramPrev / histogramDelta（当前-前柱，负值=动能衰减）</li>
  *   <li>BOLL: upper / middle / lower / stdDev</li>
  *   <li>KDJ: k / d / j</li>
  *   <li>ATR: atr / atrPercent</li>
@@ -40,6 +40,7 @@ import java.io.Serializable;
  *   <li>SUPERTREND: trend（1.0=上升，-1.0=下降）/ superTrend / upperBand / lowerBand</li>
  *   <li>VOL_CONFIRM: volRatio / currentVolume / avgVolume</li>
  *   <li>OBV: obv / obvSignal</li>
+ *   <li>DIVERGENCE: bearishDivergence（1.0=顶背离出现，0.0=无）/ bullishDivergence（1.0=底背离出现，0.0=无）</li>
  * </ul>
  */
 @Data
