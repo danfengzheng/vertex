@@ -613,10 +613,16 @@ public class TradeExecutionService {
             netAmount = netAmount.multiply(new BigDecimal("0.995"));
         }
 
+        // 合约杠杆：名义价值 = 保证金 × 杠杆，实际持仓数量按名义价值计算
+        int lev = (strategy.getLeverage() != null && strategy.getLeverage() > 1) ? strategy.getLeverage() : 1;
+        if (lev > 1) {
+            netAmount = netAmount.multiply(BigDecimal.valueOf(lev));
+        }
+
         BigDecimal quantity = netAmount.divide(currentPrice, 8, RoundingMode.DOWN);
 
-        log.info("[PositionSizing] PERCENT mode: capital={}, ratio={}, tradeAmount={}, price={}, qty={}",
-                availableCapital, positionRatio, tradeAmount, currentPrice, quantity);
+        log.info("[PositionSizing] PERCENT mode: capital={}, ratio={}, tradeAmount={}, leverage={}, price={}, qty={}",
+                availableCapital, positionRatio, tradeAmount, lev, currentPrice, quantity);
         return quantity;
     }
 
@@ -631,11 +637,16 @@ public class TradeExecutionService {
                 ? strategy.getInitialCapital() : new BigDecimal("10000");
         BigDecimal totalRealizedPnl = positionManagementService.getTotalRealizedPnl(
                 strategy.getId(), strategy.getAccountId());
+        // getOccupiedCapital 返回名义价值（entryPrice × quantity），合约模式需除以杠杆还原为保证金占用
         BigDecimal occupiedCapital = positionManagementService.getOccupiedCapital(
                 strategy.getId(), strategy.getAccountId());
+        int lev = (strategy.getLeverage() != null && strategy.getLeverage() > 1) ? strategy.getLeverage() : 1;
+        if (lev > 1) {
+            occupiedCapital = occupiedCapital.divide(BigDecimal.valueOf(lev), 8, RoundingMode.HALF_UP);
+        }
         BigDecimal available = initialCapital.add(totalRealizedPnl).subtract(occupiedCapital);
-        log.debug("[PositionSizing] Paper capital: initial={}, pnl={}, occupied={}, available={}",
-                initialCapital, totalRealizedPnl, occupiedCapital, available);
+        log.debug("[PositionSizing] Paper capital: initial={}, pnl={}, occupied(margin)={}, leverage={}, available={}",
+                initialCapital, totalRealizedPnl, occupiedCapital, lev, available);
         return available;
     }
 

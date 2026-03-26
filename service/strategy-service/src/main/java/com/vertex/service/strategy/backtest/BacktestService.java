@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import com.vertex.model.entity.quote.KLineInterval;
+import com.vertex.model.entity.trading.PositionSide;
 import com.vertex.model.entity.trading.StopLossStage;
 import com.vertex.service.strategy.config.StrategyProperties;
 
@@ -181,6 +182,14 @@ public class BacktestService {
         BigDecimal highestPrice    = null; // LONG 极值追踪
         // 出场条件：开仓后经历的K线计数（时间止损用）
         int openBarCount = 0;
+        // 合约杠杆（默认1=现货，合约策略使用实际杠杆）
+        int leverage = (strategy.getLeverage() != null && strategy.getLeverage() > 1) ? strategy.getLeverage() : 1;
+        // 合约模式（leverage > 1 时启用：支持多空双向、SELL 信号开空）
+        boolean isFutures = leverage > 1;
+        // 当前持仓方向（null=无仓位，LONG=多，SHORT=空）
+        PositionSide positionSide = null;
+        // 开仓时实际占用的保证金（合约平仓时返还保证金+盈亏，而非返还名义价值）
+        BigDecimal marginPaid = BigDecimal.ZERO;
 
         List<TradeRecord> trades = new ArrayList<>();
         List<EquityPoint> equityCurve = new ArrayList<>();
@@ -226,12 +235,15 @@ public class BacktestService {
             // 同一根 K 线同时触及止损和止盈时，止损优先（保守原则）
             boolean closedByStopOrTp = false;
             if (inPosition) {
-                boolean stopHit = stopLossPrice != null
-                        && currentKline.getLow() != null
-                        && currentKline.getLow().compareTo(stopLossPrice) <= 0;
-                boolean tpHit = !stopHit && takeProfitPrice != null
-                        && currentKline.getHigh() != null
-                        && currentKline.getHigh().compareTo(takeProfitPrice) >= 0;
+                boolean isShortPos = positionSide == PositionSide.SHORT;
+                // SHORT：止损在上方（high >= SL），止盈在下方（low <= TP）
+                // LONG ：止损在下方（low  <= SL），止盈在上方（high >= TP）
+                boolean stopHit = stopLossPrice != null && (isShortPos
+                        ? currentKline.getHigh() != null && currentKline.getHigh().compareTo(stopLossPrice) >= 0
+                        : currentKline.getLow()  != null && currentKline.getLow().compareTo(stopLossPrice)  <= 0);
+                boolean tpHit = !stopHit && takeProfitPrice != null && (isShortPos
+                        ? currentKline.getLow()  != null && currentKline.getLow().compareTo(takeProfitPrice)  <= 0
+                        : currentKline.getHigh() != null && currentKline.getHigh().compareTo(takeProfitPrice) >= 0);
 
                 if (stopHit || tpHit) {
                     BigDecimal exitPrice = stopHit ? stopLossPrice : takeProfitPrice;
@@ -239,17 +251,19 @@ public class BacktestService {
 
                     BigDecimal exitValue = position.multiply(exitPrice);
                     BigDecimal fee       = exitValue.multiply(config.getFeeRate());
-                    BigDecimal netValue  = exitValue.subtract(fee);
-                    BigDecimal cost      = position.multiply(entryPrice);
-                    BigDecimal profit    = netValue.subtract(cost);
-                    BigDecimal profitPct = cost.compareTo(BigDecimal.ZERO) > 0
-                            ? profit.divide(cost, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+                    // SHORT：价格下跌盈利；LONG：价格上涨盈利
+                    BigDecimal pnl = isShortPos
+                            ? position.multiply(entryPrice.subtract(exitPrice))
+                            : position.multiply(exitPrice.subtract(entryPrice));
+                    BigDecimal profit    = pnl.subtract(fee);
+                    BigDecimal profitPct = marginPaid.compareTo(BigDecimal.ZERO) > 0
+                            ? profit.divide(marginPaid, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
                             : BigDecimal.ZERO;
 
                     trades.add(TradeRecord.builder()
                             .entryTime(entryTime)
                             .exitTime(currentKline.getOpenTime())
-                            .type("LONG")
+                            .type(isShortPos ? "SHORT" : "LONG")
                             .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
                             .exitPrice(exitPrice.setScale(8, RoundingMode.HALF_UP))
                             .quantity(position.setScale(8, RoundingMode.HALF_UP))
@@ -258,9 +272,11 @@ public class BacktestService {
                             .exitReason(exitReason)
                             .build());
 
-                    capital        = capital.add(netValue);
+                    capital        = capital.add(marginPaid).add(profit);
+                    marginPaid     = BigDecimal.ZERO;
                     position       = BigDecimal.ZERO;
                     inPosition     = false;
+                    positionSide   = null;
                     stopLossPrice  = null;
                     takeProfitPrice = null;
                     stopLossStage  = null;
@@ -284,19 +300,21 @@ public class BacktestService {
 
                 // 时间止损：超过最大持仓K线数强制平仓
                 if (strategy.getMaxHoldingBars() != null && openBarCount >= strategy.getMaxHoldingBars()) {
+                    boolean isShortExit = positionSide == PositionSide.SHORT;
                     BigDecimal exitValue = position.multiply(currentPrice);
                     BigDecimal fee = exitValue.multiply(config.getFeeRate());
-                    BigDecimal netValue = exitValue.subtract(fee);
-                    BigDecimal cost = position.multiply(entryPrice);
-                    BigDecimal profit = netValue.subtract(cost);
-                    BigDecimal profitPct = cost.compareTo(BigDecimal.ZERO) > 0
-                            ? profit.divide(cost, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+                    BigDecimal pnl = isShortExit
+                            ? position.multiply(entryPrice.subtract(currentPrice))
+                            : position.multiply(currentPrice.subtract(entryPrice));
+                    BigDecimal profit = pnl.subtract(fee);
+                    BigDecimal profitPct = marginPaid.compareTo(BigDecimal.ZERO) > 0
+                            ? profit.divide(marginPaid, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
                             : BigDecimal.ZERO;
 
                     trades.add(TradeRecord.builder()
                             .entryTime(entryTime)
                             .exitTime(currentKline.getOpenTime())
-                            .type("LONG")
+                            .type(isShortExit ? "SHORT" : "LONG")
                             .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
                             .exitPrice(currentPrice.setScale(8, RoundingMode.HALF_UP))
                             .quantity(position.setScale(8, RoundingMode.HALF_UP))
@@ -305,9 +323,11 @@ public class BacktestService {
                             .exitReason("MAX_BARS")
                             .build());
 
-                    capital         = capital.add(netValue);
+                    capital         = capital.add(marginPaid).add(profit);
+                    marginPaid      = BigDecimal.ZERO;
                     position        = BigDecimal.ZERO;
                     inPosition      = false;
+                    positionSide    = null;
                     stopLossPrice   = null;
                     takeProfitPrice = null;
                     stopLossStage   = null;
@@ -322,22 +342,27 @@ public class BacktestService {
                     if (IndicatorCalculationEngine.hasEnoughData(exitResults)) {
                         Signal exitSignal = signalGenerator.evaluate(strategy, exitConfigs, exitResults,
                                 List.of(currentKline));
-                        if (exitSignal.getSignalType() == SignalType.SELL
-                                && exitSignal.getSignalStrength() != null
-                                && exitSignal.getSignalStrength() >= exitIndicatorMinStrength) {
+                        // 出场指标：多头在 SELL 信号时出场，空头在 BUY 信号时出场
+                        boolean indExitTriggered = exitSignal.getSignalStrength() != null
+                                && exitSignal.getSignalStrength() >= exitIndicatorMinStrength
+                                && ((positionSide == PositionSide.LONG  && exitSignal.getSignalType() == SignalType.SELL)
+                                 || (positionSide == PositionSide.SHORT && exitSignal.getSignalType() == SignalType.BUY));
+                        if (indExitTriggered) {
+                            boolean isShortExit2 = positionSide == PositionSide.SHORT;
                             BigDecimal exitValue = position.multiply(currentPrice);
                             BigDecimal fee = exitValue.multiply(config.getFeeRate());
-                            BigDecimal netValue = exitValue.subtract(fee);
-                            BigDecimal cost = position.multiply(entryPrice);
-                            BigDecimal profit = netValue.subtract(cost);
-                            BigDecimal profitPct = cost.compareTo(BigDecimal.ZERO) > 0
-                                    ? profit.divide(cost, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+                            BigDecimal pnl = isShortExit2
+                                    ? position.multiply(entryPrice.subtract(currentPrice))
+                                    : position.multiply(currentPrice.subtract(entryPrice));
+                            BigDecimal profit = pnl.subtract(fee);
+                            BigDecimal profitPct = marginPaid.compareTo(BigDecimal.ZERO) > 0
+                                    ? profit.divide(marginPaid, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
                                     : BigDecimal.ZERO;
 
                             trades.add(TradeRecord.builder()
                                     .entryTime(entryTime)
                                     .exitTime(currentKline.getOpenTime())
-                                    .type("LONG")
+                                    .type(isShortExit2 ? "SHORT" : "LONG")
                                     .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
                                     .exitPrice(currentPrice.setScale(8, RoundingMode.HALF_UP))
                                     .quantity(position.setScale(8, RoundingMode.HALF_UP))
@@ -346,9 +371,11 @@ public class BacktestService {
                                     .exitReason("INDICATOR_EXIT")
                                     .build());
 
-                            capital         = capital.add(netValue);
+                            capital         = capital.add(marginPaid).add(profit);
+                            marginPaid      = BigDecimal.ZERO;
                             position        = BigDecimal.ZERO;
                             inPosition      = false;
+                            positionSide    = null;
                             stopLossPrice   = null;
                             takeProfitPrice = null;
                             stopLossStage   = null;
@@ -361,9 +388,17 @@ public class BacktestService {
             }
 
             // 当前权益（止损/止盈出场后 inPosition=false，capital 已更新）
-            BigDecimal currentEquity = inPosition
-                    ? capital.add(position.multiply(currentPrice))
-                    : capital;
+            // 合约：权益 = 可用资金 + 保证金 + 未实现盈亏
+            // SHORT 未实现盈亏 = position × (entryPrice - currentPrice)
+            BigDecimal currentEquity;
+            if (inPosition) {
+                BigDecimal unrealizedPnl = positionSide == PositionSide.SHORT
+                        ? position.multiply(entryPrice.subtract(currentPrice))
+                        : position.multiply(currentPrice.subtract(entryPrice));
+                currentEquity = capital.add(marginPaid).add(unrealizedPnl);
+            } else {
+                currentEquity = capital;
+            }
 
             // 每 10 根K线记录一个资金曲线点（防止数据过多）
             if (equityCurve.isEmpty() || (i % 10 == 0)) {
@@ -390,46 +425,116 @@ public class BacktestService {
                 }
             }
 
-            // 根据信号执行交易（止损/止盈出场后本根 K 线不再重新开仓）
-            // minStrength（入场/SELL信号平仓）已在出场条件块中声明，默认 60 与实盘保持一致
-            if (!inPosition && !closedByStopOrTp && signal.getSignalType() == SignalType.BUY
-                    && signal.getSignalStrength() != null && signal.getSignalStrength() >= minStrength) {
-                // 开仓
-                // ── ATR 仓位控制系数 ──────────────────────────────────────────────
-                // 策略配置了 atrStopMultiplier 时，用 ATR14/ATR50 比值动态缩放头寸：
-                //   coefficient = ATR50 / ATR14，当前波动率 > 历史均值时 < 1.0 → 减仓
-                //   coefficient 钳制在 [0.2, 1.0]，避免极端行情下仓位过小
-                // 未配置 atrStopMultiplier 时按 positionRatio 全量开仓
+            // ── 信号处理（现货仅做多；合约支持多空双向）─────────────────────────────────────
+            // minStrength 已在出场条件块中声明，默认 60 与实盘保持一致
+            boolean hasValidSignal = !closedByStopOrTp
+                    && signal.getSignalStrength() != null && signal.getSignalStrength() >= minStrength;
+            // toOpen：信号处理完成后需要新开仓的方向（null=不开）
+            PositionSide toOpen = null;
+
+            if (hasValidSignal) {
+                SignalType sigType = signal.getSignalType();
+
+                // ── BUY 信号：合约先平空 → 再标记开多 ─────────────────────────────
+                if (sigType == SignalType.BUY) {
+                    // 合约：空单反向平仓
+                    if (isFutures && positionSide == PositionSide.SHORT) {
+                        BigDecimal exitVal = position.multiply(currentPrice);
+                        BigDecimal exitFee = exitVal.multiply(config.getFeeRate());
+                        BigDecimal exitPnl = position.multiply(entryPrice.subtract(currentPrice));
+                        BigDecimal exitProfit = exitPnl.subtract(exitFee);
+                        BigDecimal exitPct = marginPaid.compareTo(BigDecimal.ZERO) > 0
+                                ? exitProfit.divide(marginPaid, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+                                : BigDecimal.ZERO;
+                        trades.add(TradeRecord.builder()
+                                .entryTime(entryTime).exitTime(currentKline.getOpenTime())
+                                .type("SHORT")
+                                .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
+                                .exitPrice(currentPrice.setScale(8, RoundingMode.HALF_UP))
+                                .quantity(position.setScale(8, RoundingMode.HALF_UP))
+                                .profit(exitProfit.setScale(2, RoundingMode.HALF_UP))
+                                .profitPercent(exitPct.setScale(2, RoundingMode.HALF_UP))
+                                .exitReason("SIGNAL_REVERSE").build());
+                        capital = capital.add(marginPaid).add(exitProfit);
+                        marginPaid = BigDecimal.ZERO; position = BigDecimal.ZERO;
+                        inPosition = false; positionSide = null;
+                        stopLossPrice = null; takeProfitPrice = null;
+                        stopLossStage = null; highestPrice = null; openBarCount = 0;
+                    }
+                    // 无仓位 → 开多
+                    if (!inPosition) toOpen = PositionSide.LONG;
+                }
+
+                // ── SELL 信号：平多 → 合约再标记开空 ──────────────────────────────
+                else if (sigType == SignalType.SELL) {
+                    // 平多
+                    if (positionSide == PositionSide.LONG) {
+                        BigDecimal exitVal = position.multiply(currentPrice);
+                        BigDecimal exitFee = exitVal.multiply(config.getFeeRate());
+                        BigDecimal exitPnl = position.multiply(currentPrice.subtract(entryPrice));
+                        BigDecimal exitProfit = exitPnl.subtract(exitFee);
+                        BigDecimal exitPct = marginPaid.compareTo(BigDecimal.ZERO) > 0
+                                ? exitProfit.divide(marginPaid, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+                                : BigDecimal.ZERO;
+                        trades.add(TradeRecord.builder()
+                                .entryTime(entryTime).exitTime(currentKline.getOpenTime())
+                                .type("LONG")
+                                .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
+                                .exitPrice(currentPrice.setScale(8, RoundingMode.HALF_UP))
+                                .quantity(position.setScale(8, RoundingMode.HALF_UP))
+                                .profit(exitProfit.setScale(2, RoundingMode.HALF_UP))
+                                .profitPercent(exitPct.setScale(2, RoundingMode.HALF_UP))
+                                .exitReason("SIGNAL").build());
+                        capital = capital.add(marginPaid).add(exitProfit);
+                        marginPaid = BigDecimal.ZERO; position = BigDecimal.ZERO;
+                        inPosition = false; positionSide = null;
+                        stopLossPrice = null; takeProfitPrice = null;
+                        stopLossStage = null; highestPrice = null; openBarCount = 0;
+                    }
+                    // 合约：无仓位 → 开空
+                    if (isFutures && !inPosition) toOpen = PositionSide.SHORT;
+                }
+            }
+
+            // ── 开仓执行（LONG 或 SHORT）──────────────────────────────────────────────
+            // toOpen 由上方信号处理设置，null 表示本根 K 线不需要新开仓
+            if (toOpen != null) {
+                boolean openShort = toOpen == PositionSide.SHORT;
+                // ATR 仓位控制系数（策略配置了 atrStopMultiplier 时生效）
                 BigDecimal baseTradeAmount = capital.multiply(config.getPositionRatio());
                 BigDecimal tradeAmount = baseTradeAmount;
                 boolean hasAtrPositionSizing = strategy.getAtrStopMultiplier() != null
                         && strategy.getAtrStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
                 if (hasAtrPositionSizing) {
-                    List<KLine> atrWindow = getAtrBars(barProvider, effectiveAtrInterval, strategy.getInterval(), maxKlineHistory);
-                    BigDecimal atr14 = computeAtrFromList(atrWindow, 14);
-                    BigDecimal atr50 = computeAtrFromList(atrWindow, 50);
+                    List<KLine> atrWindow0 = getAtrBars(barProvider, effectiveAtrInterval, strategy.getInterval(), maxKlineHistory);
+                    BigDecimal atr14 = computeAtrFromList(atrWindow0, 14);
+                    BigDecimal atr50 = computeAtrFromList(atrWindow0, 50);
                     if (atr14 != null && atr50 != null && atr14.compareTo(BigDecimal.ZERO) > 0) {
-                        // 当前短期 ATR 高于长期均值 → 市场更波动 → 缩小头寸
                         double coeff = atr50.doubleValue() / atr14.doubleValue();
                         coeff = Math.max(0.2, Math.min(1.0, coeff));
                         tradeAmount = baseTradeAmount.multiply(BigDecimal.valueOf(coeff))
                                 .setScale(8, RoundingMode.DOWN);
                     }
                 }
-                BigDecimal fee = tradeAmount.multiply(config.getFeeRate());
-                BigDecimal netAmount = tradeAmount.subtract(fee);
-                position  = netAmount.divide(currentPrice, 8, RoundingMode.DOWN);
-                capital   = capital.subtract(tradeAmount);
+                // 手续费按名义价值计算（杠杆×保证金）
+                BigDecimal openFee = tradeAmount.multiply(BigDecimal.valueOf(leverage)).multiply(config.getFeeRate());
+                BigDecimal netMargin = tradeAmount.subtract(openFee);
+                position   = netMargin.multiply(BigDecimal.valueOf(leverage)).divide(currentPrice, 8, RoundingMode.DOWN);
+                capital    = capital.subtract(tradeAmount);
+                marginPaid = tradeAmount;
                 entryPrice = currentPrice;
                 entryTime  = currentKline.getOpenTime();
                 inPosition = true;
-                openBarCount = 0; // 开仓时重置 K 线计数
+                positionSide = toOpen;
+                openBarCount = 0;
 
-                // ── 计算止损止盈（优先级：移动ATR止损 > 固定ATR > 固定%，与实盘 TradeExecutionService 一致）──
+                // ── 止损止盈计算（LONG：SL 下方 TP 上方；SHORT：SL 上方 TP 下方）──────
+                // dir = 1（多）或 -1（空），统一公式：SL = entry - dir×mult×ATR，TP = entry + dir×mult×ATR
+                BigDecimal dir = openShort ? new BigDecimal("-1") : BigDecimal.ONE;
                 stopLossPrice   = null;
                 takeProfitPrice = null;
                 stopLossStage   = null;
-                highestPrice    = null;
+                highestPrice    = null; // LONG=最高价追踪；SHORT=最低价追踪（语义相反，见移动止损块）
                 boolean hasTrailingStop = strategy.getInitialStopMultiplier() != null
                         && strategy.getInitialStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
                 boolean hasAtrStop = strategy.getAtrStopMultiplier() != null
@@ -440,135 +545,117 @@ public class BacktestService {
                 boolean hasPctTp   = strategy.getTakeProfitPct() != null;
 
                 List<KLine> atrWindow = getAtrBars(barProvider, effectiveAtrInterval, strategy.getInterval(), maxKlineHistory);
-
                 if (hasTrailingStop) {
-                    // 移动ATR止损：开仓时设置 INITIAL 止损，后续每根K线逐步推进状态机
                     BigDecimal atr = computeAtrFromList(atrWindow, 14);
                     if (atr != null && atr.compareTo(BigDecimal.ZERO) > 0) {
+                        // SL = entry - dir × initialMult × ATR
                         stopLossPrice = entryPrice
-                                .subtract(atr.multiply(strategy.getInitialStopMultiplier()))
+                                .subtract(dir.multiply(atr).multiply(strategy.getInitialStopMultiplier()))
                                 .setScale(8, RoundingMode.HALF_UP);
                         stopLossStage = StopLossStage.INITIAL;
-                        highestPrice  = entryPrice;
+                        highestPrice  = entryPrice; // 追踪起点
                     }
-                    // 移动止损模式下止盈仍走固定%止盈逻辑（见下方）
                 } else if (hasAtrStop || hasAtrTp) {
-                    // 固定ATR止损/止盈
                     BigDecimal atr = computeAtrFromList(atrWindow, 14);
                     if (atr != null && atr.compareTo(BigDecimal.ZERO) > 0) {
                         if (hasAtrStop) {
                             stopLossPrice = entryPrice
-                                    .subtract(atr.multiply(strategy.getAtrStopMultiplier()))
+                                    .subtract(dir.multiply(atr).multiply(strategy.getAtrStopMultiplier()))
                                     .setScale(8, RoundingMode.HALF_UP);
                         }
                         if (hasAtrTp) {
                             takeProfitPrice = entryPrice
-                                    .add(atr.multiply(strategy.getAtrTakeProfitMultiplier()))
+                                    .add(dir.multiply(atr).multiply(strategy.getAtrTakeProfitMultiplier()))
                                     .setScale(8, RoundingMode.HALF_UP);
                         }
                     }
                 }
-                // 非ATR路径：固定%止损（移动止损模式下不叠加）
                 if (!hasTrailingStop && !hasAtrStop && hasPctStop) {
                     BigDecimal pct = strategy.getStopLossPct()
                             .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
-                    stopLossPrice = entryPrice.multiply(BigDecimal.ONE.subtract(pct))
+                    // LONG: entry × (1 - pct); SHORT: entry × (1 + pct)
+                    stopLossPrice = entryPrice.multiply(BigDecimal.ONE.subtract(dir.multiply(pct)))
                             .setScale(8, RoundingMode.HALF_UP);
                 }
-                // 固定%止盈（无ATR止盈时生效，移动止损模式下也可叠加）
                 if (!hasAtrTp && hasPctTp) {
                     BigDecimal pct = strategy.getTakeProfitPct()
                             .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
-                    takeProfitPrice = entryPrice.multiply(BigDecimal.ONE.add(pct))
+                    // LONG: entry × (1 + pct); SHORT: entry × (1 - pct)
+                    takeProfitPrice = entryPrice.multiply(BigDecimal.ONE.add(dir.multiply(pct)))
                             .setScale(8, RoundingMode.HALF_UP);
                 }
-
-            } else if (inPosition && signal.getSignalType() == SignalType.SELL
-                    && signal.getSignalStrength() != null && signal.getSignalStrength() >= minStrength) {
-                // 信号平仓
-                BigDecimal exitValue = position.multiply(currentPrice);
-                BigDecimal fee = exitValue.multiply(config.getFeeRate());
-                BigDecimal netValue = exitValue.subtract(fee);
-
-                BigDecimal cost = position.multiply(entryPrice);
-                BigDecimal profit = netValue.subtract(cost);
-                BigDecimal profitPercent = cost.compareTo(BigDecimal.ZERO) > 0
-                        ? profit.divide(cost, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
-                        : BigDecimal.ZERO;
-
-                trades.add(TradeRecord.builder()
-                        .entryTime(entryTime)
-                        .exitTime(currentKline.getOpenTime())
-                        .type("LONG")
-                        .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
-                        .exitPrice(currentPrice.setScale(8, RoundingMode.HALF_UP))
-                        .quantity(position.setScale(8, RoundingMode.HALF_UP))
-                        .profit(profit.setScale(2, RoundingMode.HALF_UP))
-                        .profitPercent(profitPercent.setScale(2, RoundingMode.HALF_UP))
-                        .exitReason("SIGNAL")
-                        .build());
-
-                capital         = capital.add(netValue);
-                position        = BigDecimal.ZERO;
-                inPosition      = false;
-                stopLossPrice   = null;
-                takeProfitPrice = null;
-                stopLossStage   = null;
-                highestPrice    = null;
-                openBarCount    = 0;
             }
+
 
             // ── 移动ATR止损状态机：每根K线收盘后推进（与实盘 TradeExecutionService 一致）────
             // 在信号处理之后执行，新止损价在下一根K线的止损检查中生效
+            // SHORT：阈值和极值方向全部取反（dir=-1），highestPrice 在空单时实为"最低价"
             if (inPosition && stopLossStage != null) {
+                boolean trailShort = positionSide == PositionSide.SHORT;
                 List<KLine> atrWin = getAtrBars(barProvider, effectiveAtrInterval, strategy.getInterval(), maxKlineHistory);
                 BigDecimal atr = computeAtrFromList(atrWin, 14);
                 if (atr != null && atr.compareTo(BigDecimal.ZERO) > 0) {
                     BigDecimal closePrice = currentKline.getClose();
                     switch (stopLossStage) {
                         case INITIAL -> {
-                            // → BREAKEVEN：收盘价 >= entry + breakevenActivationMultiplier × ATR
+                            // LONG：close >= entry + activation × ATR
+                            // SHORT：close <= entry - activation × ATR
                             if (strategy.getBreakevenActivationMultiplier() != null) {
                                 BigDecimal threshold = entryPrice
-                                        .add(atr.multiply(strategy.getBreakevenActivationMultiplier()));
-                                if (closePrice.compareTo(threshold) >= 0) {
+                                        .add(atr.multiply(strategy.getBreakevenActivationMultiplier())
+                                                .multiply(trailShort ? new BigDecimal("-1") : BigDecimal.ONE));
+                                boolean activated = trailShort
+                                        ? closePrice.compareTo(threshold) <= 0
+                                        : closePrice.compareTo(threshold) >= 0;
+                                if (activated) {
                                     stopLossPrice = entryPrice.setScale(8, RoundingMode.HALF_UP);
                                     stopLossStage = StopLossStage.BREAKEVEN;
                                 }
                             }
                         }
                         case BREAKEVEN -> {
-                            // → TRAILING：收盘价 >= entry + trailingActivationMultiplier × ATR
                             if (strategy.getTrailingActivationMultiplier() != null) {
                                 BigDecimal threshold = entryPrice
-                                        .add(atr.multiply(strategy.getTrailingActivationMultiplier()));
-                                if (closePrice.compareTo(threshold) >= 0) {
-                                    highestPrice  = closePrice;
+                                        .add(atr.multiply(strategy.getTrailingActivationMultiplier())
+                                                .multiply(trailShort ? new BigDecimal("-1") : BigDecimal.ONE));
+                                boolean activated = trailShort
+                                        ? closePrice.compareTo(threshold) <= 0
+                                        : closePrice.compareTo(threshold) >= 0;
+                                if (activated) {
+                                    highestPrice  = closePrice; // SHORT 时实为最低价
                                     stopLossStage = StopLossStage.TRAILING;
-                                    // 立即计算初始追踪止损
                                     if (strategy.getTrailingDistanceMultiplier() != null) {
-                                        BigDecimal newStop = highestPrice
-                                                .subtract(atr.multiply(strategy.getTrailingDistanceMultiplier()))
-                                                .setScale(8, RoundingMode.HALF_UP);
-                                        if (stopLossPrice == null || newStop.compareTo(stopLossPrice) > 0) {
-                                            stopLossPrice = newStop;
-                                        }
+                                        // LONG：highest - dist×ATR；SHORT：lowest + dist×ATR
+                                        BigDecimal newStop = trailShort
+                                                ? highestPrice.add(atr.multiply(strategy.getTrailingDistanceMultiplier()))
+                                                        .setScale(8, RoundingMode.HALF_UP)
+                                                : highestPrice.subtract(atr.multiply(strategy.getTrailingDistanceMultiplier()))
+                                                        .setScale(8, RoundingMode.HALF_UP);
+                                        boolean improved = trailShort
+                                                ? (stopLossPrice == null || newStop.compareTo(stopLossPrice) < 0)
+                                                : (stopLossPrice == null || newStop.compareTo(stopLossPrice) > 0);
+                                        if (improved) stopLossPrice = newStop;
                                     }
                                 }
                             }
                         }
                         case TRAILING -> {
-                            // 更新最高价，止损只朝有利方向移动（只升不降）
-                            if (closePrice.compareTo(highestPrice) > 0) {
-                                highestPrice = closePrice;
-                            }
+                            // LONG：极值只升；SHORT：极值只降
+                            boolean newExtreme = trailShort
+                                    ? closePrice.compareTo(highestPrice) < 0
+                                    : closePrice.compareTo(highestPrice) > 0;
+                            if (newExtreme) highestPrice = closePrice;
                             if (strategy.getTrailingDistanceMultiplier() != null) {
-                                BigDecimal newStop = highestPrice
-                                        .subtract(atr.multiply(strategy.getTrailingDistanceMultiplier()))
-                                        .setScale(8, RoundingMode.HALF_UP);
-                                if (stopLossPrice == null || newStop.compareTo(stopLossPrice) > 0) {
-                                    stopLossPrice = newStop;
-                                }
+                                BigDecimal newStop = trailShort
+                                        ? highestPrice.add(atr.multiply(strategy.getTrailingDistanceMultiplier()))
+                                                .setScale(8, RoundingMode.HALF_UP)
+                                        : highestPrice.subtract(atr.multiply(strategy.getTrailingDistanceMultiplier()))
+                                                .setScale(8, RoundingMode.HALF_UP);
+                                // LONG：止损只朝上移；SHORT：止损只朝下移
+                                boolean improved = trailShort
+                                        ? (stopLossPrice == null || newStop.compareTo(stopLossPrice) < 0)
+                                        : (stopLossPrice == null || newStop.compareTo(stopLossPrice) > 0);
+                                if (improved) stopLossPrice = newStop;
                             }
                         }
                     }
@@ -579,20 +666,23 @@ public class BacktestService {
         // 如果回测结束时仍有持仓，按最后价格平仓
         if (inPosition && !klines.isEmpty()) {
             BigDecimal lastPrice = klines.get(klines.size() - 1).getClose();
+            boolean isShortEnd = positionSide == PositionSide.SHORT;
             BigDecimal exitValue = position.multiply(lastPrice);
             BigDecimal fee = exitValue.multiply(config.getFeeRate());
-            capital = capital.add(exitValue.subtract(fee));
-
-            BigDecimal cost = position.multiply(entryPrice);
-            BigDecimal profit = exitValue.subtract(fee).subtract(cost);
-            BigDecimal profitPercent = cost.compareTo(BigDecimal.ZERO) > 0
-                    ? profit.divide(cost, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+            BigDecimal pnl = isShortEnd
+                    ? position.multiply(entryPrice.subtract(lastPrice))
+                    : position.multiply(lastPrice.subtract(entryPrice));
+            BigDecimal profit = pnl.subtract(fee);
+            BigDecimal profitPercent = marginPaid.compareTo(BigDecimal.ZERO) > 0
+                    ? profit.divide(marginPaid, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
                     : BigDecimal.ZERO;
+
+            capital = capital.add(marginPaid).add(profit);
 
             trades.add(TradeRecord.builder()
                     .entryTime(entryTime)
                     .exitTime(klines.get(klines.size() - 1).getOpenTime())
-                    .type("LONG")
+                    .type(isShortEnd ? "SHORT" : "LONG")
                     .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
                     .exitPrice(lastPrice.setScale(8, RoundingMode.HALF_UP))
                     .quantity(position.setScale(8, RoundingMode.HALF_UP))

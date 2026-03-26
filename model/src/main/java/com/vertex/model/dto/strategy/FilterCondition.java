@@ -40,7 +40,10 @@ import java.io.Serializable;
  *   <li>SUPERTREND: trend（1.0=上升，-1.0=下降）/ superTrend / upperBand / lowerBand</li>
  *   <li>VOL_CONFIRM: volRatio / currentVolume / avgVolume</li>
  *   <li>OBV: obv / obvSignal</li>
- *   <li>DIVERGENCE: bearishDivergence（1.0=顶背离出现，0.0=无）/ bullishDivergence（1.0=底背离出现，0.0=无）</li>
+ *   <li>DIVERGENCE:
+ *       bearishDivergence（1.0=已确认顶背离）/ bullishDivergence（1.0=已确认底背离）/
+ *       bearishDivergenceForming（1.0=顶背离形成中，提前预警）/ bullishDivergenceForming（1.0=底背离形成中）/
+ *       bearishPressure（0-100，价格↑RSI↓动能分歧压力分）/ bullishPressure（0-100，价格↓RSI↑）</li>
  * </ul>
  */
 @Data

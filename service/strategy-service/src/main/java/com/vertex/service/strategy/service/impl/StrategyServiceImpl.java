@@ -120,6 +120,9 @@ public class StrategyServiceImpl implements IStrategyService {
         if (dto.getTradeQuantity() != null) strategy.setTradeQuantity(dto.getTradeQuantity());
         if (dto.getPositionRatio() != null) strategy.setPositionRatio(dto.getPositionRatio());
         if (dto.getInitialCapital() != null) strategy.setInitialCapital(dto.getInitialCapital());
+        // 合约配置
+        if (dto.getLeverage() != null) strategy.setLeverage(dto.getLeverage());
+        if (dto.getMarginType() != null) strategy.setMarginType(dto.getMarginType());
         // 以下字段允许清空（前端明确发送 null 时置空数据库中的值）
         strategy.setMinSignalStrength(dto.getMinSignalStrength());
         strategy.setStopLossPct(dto.getStopLossPct());
