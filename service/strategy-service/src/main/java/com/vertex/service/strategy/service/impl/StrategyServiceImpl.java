@@ -9,10 +9,12 @@ import com.vertex.common.core.context.UserContext;
 import com.vertex.common.core.exception.BizException;
 import com.vertex.common.core.GlobalError;
 import com.vertex.common.core.page.PageResult;
+import com.vertex.model.dto.strategy.FilterCondition;
 import com.vertex.model.dto.strategy.StrategyCreateDTO;
 import com.vertex.model.dto.strategy.StrategyIndicatorConfig;
 import com.vertex.model.dto.strategy.StrategyQueryDTO;
 import com.vertex.model.dto.strategy.StrategyUpdateDTO;
+import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.vo.strategy.StrategyVO;
@@ -337,6 +339,60 @@ public class StrategyServiceImpl implements IStrategyService {
         }
         strategy.setEnabled(0);
         strategyMapper.updateById(strategy);
+    }
+
+    @Override
+    public int addDivergenceExitToRunningStrategies() {
+        // 查询所有运行中的策略
+        List<Strategy> running = strategyMapper.selectList(
+                new LambdaQueryWrapper<Strategy>()
+                        .eq(Strategy::getEnabled, 1)
+                        .eq(Strategy::getDeleted, 0));
+
+        if (running.isEmpty()) {
+            log.info("[AddDivergence] 当前没有运行中的策略，跳过");
+            return 0;
+        }
+
+        // 构造默认背离出场配置
+        FilterCondition sellCond = new FilterCondition();
+        sellCond.setField("bearishDivergence");
+        sellCond.setOp("GTE");
+        sellCond.setThreshold(1.0);
+
+        StrategyIndicatorConfig divergenceConfig = new StrategyIndicatorConfig();
+        divergenceConfig.setIndicatorType(IndicatorType.DIVERGENCE);
+        divergenceConfig.setParams(Map.of("lookback", 20, "rsiPeriod", 14, "swingStrength", 2));
+        divergenceConfig.setWeight(100);
+        divergenceConfig.setSellConditions(List.of(sellCond));
+
+        int updated = 0;
+        for (Strategy strategy : running) {
+            // 解析现有出场指标配置
+            List<StrategyIndicatorConfig> exitConfigs = strategy.getExitIndicatorConfigs() != null
+                    ? new ArrayList<>(JSON.parseArray(strategy.getExitIndicatorConfigs(), StrategyIndicatorConfig.class))
+                    : new ArrayList<>();
+
+            // 检查是否已存在 DIVERGENCE 类型
+            boolean alreadyExists = exitConfigs.stream()
+                    .anyMatch(c -> IndicatorType.DIVERGENCE.equals(c.getIndicatorType()));
+            if (alreadyExists) {
+                log.info("[AddDivergence] 策略 '{}' (id={}) 已存在背离配置，跳过",
+                        strategy.getName(), strategy.getId());
+                continue;
+            }
+
+            // 追加背离配置并保存
+            exitConfigs.add(divergenceConfig);
+            strategy.setExitIndicatorConfigs(JSON.toJSONString(exitConfigs));
+            strategyMapper.updateById(strategy);
+            updated++;
+            log.info("[AddDivergence] 策略 '{}' (id={}) 已追加背离出场配置",
+                    strategy.getName(), strategy.getId());
+        }
+
+        log.info("[AddDivergence] 完成：共更新 {}/{} 个运行中策略", updated, running.size());
+        return updated;
     }
 
     private StrategyVO toVO(Strategy strategy) {

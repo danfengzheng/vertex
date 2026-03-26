@@ -85,4 +85,13 @@ public class StrategyController {
     public Result<Long> copy(@PathVariable Long id) {
         return Result.success(strategyService.copy(id));
     }
+
+    @RequiresPermission("strategy:config")
+    @PostMapping("/batch/add-divergence-exit")
+    @Operation(summary = "批量追加背离出场配置",
+               description = "为所有当前运行中（enabled=1）的策略自动追加背离（DIVERGENCE）出场指标配置。" +
+                             "若策略已包含 DIVERGENCE 出场配置则跳过，不重复添加。返回实际更新的策略数量。")
+    public Result<Integer> addDivergenceExitToRunningStrategies() {
+        return Result.success(strategyService.addDivergenceExitToRunningStrategies());
+    }
 }

@@ -57,6 +57,13 @@ public class TradeExecutionService {
     private final KLineStore klineStore;
 
     /**
+     * 合约账户参数缓存：key = accountId_symbol_marketType，避免重复调用 Binance 设置杠杆/保证金模式。
+     * 服务重启后缓存清空，第一次开仓时仍会同步一次，确保状态正确。
+     */
+    private final ConcurrentHashMap<String, Integer> leverageCache = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, MarginType> marginTypeCache = new ConcurrentHashMap<>();
+
+    /**
      * 同一策略的委托必须串行执行，防止并发导致重复开仓。
      */
     private final ConcurrentHashMap<Long, ReentrantLock> strategyLocks = new ConcurrentHashMap<>();
@@ -330,7 +337,9 @@ public class TradeExecutionService {
     }
 
     /**
-     * 开仓前设置合约账户参数（杠杆 + 保证金模式）
+     * 开仓前设置合约账户参数（杠杆 + 保证金模式）。
+     * 利用内存缓存避免对同一账户 + 标的重复调用 Binance API，
+     * 仅在首次或配置变更时实际发起请求。
      */
     private void setupFuturesAccount(Order order, Strategy strategy) {
         String[] credentials = accountService.getDecryptedCredentials(order.getAccountId());
@@ -338,14 +347,28 @@ public class TradeExecutionService {
         int leverage = strategy.getLeverage() != null ? strategy.getLeverage() : 1;
         MarginType marginType = strategy.getMarginType() != null
                 ? strategy.getMarginType() : MarginType.ISOLATED;
+
+        String cacheKey = order.getAccountId() + "_" + order.getSymbol() + "_" + marketType.name();
+
         try {
-            binanceFuturesClient.setLeverage(
-                    credentials[0], credentials[1], order.getSymbol(), leverage, marketType);
-            binanceFuturesClient.setMarginType(
-                    credentials[0], credentials[1], order.getSymbol(), marginType, marketType);
-            log.info("[Futures] Account setup: symbol={}, leverage={}, marginType={}",
-                    order.getSymbol(), leverage, marginType);
+            // 杠杆：缓存命中且值未变则跳过
+            if (!Integer.valueOf(leverage).equals(leverageCache.get(cacheKey))) {
+                binanceFuturesClient.setLeverage(
+                        credentials[0], credentials[1], order.getSymbol(), leverage, marketType);
+                leverageCache.put(cacheKey, leverage);
+                log.info("[Futures] Leverage set: symbol={}, leverage={}", order.getSymbol(), leverage);
+            }
+            // 保证金模式：缓存命中且值未变则跳过
+            if (!marginType.equals(marginTypeCache.get(cacheKey))) {
+                binanceFuturesClient.setMarginType(
+                        credentials[0], credentials[1], order.getSymbol(), marginType, marketType);
+                marginTypeCache.put(cacheKey, marginType);
+                log.info("[Futures] MarginType set: symbol={}, marginType={}", order.getSymbol(), marginType);
+            }
         } catch (Exception e) {
+            // 清除缓存，下次开仓时重试
+            leverageCache.remove(cacheKey);
+            marginTypeCache.remove(cacheKey);
             log.warn("[Futures] Account setup warning for {}: {}", order.getSymbol(), e.getMessage());
         }
     }

@@ -24,7 +24,8 @@ public enum IndicatorType {
     ADX("ADX", "平均趋向指数"),
     SUPERTREND("SUPERTREND", "超级趋势指标"),
     VOL_CONFIRM("VOL_CONFIRM", "成交量确认"),
-    OBV("OBV", "能量潮指标");
+    OBV("OBV", "能量潮指标"),
+    DIVERGENCE("DIVERGENCE", "背离指标");
 
     private final String code;
     private final String description;

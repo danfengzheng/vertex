@@ -82,13 +82,18 @@ public class MacdIndicator implements TechnicalIndicator {
             suggestion = SignalSuggestion.NEUTRAL;
         }
 
+        // histogramDelta > 0：柱线在扩张（动能增强）
+        // histogramDelta < 0：柱线在收缩（动能衰竭），可用于出场条件：histogramDelta LT 0
+        double histogramDelta = currentHistogram - prevHistogram;
+
         return IndicatorResult.builder()
                 .type(IndicatorType.MACD)
                 .values(Map.of(
                         "macd", round(macdValue),
                         "signal", round(signalValue),
                         "histogram", round(currentHistogram),
-                        "histogramPrev", round(prevHistogram)
+                        "histogramPrev", round(prevHistogram),
+                        "histogramDelta", round(histogramDelta)
                 ))
                 .suggestion(suggestion)
                 .build();

@@ -32,4 +32,14 @@ public interface IStrategyService {
      * @return 新策略 ID
      */
     Long copy(Long id);
+
+    /**
+     * 为所有当前运行中（enabled=1）的策略自动追加背离出场指标配置。
+     * <p>
+     * 若某策略的 exitIndicatorConfigs 中已存在 DIVERGENCE 类型的指标，则跳过不重复添加。
+     * </p>
+     *
+     * @return 实际更新的策略数量
+     */
+    int addDivergenceExitToRunningStrategies();
 }
