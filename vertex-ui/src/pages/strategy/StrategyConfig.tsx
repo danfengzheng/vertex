@@ -70,7 +70,7 @@ function getIndicatorValueFields(
     case 'MA':         return [`ma${p(20)}`];
     case 'EMA':        return [`ema${p(20)}`];
     case 'WR':         return [`wr${p(14)}`];
-    case 'MACD':       return ['macd', 'signal', 'histogram', 'histogramPrev'];
+    case 'MACD':       return ['macd', 'signal', 'histogram', 'histogramPrev', 'histogramDelta'];
     case 'BOLL':       return ['upper', 'middle', 'lower', 'stdDev'];
     case 'KDJ':        return ['k', 'd', 'j', 'kPrev', 'dPrev'];
     case 'ATR':        return ['atr', 'atrPercent'];
@@ -81,6 +81,7 @@ function getIndicatorValueFields(
     case 'SUPERTREND': return ['trend', 'prevTrend', 'superTrend', 'upperBand', 'lowerBand'];
     case 'VOL_CONFIRM':return ['volRatio', 'currentVolume', 'avgVolume'];
     case 'OBV':        return ['obv', 'obvSignal'];
+    case 'DIVERGENCE': return ['bearishDivergence', 'bullishDivergence'];
     default:           return [];
   }
 }
@@ -378,6 +379,37 @@ const IndicatorParamsFields = ({
           </Form.Item>
           <span style={{ color: '#888', fontSize: 12 }}>
             {t('text.strategy.obvInfo')}
+          </span>
+        </Space>
+      );
+    case 'DIVERGENCE':
+      return (
+        <Space wrap>
+          <Form.Item
+            name={[...prefix, 'params', 'lookback']}
+            label={t('text.strategy.lookback')}
+            initialValue={20}
+            tooltip={t('text.strategy.lookbackTip')}
+          >
+            <InputNumber min={10} max={100} style={{ width: 80 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'rsiPeriod']}
+            label={t('text.strategy.rsiPeriod')}
+            initialValue={14}
+          >
+            <InputNumber min={2} max={50} style={{ width: 80 }} />
+          </Form.Item>
+          <Form.Item
+            name={[...prefix, 'params', 'swingStrength']}
+            label={t('text.strategy.swingStrength')}
+            initialValue={2}
+            tooltip={t('text.strategy.swingStrengthTip')}
+          >
+            <InputNumber min={1} max={5} style={{ width: 80 }} />
+          </Form.Item>
+          <span style={{ color: '#888', fontSize: 12 }}>
+            {t('text.strategy.divergenceInfo')}
           </span>
         </Space>
       );

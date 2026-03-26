@@ -257,6 +257,11 @@
       "signalPeriod": "Signal Period",
       "volConfirmInfo": "Detects volume surges to confirm trend signals",
       "obvInfo": "Tracks cumulative volume flow direction",
+      "lookback": "Lookback",
+      "lookbackTip": "Number of recent candles to search for swing highs/lows",
+      "swingStrength": "Swing Strength",
+      "swingStrengthTip": "Number of candles required on each side to confirm a swing point — higher = more stable but lagging",
+      "divergenceInfo": "Detects bearish divergence (price ↑ RSI ↓) and bullish divergence (price ↓ RSI ↑)",
       "indicatorInterval": "Indicator Interval",
       "useDefault": "Use strategy default"
     },
