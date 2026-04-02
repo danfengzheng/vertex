@@ -397,6 +397,14 @@ public class PositionManagementService {
     }
 
     /**
+     * 重新从数据库确认持仓仍处于 OPEN 状态（防止并发双重平仓）
+     */
+    public boolean isStillOpen(Long positionId) {
+        Position fresh = positionMapper.selectById(positionId);
+        return fresh != null && fresh.getStatus() == PositionStatus.OPEN;
+    }
+
+    /**
      * 更新持仓当前价格和未实现盈亏
      */
     public void updateCurrentPrice(Position position) {

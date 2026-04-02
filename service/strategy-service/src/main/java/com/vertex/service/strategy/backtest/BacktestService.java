@@ -194,6 +194,11 @@ public class BacktestService {
         List<TradeRecord> trades = new ArrayList<>();
         List<EquityPoint> equityCurve = new ArrayList<>();
 
+        // 峰值回撤止损：追踪持仓期间最优价格（LONG=最高价，SHORT=最低价），null 表示未开仓
+        BigDecimal peakPrice = null;
+        boolean hasTrailingDrop = strategy.getTrailingDropPct() != null
+                && strategy.getTrailingDropPct().compareTo(BigDecimal.ZERO) > 0;
+
         BigDecimal peakEquity = capital;
         BigDecimal maxDrawdown = BigDecimal.ZERO;
         int maxDrawdownDuration = 0;
@@ -230,6 +235,20 @@ public class BacktestService {
 
             // 当前 bar 收盘价（用于权益计算与信号平仓）
             BigDecimal currentPrice = currentKline.getClose();
+
+            // ── 峰值更新：每根 K 线先更新最优价格，再检查回撤止损 ────────────────────────
+            if (inPosition && hasTrailingDrop) {
+                boolean isShortPeak = positionSide == PositionSide.SHORT;
+                if (!isShortPeak) {
+                    // LONG：用当根 K 线最高价更新峰值
+                    BigDecimal high = currentKline.getHigh() != null ? currentKline.getHigh() : currentPrice;
+                    if (peakPrice == null || high.compareTo(peakPrice) > 0) peakPrice = high;
+                } else {
+                    // SHORT：用当根 K 线最低价更新峰值（最低价越低越优）
+                    BigDecimal low = currentKline.getLow() != null ? currentKline.getLow() : currentPrice;
+                    if (peakPrice == null || low.compareTo(peakPrice) < 0) peakPrice = low;
+                }
+            }
 
             // ── 止损止盈检查（优先于信号，使用 K 线 High/Low 判断触发）───────────────────
             // 同一根 K 线同时触及止损和止盈时，止损优先（保守原则）
@@ -281,10 +300,63 @@ public class BacktestService {
                     takeProfitPrice = null;
                     stopLossStage  = null;
                     highestPrice   = null;
+                    peakPrice      = null;
                     openBarCount   = 0;
                     closedByStopOrTp = true;
                     // 止损/止盈当根 K 线权益以出场价结算
                     currentPrice = exitPrice;
+                }
+
+                // ── 峰值回撤止损检查（SL/TP 未触发时才执行）────────────────────
+                if (!closedByStopOrTp && hasTrailingDrop && peakPrice != null) {
+                    BigDecimal dropPct = strategy.getTrailingDropPct()
+                            .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+                    boolean dropTriggered;
+                    BigDecimal dropExitPrice;
+                    if (isShortPos) {
+                        // SHORT：从最低价反弹 dropPct% 触发
+                        dropExitPrice = peakPrice.multiply(BigDecimal.ONE.add(dropPct))
+                                .setScale(8, RoundingMode.HALF_UP);
+                        dropTriggered = currentKline.getHigh() != null
+                                && currentKline.getHigh().compareTo(dropExitPrice) >= 0;
+                    } else {
+                        // LONG：从最高价下跌 dropPct% 触发
+                        dropExitPrice = peakPrice.multiply(BigDecimal.ONE.subtract(dropPct))
+                                .setScale(8, RoundingMode.HALF_UP);
+                        dropTriggered = currentKline.getLow() != null
+                                && currentKline.getLow().compareTo(dropExitPrice) <= 0;
+                    }
+                    if (dropTriggered) {
+                        BigDecimal exitVal = position.multiply(dropExitPrice);
+                        BigDecimal fee     = exitVal.multiply(config.getFeeRate());
+                        BigDecimal pnl     = isShortPos
+                                ? position.multiply(entryPrice.subtract(dropExitPrice))
+                                : position.multiply(dropExitPrice.subtract(entryPrice));
+                        BigDecimal profit  = pnl.subtract(fee);
+                        BigDecimal profitPct = marginPaid.compareTo(BigDecimal.ZERO) > 0
+                                ? profit.divide(marginPaid, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+                                : BigDecimal.ZERO;
+                        trades.add(TradeRecord.builder()
+                                .entryTime(entryTime).exitTime(currentKline.getOpenTime())
+                                .type(isShortPos ? "SHORT" : "LONG")
+                                .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
+                                .exitPrice(dropExitPrice)
+                                .quantity(position.setScale(8, RoundingMode.HALF_UP))
+                                .profit(profit.setScale(2, RoundingMode.HALF_UP))
+                                .profitPercent(profitPct.setScale(2, RoundingMode.HALF_UP))
+                                .exitReason("TRAILING_DROP").build());
+                        capital      = capital.add(marginPaid).add(profit);
+                        marginPaid   = BigDecimal.ZERO;
+                        position     = BigDecimal.ZERO;
+                        inPosition   = false;
+                        positionSide = null;
+                        stopLossPrice = null; takeProfitPrice = null;
+                        stopLossStage = null; highestPrice = null;
+                        peakPrice    = null;
+                        openBarCount = 0;
+                        closedByStopOrTp = true;
+                        currentPrice = dropExitPrice;
+                    }
                 }
             }
 
@@ -332,6 +404,7 @@ public class BacktestService {
                     takeProfitPrice = null;
                     stopLossStage   = null;
                     highestPrice    = null;
+                    peakPrice       = null;
                     openBarCount    = 0;
                     closedByStopOrTp = true; // 当根K线已平仓，阻止信号重新开仓
                 }
@@ -380,6 +453,7 @@ public class BacktestService {
                             takeProfitPrice = null;
                             stopLossStage   = null;
                             highestPrice    = null;
+                            peakPrice       = null;
                             openBarCount    = 0;
                             closedByStopOrTp = true; // 当根K线已平仓，阻止信号重新开仓
                         }
@@ -459,7 +533,7 @@ public class BacktestService {
                         marginPaid = BigDecimal.ZERO; position = BigDecimal.ZERO;
                         inPosition = false; positionSide = null;
                         stopLossPrice = null; takeProfitPrice = null;
-                        stopLossStage = null; highestPrice = null; openBarCount = 0;
+                        stopLossStage = null; highestPrice = null; peakPrice = null; openBarCount = 0;
                     }
                     // 无仓位 → 开多
                     if (!inPosition) toOpen = PositionSide.LONG;
@@ -489,7 +563,7 @@ public class BacktestService {
                         marginPaid = BigDecimal.ZERO; position = BigDecimal.ZERO;
                         inPosition = false; positionSide = null;
                         stopLossPrice = null; takeProfitPrice = null;
-                        stopLossStage = null; highestPrice = null; openBarCount = 0;
+                        stopLossStage = null; highestPrice = null; peakPrice = null; openBarCount = 0;
                     }
                     // 合约：无仓位 → 开空
                     if (isFutures && !inPosition) toOpen = PositionSide.SHORT;

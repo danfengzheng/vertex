@@ -51,9 +51,15 @@ public class AdxIndicator implements TechnicalIndicator {
         double[] closes = new double[n];
 
         for (int i = 0; i < n; i++) {
-            highs[i] = klines.get(i).getHigh().doubleValue();
-            lows[i] = klines.get(i).getLow().doubleValue();
-            closes[i] = klines.get(i).getClose().doubleValue();
+            KLine k = klines.get(i);
+            if (k.getHigh() == null || k.getLow() == null || k.getClose() == null) {
+                throw new IllegalArgumentException(
+                        "KLine at index " + i + " has null OHLC field (openTime=" + k.getOpenTime()
+                        + ", high=" + k.getHigh() + ", low=" + k.getLow() + ", close=" + k.getClose() + ")");
+            }
+            highs[i] = k.getHigh().doubleValue();
+            lows[i] = k.getLow().doubleValue();
+            closes[i] = k.getClose().doubleValue();
         }
 
         // Step 1: 计算 +DM, -DM, TR 序列

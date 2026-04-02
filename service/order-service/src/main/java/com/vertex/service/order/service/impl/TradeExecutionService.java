@@ -201,6 +201,12 @@ public class TradeExecutionService {
      * LIVE FUTURES SHORT：BUY reduceOnly 单
      */
     public void executeClose(Position position) {
+        // 重新从数据库确认持仓仍为 OPEN，防止 StopLossTakeProfitTask 与 processExitConditions
+        // 并发触发时对同一持仓执行双重平仓
+        if (!positionManagementService.isStillOpen(position.getId())) {
+            log.info("[Close] Position {} is no longer OPEN, skipping duplicate close", position.getId());
+            return;
+        }
         MarketType marketType = position.getMarketType();
         boolean isFutures = marketType != null && marketType.isFutures();
 
@@ -819,6 +825,14 @@ public class TradeExecutionService {
             position.setTakeProfit(takeProfit);
         }
 
+        // ── 峰值回撤止损：初始化极值追踪（与移动ATR止损独立并存）────────
+        // 若 ATR 移动止损已初始化 highestPrice/lowestPrice 则不重复覆盖，否则在此初始化
+        if (strategy.getTrailingDropPct() != null
+                && strategy.getTrailingDropPct().compareTo(BigDecimal.ZERO) > 0) {
+            if (position.getHighestPrice() == null) position.setHighestPrice(entryPrice);
+            if (position.getLowestPrice()  == null) position.setLowestPrice(entryPrice);
+        }
+
         positionManagementService.updateStopLossTakeProfit(position);
     }
 
@@ -949,11 +963,17 @@ public class TradeExecutionService {
                 : currentPrice.compareTo(entryPrice.add(threshold)) >= 0;
 
         if (activated) {
-            // 初始化极值追踪字段并立即计算追踪止损
+            // 初始化极值追踪字段并立即计算追踪止损。
+            // 若峰值回撤止损已记录了更优的历史极值（LONG:更高；SHORT:更低），保留其值，
+            // 避免覆盖后使峰值回撤止损阈值变得宽松。
             if (isShort) {
-                position.setLowestPrice(currentPrice);
+                if (position.getLowestPrice() == null || currentPrice.compareTo(position.getLowestPrice()) < 0) {
+                    position.setLowestPrice(currentPrice);
+                }
             } else {
-                position.setHighestPrice(currentPrice);
+                if (position.getHighestPrice() == null || currentPrice.compareTo(position.getHighestPrice()) > 0) {
+                    position.setHighestPrice(currentPrice);
+                }
             }
             position.setStopLossStage(StopLossStage.TRAILING);
             updateTrailingStopPrice(position, strategy, currentPrice, atrValue, isShort);

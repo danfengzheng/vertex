@@ -67,12 +67,15 @@ public class KLinePartialBarBuilder {
 
         BigDecimal open = periodBars.get(0).getOpen();
         BigDecimal close = periodBars.get(periodBars.size() - 1).getClose();
+        // close 可能在 WS 重连时为 null（bar 未完整推送）；fallback 优先用 close，其次用 open，
+        // 确保 high/low 不为 null，避免下游指标（ADX 等）NPE。
+        BigDecimal hlFallback = close != null ? close : open;
         BigDecimal high = periodBars.stream()
                 .map(KLine::getHigh).filter(v -> v != null)
-                .max(Comparator.naturalOrder()).orElse(close);
+                .max(Comparator.naturalOrder()).orElse(hlFallback);
         BigDecimal low = periodBars.stream()
                 .map(KLine::getLow).filter(v -> v != null)
-                .min(Comparator.naturalOrder()).orElse(close);
+                .min(Comparator.naturalOrder()).orElse(hlFallback);
         BigDecimal volume = periodBars.stream()
                 .map(KLine::getVolume).filter(v -> v != null)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

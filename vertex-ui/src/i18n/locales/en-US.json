@@ -365,6 +365,8 @@
       "atrIntervalTip": "K-line interval used for ATR stop-loss calculation. Leave blank to use the strategy's primary interval. When the primary bar is 1m but all indicators use 15m+, set this to match the indicator timeframe (e.g. 15m)",
       "maxHoldingBars": "Max Holding Bars",
       "maxHoldingBarsTip": "Force-close the position after holding for N bars (time-based stop). Leave blank for no limit",
+      "trailingDropPct": "Peak Drawdown Stop",
+      "trailingDropPctTip": "Exit when price drops more than this % from the peak (long: highest price; short: lowest price). Works independently alongside ATR trailing stop — whichever triggers first closes the position. E.g. 5 means exit on a 5% pullback from peak",
       "unlimited": "Unlimited",
       "feeRate": "Fee Rate",
       "feeRateTip": "e.g. 0.001 = 0.1%, aligned with backtest parameters",

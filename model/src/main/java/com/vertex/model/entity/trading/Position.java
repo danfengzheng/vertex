@@ -92,21 +92,25 @@ public class Position extends BaseEntity {
     /** 开仓后经历的K线根数（时间止损用，每根K线+1，null/0=未统计） */
     private Integer openBarCount;
 
-    // ─── 移动止损追踪字段（仅策略启用移动ATR止损时使用） ────────────
+    // ─── 移动止损 / 峰值回撤止损追踪字段 ────────────────────────────
 
     /** 当前止损阶段：INITIAL / BREAKEVEN / TRAILING */
     @TableField("`stop_loss_stage`")
     private StopLossStage stopLossStage;
 
     /**
-     * LONG 持仓追踪最高价（用于 TRAILING 阶段计算追踪止损）。
-     * SHORT 持仓此字段不使用。
+     * LONG 持仓追踪最高价。
+     * 用途1：移动ATR止损 TRAILING 阶段，追踪最高价以上移止损价。
+     * 用途2：峰值回撤止损（trailingDropPct），从最高价回撤超过阈值时平仓。
+     * SHORT 持仓使用 lowestPrice，此字段对空头无实际意义（开仓时会初始化为入场价）。
      */
     private BigDecimal highestPrice;
 
     /**
-     * SHORT 持仓追踪最低价（用于 TRAILING 阶段计算追踪止损）。
-     * LONG 持仓此字段不使用。
+     * SHORT 持仓追踪最低价。
+     * 用途1：移动ATR止损 TRAILING 阶段，追踪最低价以下移止损价。
+     * 用途2：峰值回撤止损（trailingDropPct），从最低价反弹超过阈值时平仓。
+     * LONG 持仓使用 highestPrice，此字段对多头无实际意义（开仓时会初始化为入场价）。
      */
     private BigDecimal lowestPrice;
 }

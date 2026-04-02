@@ -1,8 +1,10 @@
 package com.vertex.service.order.task;
 
+import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.entity.trading.Position;
 import com.vertex.model.entity.trading.PositionSide;
 import com.vertex.model.entity.trading.PositionStatus;
+import com.vertex.service.order.mapper.StrategyRefMapper;
 import com.vertex.service.order.service.impl.PaperTradingService;
 import com.vertex.service.order.service.impl.PositionManagementService;
 import com.vertex.service.order.service.impl.TradeExecutionService;
@@ -33,6 +35,7 @@ public class StopLossTakeProfitTask {
     private final PositionManagementService positionManagementService;
     private final PaperTradingService paperTradingService;
     private final TradeExecutionService tradeExecutionService;
+    private final StrategyRefMapper strategyRefMapper;
 
     @Scheduled(fixedDelayString = "${vertex.trading.sl-tp-check-interval:10000}")
     public void checkStopLossTakeProfit() {
@@ -70,6 +73,58 @@ public class StopLossTakeProfitTask {
 
                 boolean triggered = false;
                 boolean isShort = position.getSide() == PositionSide.SHORT;
+
+                // ── 峰值回撤止损：更新最优价格并检查触发 ─────────────────────
+                // 每次价格刷新时：多头追踪最高价，空头追踪最低价；
+                // 从峰值回撤超过 trailingDropPct% 时触发平仓。
+                if (!triggered && position.getStrategyId() != null) {
+                    Strategy strategy = strategyRefMapper.selectById(position.getStrategyId());
+                    if (strategy != null && strategy.getTrailingDropPct() != null
+                            && strategy.getTrailingDropPct().compareTo(BigDecimal.ZERO) > 0) {
+                        BigDecimal dropPct = strategy.getTrailingDropPct()
+                                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+                        boolean peakUpdated = false;
+                        if (!isShort) {
+                            // LONG：追踪最高价
+                            BigDecimal peak = position.getHighestPrice() != null
+                                    ? position.getHighestPrice() : position.getEntryPrice();
+                            if (currentPrice.compareTo(peak) > 0) {
+                                position.setHighestPrice(currentPrice);
+                                peak = currentPrice;
+                                peakUpdated = true;
+                            }
+                            BigDecimal dropTrigger = peak.multiply(BigDecimal.ONE.subtract(dropPct));
+                            if (currentPrice.compareTo(dropTrigger) <= 0) {
+                                log.info("[Peak Drop SL] LONG triggered: {} {} peak={} dropPct={}% currentPrice={}",
+                                        position.getExchange(), position.getSymbol(),
+                                        peak, strategy.getTrailingDropPct(), currentPrice);
+                                tradeExecutionService.executeClose(position);
+                                triggered = true;
+                            }
+                        } else {
+                            // SHORT：追踪最低价
+                            BigDecimal trough = position.getLowestPrice() != null
+                                    ? position.getLowestPrice() : position.getEntryPrice();
+                            if (currentPrice.compareTo(trough) < 0) {
+                                position.setLowestPrice(currentPrice);
+                                trough = currentPrice;
+                                peakUpdated = true;
+                            }
+                            BigDecimal dropTrigger = trough.multiply(BigDecimal.ONE.add(dropPct));
+                            if (currentPrice.compareTo(dropTrigger) >= 0) {
+                                log.info("[Peak Drop SL] SHORT triggered: {} {} trough={} dropPct={}% currentPrice={}",
+                                        position.getExchange(), position.getSymbol(),
+                                        trough, strategy.getTrailingDropPct(), currentPrice);
+                                tradeExecutionService.executeClose(position);
+                                triggered = true;
+                            }
+                        }
+                        // 峰值更新但未触发止损：持久化新峰值
+                        if (!triggered && peakUpdated) {
+                            positionManagementService.updateCurrentPrice(position);
+                        }
+                    }
+                }
 
                 // 止损检查（区分方向）
                 // LONG：价格下跌触达止损（currentPrice <= stopLoss）

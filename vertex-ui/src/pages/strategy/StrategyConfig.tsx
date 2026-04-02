@@ -639,6 +639,7 @@ export const StrategyConfig = () => {
         trailingActivationMultiplier: record.trailingActivationMultiplier,
         trailingDistanceMultiplier: record.trailingDistanceMultiplier,
         atrInterval: record.atrInterval ?? undefined,
+        trailingDropPct: record.trailingDropPct,
       });
     }, 0);
   };
@@ -699,7 +700,7 @@ export const StrategyConfig = () => {
           'feeRate', 'atrStopMultiplier', 'atrTakeProfitMultiplier',
           'initialStopMultiplier', 'breakevenActivationMultiplier',
           'trailingActivationMultiplier', 'trailingDistanceMultiplier',
-          'atrInterval', 'maxHoldingBars',
+          'atrInterval', 'maxHoldingBars', 'trailingDropPct',
         ] as const;
         const payload: Record<string, unknown> = { id: editingId, ...values };
         CLEARABLE_FIELDS.forEach((key) => {
@@ -1542,6 +1543,14 @@ export const StrategyConfig = () => {
                   tooltip={t('text.trading.maxHoldingBarsTip')}
                 >
                   <InputNumber min={1} step={1} style={{ width: 140 }} placeholder={t('text.trading.unlimited')} />
+                </Form.Item>
+
+                <Form.Item
+                  name="trailingDropPct"
+                  label={t('text.trading.trailingDropPct')}
+                  tooltip={t('text.trading.trailingDropPctTip')}
+                >
+                  <InputNumber min={0.1} max={100} step={0.1} style={{ width: 140 }} addonAfter="%" placeholder="5.0" />
                 </Form.Item>
               </Space>
 

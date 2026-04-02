@@ -48,6 +48,26 @@ public class KLineFlushOnNextHandler {
         if (previous != null && !previous.getOpenTime().equals(kline.getOpenTime())) {
             boolean wasAlreadyClosed = Boolean.TRUE.equals(previous.getClosed());
             previous.setClosed(true);
+            // 加密货币 close[n] == open[n+1]，若 previous bar 因 WS 重连等原因未收到收盘数据
+            // （close/high/low 为 null），用下一根的 open 补全，确保存入 KLineStore 的收盘 bar 字段完整。
+            if (previous.getClose() == null && kline.getOpen() != null) {
+                previous.setClose(kline.getOpen());
+                log.warn("[KLineFlushOnNext] close was null for {} {} {} openTime={}, filled with next open={}",
+                        previous.getExchange(), previous.getSymbol(),
+                        previous.getInterval().getCode(), previous.getOpenTime(), kline.getOpen());
+            }
+            if (previous.getHigh() == null && previous.getClose() != null) {
+                // high 缺失时取 open/close 中的较大值，保持 OHLC 逻辑一致
+                previous.setHigh(previous.getOpen() != null
+                        ? previous.getOpen().max(previous.getClose())
+                        : previous.getClose());
+            }
+            if (previous.getLow() == null && previous.getClose() != null) {
+                // low 缺失时取 open/close 中的较小值
+                previous.setLow(previous.getOpen() != null
+                        ? previous.getOpen().min(previous.getClose())
+                        : previous.getClose());
+            }
             klineStore.save(previous);
             if (!wasAlreadyClosed) {
                 notifier.notifyKLine(previous);

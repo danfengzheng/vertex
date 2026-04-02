@@ -138,6 +138,8 @@ export interface StrategyVO {
   trailingDistanceMultiplier?: number;
   /** ATR止损专用K线周期（留空则使用策略默认周期） */
   atrInterval?: KLineInterval;
+  /** 峰值回撤止损百分比（如 5.0 = 5%），从峰值回撤超过此值时止损 */
+  trailingDropPct?: number;
   createTime: string;
   updateTime: string;
 }
@@ -193,6 +195,8 @@ export interface StrategyCreateDTO {
   trailingActivationMultiplier?: number;
   trailingDistanceMultiplier?: number;
   atrInterval?: KLineInterval;
+  /** 峰值回撤止损百分比（如 5.0 = 5%） */
+  trailingDropPct?: number;
 }
 
 /** 策略更新参数 */
@@ -230,6 +234,8 @@ export interface StrategyUpdateDTO {
   trailingActivationMultiplier?: number;
   trailingDistanceMultiplier?: number;
   atrInterval?: KLineInterval;
+  /** 峰值回撤止损百分比（如 5.0 = 5%） */
+  trailingDropPct?: number;
   minSignalStrength?: number;
 }
 

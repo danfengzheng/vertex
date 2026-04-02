@@ -146,6 +146,15 @@ public class Strategy extends BaseEntity {
     private BigDecimal trailingDistanceMultiplier;
 
     /**
+     * 峰值回撤止损百分比（如 5.0 = 5%）。
+     * 开仓后持续追踪最优价格（多：最高价；空：最低价），
+     * 当价格从峰值回撤超过此百分比时触发止损，不依赖 ATR。
+     * 与移动ATR止损独立并存，先触发者出场。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal trailingDropPct;
+
+    /**
      * ATR止损专用K线周期（可选）。
      * 未设置时默认使用 strategy.interval。
      * 当主周期为 1m 但指标全用高周期时，可在此单独指定 ATR 计算周期（如 15m）。
