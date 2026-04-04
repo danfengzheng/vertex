@@ -25,6 +25,7 @@ import {
   PieChartOutlined,
   NodeExpandOutlined,
   BellOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -196,6 +197,11 @@ export const MainLayout = () => {
           key: '/trading/pnl',
           icon: <PieChartOutlined />,
           label: t('text.trading.pnlAnalysisTitle'),
+        },
+        {
+          key: '/trading/symbols',
+          icon: <DatabaseOutlined />,
+          label: t('text.trading.symbolTitle'),
         },
       ],
     },

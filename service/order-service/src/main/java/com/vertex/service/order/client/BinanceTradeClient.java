@@ -5,6 +5,8 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.vertex.common.core.GlobalError;
 import com.vertex.common.core.exception.BizException;
+import com.vertex.model.entity.trading.TrdExchangeSymbol;
+import com.vertex.service.order.cache.ExchangeSymbolCache;
 import com.vertex.service.order.config.TradingProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,6 +41,8 @@ public class BinanceTradeClient {
 
     private final OkHttpClient httpClient;
     private final TradingProperties properties;
+    private final ExchangeSymbolCache exchangeSymbolCache;
+
     @EventListener(ApplicationReadyEvent.class)
     public void loadStep() {
         List<String> symbols = new ArrayList<>();
@@ -271,6 +275,16 @@ public class BinanceTradeClient {
     private BigDecimal alignToTickSize(String binanceSymbol, BigDecimal price) {
         BigDecimal tickSize = tickSizeCache.get(binanceSymbol);
         if (tickSize == null) {
+            // 独立查询 ExchangeSymbolCache，不依赖 getStepSize 的副作用
+            // （getStepSize 会顺带填充 tickSizeCache，但若 alignToTickSize 单独调用则无该副作用）
+            TrdExchangeSymbol esym = exchangeSymbolCache.getExchangeSymbol("binance", "SPOT", binanceSymbol);
+            if (esym != null && esym.getTickSize() != null && esym.getTickSize().compareTo(BigDecimal.ZERO) > 0) {
+                tickSize = esym.getTickSize();
+                tickSizeCache.put(binanceSymbol, tickSize);
+            }
+        }
+        if (tickSize == null) {
+            // 仍未命中（ExchangeSymbolCache 也无数据）：回退到 exchangeInfo API 调用
             fetchAndCacheFilters(binanceSymbol);
             tickSize = tickSizeCache.get(binanceSymbol);
         }
@@ -288,6 +302,18 @@ public class BinanceTradeClient {
     public BigDecimal getStepSize(String binanceSymbol) {
         BigDecimal cached = stepSizeCache.get(binanceSymbol);
         if (cached != null) return cached;
+        // 优先从 ExchangeSymbolCache（DB 同步数据）获取，避免下单路径上的阻塞 HTTP 调用
+        TrdExchangeSymbol esym = exchangeSymbolCache.getExchangeSymbol("binance", "SPOT", binanceSymbol);
+        if (esym != null && esym.getLotSize() != null && esym.getLotSize().compareTo(BigDecimal.ZERO) > 0) {
+            stepSizeCache.put(binanceSymbol, esym.getLotSize());
+            // tickSize 一并填充，减少后续 alignToTickSize 再走一次 API
+            if (esym.getTickSize() != null && esym.getTickSize().compareTo(BigDecimal.ZERO) > 0) {
+                tickSizeCache.put(binanceSymbol, esym.getTickSize());
+            }
+            log.debug("[Trade] stepSize/tickSize loaded from ExchangeSymbolCache for {}", binanceSymbol);
+            return esym.getLotSize();
+        }
+        // 兜底：ExchangeSymbolCache 未命中（首次部署 / 表为空）时，回退到 exchangeInfo API 调用
         fetchAndCacheFilters(binanceSymbol);
         return stepSizeCache.get(binanceSymbol);
     }

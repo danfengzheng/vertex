@@ -7,6 +7,8 @@ import com.vertex.common.core.GlobalError;
 import com.vertex.common.core.exception.BizException;
 import com.vertex.model.entity.trading.MarginType;
 import com.vertex.model.entity.trading.MarketType;
+import com.vertex.model.entity.trading.TrdExchangeSymbol;
+import com.vertex.service.order.cache.ExchangeSymbolCache;
 import com.vertex.service.order.config.TradingProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +37,7 @@ public class BinanceFuturesClient {
 
     private final OkHttpClient httpClient;
     private final TradingProperties properties;
+    private final ExchangeSymbolCache exchangeSymbolCache;
 
     /** USDM 合约 Base URL */
     private static final String USDM_BASE = "https://fapi.binance.com";
@@ -304,7 +307,18 @@ public class BinanceFuturesClient {
                                            String base, MarketType marketType) {
         BigDecimal cached = stepSizeCache.get(cacheKey);
         if (cached != null) return cached;
-        // 一次 exchangeInfo 同时填充 stepSize 和 tickSize 两个缓存，减少网络请求
+        // 优先从 ExchangeSymbolCache（DB 同步数据）获取，避免下单路径上的阻塞 HTTP 调用
+        TrdExchangeSymbol esym = exchangeSymbolCache.getExchangeSymbol("binance", marketType.name(), binanceSymbol);
+        if (esym != null && esym.getLotSize() != null && esym.getLotSize().compareTo(BigDecimal.ZERO) > 0) {
+            stepSizeCache.put(cacheKey, esym.getLotSize());
+            // tickSize 一并填充，减少后续 alignToTickSize 再走一次 API
+            if (esym.getTickSize() != null && esym.getTickSize().compareTo(BigDecimal.ZERO) > 0) {
+                tickSizeCache.put(cacheKey, esym.getTickSize());
+            }
+            log.debug("[Futures] stepSize/tickSize loaded from ExchangeSymbolCache for {}", cacheKey);
+            return esym.getLotSize();
+        }
+        // 兜底：ExchangeSymbolCache 未命中（首次部署 / 表为空）时，回退到 exchangeInfo API 调用
         fetchAndCacheFilters(binanceSymbol, base, marketType);
         return stepSizeCache.get(cacheKey);
     }
@@ -377,7 +391,16 @@ public class BinanceFuturesClient {
                                         String base, MarketType marketType, BigDecimal price) {
         BigDecimal tickSize = tickSizeCache.get(cacheKey);
         if (tickSize == null) {
-            // 一次 exchangeInfo 同时填充 stepSize 和 tickSize（getOrFetchStepSize 可能已触发）
+            // 独立查询 ExchangeSymbolCache，不依赖 getOrFetchStepSize 的副作用
+            // （getOrFetchStepSize 会顺带填充 tickSizeCache，但若 alignToTickSize 单独调用则无该副作用）
+            TrdExchangeSymbol esym = exchangeSymbolCache.getExchangeSymbol("binance", marketType.name(), binanceSymbol);
+            if (esym != null && esym.getTickSize() != null && esym.getTickSize().compareTo(BigDecimal.ZERO) > 0) {
+                tickSize = esym.getTickSize();
+                tickSizeCache.put(cacheKey, tickSize);
+            }
+        }
+        if (tickSize == null) {
+            // 仍未命中（ExchangeSymbolCache 也无数据）：回退到 exchangeInfo API 调用
             fetchAndCacheFilters(binanceSymbol, base, marketType);
             tickSize = tickSizeCache.get(cacheKey);
         }

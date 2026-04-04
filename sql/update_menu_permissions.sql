@@ -15,6 +15,7 @@ UPDATE sys_menu SET permission = 'trade:account'    WHERE id = 41;
 UPDATE sys_menu SET permission = 'trade:order'      WHERE id = 42;
 UPDATE sys_menu SET permission = 'trade:position'   WHERE id = 43;
 UPDATE sys_menu SET permission = 'trade:pnl'        WHERE id = 44;
+UPDATE sys_menu SET permission = 'trade:symbol'     WHERE id = 45;
 
 UPDATE sys_menu SET permission = 'chain:token'      WHERE id = 51;
 UPDATE sys_menu SET permission = 'chain:alert'      WHERE id = 52;

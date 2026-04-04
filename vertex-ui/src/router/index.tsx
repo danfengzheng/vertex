@@ -15,6 +15,7 @@ import { ExchangeAccountManagement } from '../pages/trading/ExchangeAccountManag
 import { OrderHistory } from '../pages/trading/OrderHistory';
 import { PositionMonitor } from '../pages/trading/PositionMonitor';
 import { PnlAnalysis } from '../pages/trading/PnlAnalysis';
+import { SymbolManagement } from '../pages/trading/SymbolManagement';
 import { TokenList } from '../pages/chain/TokenList';
 import { AlertConfig } from '../pages/chain/AlertConfig';
 import { SourceConfig } from '../pages/chain/SourceConfig';
@@ -72,6 +73,9 @@ export const AppRouter = () => {
         } />
         <Route path="trading/pnl" element={
           <PermissionGuard path="/trading/pnl"><PnlAnalysis /></PermissionGuard>
+        } />
+        <Route path="trading/symbols" element={
+          <PermissionGuard path="/trading/symbols"><SymbolManagement /></PermissionGuard>
         } />
 
         {/* 链上分析 */}

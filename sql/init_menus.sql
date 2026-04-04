@@ -30,6 +30,7 @@ VALUES
 (42, 4, '订单记录', 'text.trading.orderTitle',      '/trading/orders',    'OrderManagement',    'OrderedListOutlined', 1, 2, 1, 0, NOW(), NOW()),
 (43, 4, '持仓管理', 'text.trading.positionTitle',   '/trading/positions', 'PositionManagement', 'DashboardOutlined',   1, 3, 1, 0, NOW(), NOW()),
 (44, 4, '盈亏分析', 'text.trading.pnlAnalysisTitle','/trading/pnl',       'PnlAnalysis',        'PieChartOutlined',    1, 4, 1, 0, NOW(), NOW()),
+(45, 4, '币对管理', 'text.trading.symbolTitle',    '/trading/symbols',   'SymbolManagement',   'DatabaseOutlined',    1, 5, 1, 0, NOW(), NOW()),
 
 -- ── 链上分析子菜单 ──────────────────────────────────────────────────────
 (51, 5, '代币列表', 'text.chain.tokenListTitle', '/chain/tokens', 'TokenManagement',  'FundOutlined', 1, 1, 1, 0, NOW(), NOW()),

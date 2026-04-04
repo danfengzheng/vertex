@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  Table, Button, Space, message, Tag, Select, Input, DatePicker, Modal, Descriptions,
+  Table, Button, Space, message, Tag, Select, DatePicker, Modal, Descriptions,
   Progress, Badge, Tooltip, Dropdown, Card, Row, Col, Statistic, Empty,
 } from 'antd';
 import type { Dayjs } from 'dayjs';
@@ -29,6 +29,7 @@ import {
   BacktestResultVO,
 } from '../../api/strategy';
 import { KLINE_INTERVAL_LABELS, KLineInterval } from '../../api/quote';
+import { symbolApi, ExchangeSymbolVO } from '../../api/symbol';
 import { useNotification } from '../../hooks/useNotification';
 
 const INTERVAL_OPTIONS = Object.entries(KLINE_INTERVAL_LABELS).map(([value, label]) => ({
@@ -243,6 +244,8 @@ export const SignalMonitor = () => {
   // 筛选
   const [exchange, setExchange] = useState<string | undefined>();
   const [symbol, setSymbol] = useState<string | undefined>();
+  const [symbolOptions, setSymbolOptions] = useState<{ label: string; value: string }[]>([]);
+  const [symbolsLoading, setSymbolsLoading] = useState(false);
   const [interval, setInterval] = useState<KLineInterval | undefined>();
   const [signalType, setSignalType] = useState<SignalType | undefined>();
   const [timeRange, setTimeRange] = useState<[Dayjs, Dayjs] | null>(null);
@@ -291,6 +294,25 @@ export const SignalMonitor = () => {
       }
     } catch {
       // silent
+    }
+  };
+
+  const fetchSymbolsByExchange = async (exch: string) => {
+    if (!exch) { setSymbolOptions([]); return; }
+    setSymbolsLoading(true);
+    try {
+      const res = await symbolApi.list(exch);
+      if (res.data) {
+        const seen = new Set<string>();
+        const opts = (res.data as ExchangeSymbolVO[])
+          .filter((s) => !seen.has(s.symbol) && seen.add(s.symbol))
+          .map((s) => ({ label: s.symbol, value: s.symbol }));
+        setSymbolOptions(opts);
+      }
+    } catch {
+      // error handled by interceptor
+    } finally {
+      setSymbolsLoading(false);
     }
   };
 
@@ -499,18 +521,29 @@ export const SignalMonitor = () => {
           placeholder={t('placeholder.strategy.exchange')}
           style={{ width: 140 }}
           value={exchange}
-          onChange={setExchange}
+          onChange={(val: string | undefined) => {
+            setExchange(val);
+            setSymbol(undefined);
+            if (val) fetchSymbolsByExchange(val);
+            else setSymbolOptions([]);
+          }}
         >
           <Select.Option value="binance">Binance</Select.Option>
           <Select.Option value="okx">OKX</Select.Option>
         </Select>
 
-        <Input
+        <Select
           allowClear
+          showSearch
           placeholder={t('placeholder.strategy.symbol')}
-          style={{ width: 160 }}
+          style={{ width: 180 }}
           value={symbol}
-          onChange={(e) => setSymbol(e.target.value || undefined)}
+          loading={symbolsLoading}
+          options={symbolOptions}
+          onChange={(val: string | undefined) => setSymbol(val)}
+          filterOption={(input, option) =>
+            (option?.value as string ?? '').toLowerCase().includes(input.toLowerCase())
+          }
         />
 
         <Select

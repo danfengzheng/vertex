@@ -307,6 +307,18 @@
       "orderTitle": "订单历史",
       "positionTitle": "持仓监控",
       "pnlAnalysisTitle": "盈亏分析",
+      "symbolTitle": "币对管理",
+      "symbolMgmt": {
+        "symbol": "平台标识",
+        "baseAsset": "标的资产",
+        "quoteAsset": "计价资产",
+        "marketType": "市场类型",
+        "exchangeSymbol": "交易所标识",
+        "lotSize": "数量步长",
+        "tickSize": "价格步长",
+        "allMarkets": "全部市场",
+        "sync": "立即同步"
+      },
       "totalPnl": "总盈亏",
       "paperPnl": "虚拟盈亏",
       "livePnl": "实盘盈亏",
@@ -471,7 +483,7 @@
       "name": "请输入策略名称",
       "description": "请输入策略描述",
       "exchange": "请选择交易所",
-      "symbol": "请输入交易对",
+      "symbol": "请选择交易对",
       "interval": "请选择K线周期",
       "filterField": "指标计算值字段，如 volRatio"
     }
@@ -517,6 +529,7 @@
       "updateSuccess": "更新成功",
       "deleteConfirm": "确定要删除该账户吗？",
       "deleteSuccess": "删除成功",
+      "symbolSyncSuccess": "同步完成，共处理 {{count}} 条记录",
       "confirmSuccess": "订单已确认执行",
       "rejectSuccess": "订单已拒绝",
       "cancelSuccess": "订单已取消",

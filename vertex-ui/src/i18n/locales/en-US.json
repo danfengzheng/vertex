@@ -307,6 +307,18 @@
       "orderTitle": "Order History",
       "positionTitle": "Position Monitor",
       "pnlAnalysisTitle": "P&L Analysis",
+      "symbolTitle": "Symbol Management",
+      "symbolMgmt": {
+        "symbol": "Symbol",
+        "baseAsset": "Base Asset",
+        "quoteAsset": "Quote Asset",
+        "marketType": "Market Type",
+        "exchangeSymbol": "Exchange Symbol",
+        "lotSize": "Lot Size",
+        "tickSize": "Tick Size",
+        "allMarkets": "All Markets",
+        "sync": "Sync Now"
+      },
       "totalPnl": "Total P&L",
       "paperPnl": "Paper P&L",
       "livePnl": "Live P&L",
@@ -472,7 +484,7 @@
       "name": "Enter strategy name",
       "description": "Enter description",
       "exchange": "Select exchange",
-      "symbol": "Enter symbol",
+      "symbol": "Select symbol",
       "interval": "Select interval",
       "filterField": "Indicator field, e.g. volRatio"
     }
@@ -518,6 +530,7 @@
       "updateSuccess": "Updated",
       "deleteConfirm": "Delete this account?",
       "deleteSuccess": "Deleted",
+      "symbolSyncSuccess": "Sync done, {{count}} records processed",
       "confirmSuccess": "Order confirmed",
       "rejectSuccess": "Order rejected",
       "cancelSuccess": "Order cancelled",

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Table, Button, Form, Select, Input, Space, message, Tag } from 'antd';
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -8,6 +8,7 @@ import {
   KLineQueryDTO,
   KLINE_INTERVAL_LABELS,
 } from '../../api/quote';
+import { symbolApi, ExchangeSymbolVO } from '../../api/symbol';
 import { formatTimestamp } from '../../utils/date';
 
 const INTERVAL_OPTIONS = Object.entries(KLINE_INTERVAL_LABELS).map(([value, label]) => ({
@@ -25,6 +26,27 @@ export const KLineQuery = () => {
   const [klines, setKlines] = useState<KLineVO[]>([]);
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
+  const [symbolOptions, setSymbolOptions] = useState<{ label: string; value: string }[]>([]);
+  const [symbolsLoading, setSymbolsLoading] = useState(false);
+
+  const fetchSymbolsByExchange = useCallback(async (exchange: string) => {
+    if (!exchange) { setSymbolOptions([]); return; }
+    setSymbolsLoading(true);
+    try {
+      const res = await symbolApi.list(exchange);
+      if (res.data) {
+        const seen = new Set<string>();
+        const opts = (res.data as ExchangeSymbolVO[])
+          .filter((s) => !seen.has(s.symbol) && seen.add(s.symbol))
+          .map((s) => ({ label: s.symbol, value: s.symbol }));
+        setSymbolOptions(opts);
+      }
+    } catch {
+      // error handled by interceptor
+    } finally {
+      setSymbolsLoading(false);
+    }
+  }, []);
 
   const handleQuery = async () => {
     try {
@@ -53,6 +75,7 @@ export const KLineQuery = () => {
   const handleReset = () => {
     form.resetFields();
     setKlines([]);
+    setSymbolOptions([]);
   };
 
   const columns = [
@@ -135,13 +158,27 @@ export const KLineQuery = () => {
             placeholder={t('placeholder.quote.exchange')}
             options={EXCHANGE_OPTIONS}
             style={{ width: 140 }}
+            onChange={(val: string) => {
+              form.setFieldValue('symbol', undefined);
+              fetchSymbolsByExchange(val);
+            }}
           />
         </Form.Item>
         <Form.Item
           name="symbol"
           rules={[{ required: true, message: t('placeholder.quote.symbol') }]}
         >
-          <Input placeholder={t('placeholder.quote.symbol')} style={{ width: 160 }} />
+          <Select
+            showSearch
+            placeholder={t('placeholder.quote.symbol')}
+            style={{ width: 180 }}
+            loading={symbolsLoading}
+            options={symbolOptions}
+            filterOption={(input, option) =>
+              (option?.value as string ?? '').toLowerCase().includes(input.toLowerCase())
+            }
+            notFoundContent={symbolOptions.length === 0 ? t('placeholder.quote.exchange') : undefined}
+          />
         </Form.Item>
         <Form.Item
           name="interval"

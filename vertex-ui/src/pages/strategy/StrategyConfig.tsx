@@ -22,6 +22,7 @@ import {
 } from '../../api/strategy';
 import { KLINE_INTERVAL_LABELS, KLineInterval } from '../../api/quote';
 import { exchangeAccountApi, ExchangeAccountVO, MarketType } from '../../api/trading';
+import { symbolApi, ExchangeSymbolVO } from '../../api/symbol';
 import { BacktestPanel } from './BacktestPanel';
 
 const INTERVAL_OPTIONS = Object.entries(KLINE_INTERVAL_LABELS).map(([value, label]) => ({
@@ -523,6 +524,34 @@ export const StrategyConfig = () => {
   const [backtestVisible, setBacktestVisible] = useState(false);
   const [backtestStrategy, setBacktestStrategy] = useState<StrategyVO | null>(null);
 
+  // 币对下拉
+  const [symbolOptions, setSymbolOptions] = useState<{ label: string; value: string }[]>([]);
+  const [symbolsLoading, setSymbolsLoading] = useState(false);
+
+  const fetchSymbolsByExchange = async (exchange: string) => {
+    if (!exchange) {
+      setSymbolOptions([]);
+      return;
+    }
+    setSymbolsLoading(true);
+    try {
+      const res = await symbolApi.list(exchange);
+      if (res.data) {
+        // 按 canonical symbol 去重，保留各市场类型中第一个出现的
+        const seen = new Set<string>();
+        const opts = (res.data as ExchangeSymbolVO[])
+          .filter((s) => !seen.has(s.symbol) && seen.add(s.symbol))
+          .map((s) => ({ label: s.symbol, value: s.symbol }));
+        setSymbolOptions(opts);
+      }
+    } catch {
+      // silent — 下拉加载失败不影响手动输入
+      setSymbolOptions([]);
+    } finally {
+      setSymbolsLoading(false);
+    }
+  };
+
   const loadAccounts = async () => {
     try {
       const res = await exchangeAccountApi.list();
@@ -568,12 +597,16 @@ export const StrategyConfig = () => {
     setExitHardFilters([]);
     setAutoTradeEnabled(false);
     setPositionSizingMode('FIXED');
+    // 预加载默认交易所（binance）的币对
+    fetchSymbolsByExchange('binance');
     setModalVisible(true);
   };
 
   const handleEdit = (record: StrategyVO) => {
     setEditingId(record.id);
     setEditingRecord(record);
+    // 预加载该策略对应交易所的币对选项
+    fetchSymbolsByExchange(record.exchange);
     // 先更新所有 UI 状态，让条件渲染（filterConditions Form.List）在正确的 hardFilters 下挂载
     setIndicatorTypes(record.indicatorConfigs.map((c) => c.indicatorType));
     setHardFilters(record.indicatorConfigs.map((c) => !!c.hardFilter));
@@ -876,7 +909,14 @@ export const StrategyConfig = () => {
               label={t('text.strategy.exchange')}
               rules={[{ required: true, message: t('placeholder.strategy.exchange') }]}
             >
-              <Select placeholder={t('placeholder.strategy.exchange')} style={{ width: 200 }}>
+              <Select
+                placeholder={t('placeholder.strategy.exchange')}
+                style={{ width: 200 }}
+                onChange={(val: string) => {
+                  form.setFieldValue('symbol', undefined);
+                  fetchSymbolsByExchange(val);
+                }}
+              >
                 <Select.Option value="binance">Binance</Select.Option>
                 <Select.Option value="okx">OKX</Select.Option>
               </Select>
@@ -887,7 +927,16 @@ export const StrategyConfig = () => {
               label={t('text.strategy.symbol')}
               rules={[{ required: true, message: t('placeholder.strategy.symbol') }]}
             >
-              <Input placeholder={t('placeholder.strategy.symbol')} style={{ width: 200 }} />
+              <Select
+                showSearch
+                placeholder={t('placeholder.strategy.symbol')}
+                style={{ width: 200 }}
+                loading={symbolsLoading}
+                options={symbolOptions}
+                filterOption={(input, option) =>
+                  (option?.value as string ?? '').toLowerCase().includes(input.toLowerCase())
+                }
+              />
             </Form.Item>
 
             <Form.Item

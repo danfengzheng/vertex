@@ -151,6 +151,11 @@ public class StrategyServiceImpl implements IStrategyService {
         if (strategy == null) {
             throw new BizException(GlobalError.STRATEGY_NOT_FOUND);
         }
+        // 软删除前先重命名，释放 uk_name(name, deleted) 中的名称占用。
+        // 若不重命名：create → delete → create(同名) → delete(同名) 时，
+        // 两条记录的 (name, deleted=1) 组合相同，第二次 deleteById 会触发唯一键冲突。
+        strategy.setName(strategy.getName() + "_del_" + id);
+        strategyMapper.updateById(strategy);
         strategyMapper.deleteById(id);
     }
 
