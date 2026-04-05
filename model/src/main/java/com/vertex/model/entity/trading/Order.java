@@ -75,4 +75,12 @@ public class Order extends BaseEntity {
     /** 是否仅减仓（合约平仓专用，不持久化到数据库）*/
     @TableField(exist = false)
     private boolean reduceOnly;
+
+    /** 杠杆倍数（合约开仓专用，运行时从策略读取，不持久化）*/
+    @TableField(exist = false)
+    private Integer leverage;
+
+    /** 保证金模式（合约开仓专用，运行时从策略读取，不持久化）*/
+    @TableField(exist = false)
+    private MarginType marginType;
 }

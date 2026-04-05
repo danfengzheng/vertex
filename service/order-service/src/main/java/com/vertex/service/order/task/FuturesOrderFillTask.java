@@ -2,6 +2,7 @@ package com.vertex.service.order.task;
 
 import com.alibaba.fastjson2.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.entity.trading.ExecutionMode;
 import com.vertex.model.entity.trading.MarketType;
 import com.vertex.model.entity.trading.Order;
@@ -10,6 +11,7 @@ import com.vertex.model.entity.trading.OrderStatus;
 import com.vertex.model.entity.trading.PositionSide;
 import com.vertex.service.order.client.BinanceFuturesClient;
 import com.vertex.service.order.mapper.OrderMapper;
+import com.vertex.service.order.mapper.StrategyRefMapper;
 import com.vertex.service.order.service.impl.ExchangeAccountServiceImpl;
 import com.vertex.service.order.service.impl.PositionManagementService;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +48,7 @@ public class FuturesOrderFillTask {
     private final BinanceFuturesClient binanceFuturesClient;
     private final PositionManagementService positionManagementService;
     private final ExchangeAccountServiceImpl accountService;
+    private final StrategyRefMapper strategyRefMapper;
 
     /**
      * 手动同步指定订单的 Binance 成交状态，并补录持仓。
@@ -162,6 +165,15 @@ public class FuturesOrderFillTask {
                     order.getExchange(), order.getSymbol(), PositionSide.SHORT) != null;
         }
         order.setReduceOnly(reduceOnly);
+
+        // 开仓时从策略读取杠杆和保证金模式，写入持仓
+        if (!reduceOnly && order.getStrategyId() != null) {
+            Strategy strategy = strategyRefMapper.selectById(order.getStrategyId());
+            if (strategy != null) {
+                order.setLeverage(strategy.getLeverage());
+                order.setMarginType(strategy.getMarginType());
+            }
+        }
 
         // 更新订单记录
         orderMapper.updateById(order);

@@ -324,6 +324,12 @@ public class TradeExecutionService {
                     order.setFilledQuantity(positionQuantity);
                 }
 
+                // 合约开仓时将策略的杠杆和保证金模式写入 order，供 buildNewPosition 使用
+                if (mt != null && mt.isFutures() && !order.isReduceOnly() && strategy != null) {
+                    order.setLeverage(strategy.getLeverage());
+                    order.setMarginType(strategy.getMarginType());
+                }
+
                 positionManagementService.updatePosition(order);
 
                 // 设置止盈止损（开仓订单 + 策略有配置；含现货BUY和合约SHORT开仓）

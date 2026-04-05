@@ -477,6 +477,8 @@ public class PositionManagementService {
         position.setStatus(PositionStatus.OPEN);
         position.setTradeMode(order.getTradeMode());
         position.setMarketType(order.getMarketType());
+        position.setLeverage(order.getLeverage());
+        position.setMarginType(order.getMarginType());
         return position;
     }
 
