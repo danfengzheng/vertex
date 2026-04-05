@@ -462,6 +462,9 @@ public class TradeExecutionService {
      * 合约实盘执行（USDM / COINM）
      */
     private void executeLiveFutures(Order order, String apiKey, String apiSecret, MarketType marketType) {
+        log.info("[Futures] Placing order: symbol={}, side={}, type={}, qty={}, price={}, reduceOnly={}, market={}",
+                order.getSymbol(), order.getSide(), order.getOrderType(),
+                order.getQuantity(), order.getPrice(), order.isReduceOnly(), marketType);
         JSONObject result = binanceFuturesClient.placeOrder(
                 apiKey, apiSecret,
                 order.getSymbol(),
@@ -617,7 +620,7 @@ public class TradeExecutionService {
         BigDecimal netAmount = tradeAmount.multiply(BigDecimal.ONE.subtract(feeRate));
 
         if (strategy.getExecutionMode() == ExecutionMode.LIVE) {
-            netAmount = netAmount.multiply(new BigDecimal("0.995"));
+            netAmount = netAmount.multiply(new BigDecimal("0.95"));
         }
 
         // 合约杠杆：名义价值 = 保证金 × 杠杆，实际持仓数量按名义价值计算

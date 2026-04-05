@@ -386,8 +386,9 @@ public class BinanceTradeClient {
             String bodyStr = responseBody != null ? responseBody.string() : "";
 
             if (!response.isSuccessful()) {
+                String binanceMsg = extractBinanceMsg(bodyStr);
                 log.error("[Binance Trade] {} failed, code: {}, body: {}", operation, response.code(), bodyStr);
-                throw new BizException(GlobalError.TRADE_API_ERROR);
+                throw new BizException(GlobalError.TRADE_API_ERROR, binanceMsg);
             }
 
             return JSON.parseObject(bodyStr);
@@ -396,6 +397,18 @@ public class BinanceTradeClient {
         } catch (Exception e) {
             log.error("[Binance Trade] {} error: {}", operation, e.getMessage(), e);
             throw new BizException(GlobalError.TRADE_API_ERROR);
+        }
+    }
+
+    /** 从 Binance 错误响应体中提取 msg 字段，格式：{"code":-1111,"msg":"..."} */
+    private String extractBinanceMsg(String body) {
+        try {
+            JSONObject obj = JSON.parseObject(body);
+            String msg = obj.getString("msg");
+            int code = obj.getIntValue("code");
+            return code != 0 ? "[" + code + "] " + msg : msg;
+        } catch (Exception ignored) {
+            return body;
         }
     }
 

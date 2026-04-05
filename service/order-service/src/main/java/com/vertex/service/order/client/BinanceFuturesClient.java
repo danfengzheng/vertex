@@ -48,6 +48,8 @@ public class BinanceFuturesClient {
     private final ConcurrentHashMap<String, BigDecimal> stepSizeCache = new ConcurrentHashMap<>();
     /** 交易对 tickSize 缓存（"USDM:BTCUSDT" → tickSize，用于 LIMIT 价格对齐） */
     private final ConcurrentHashMap<String, BigDecimal> tickSizeCache = new ConcurrentHashMap<>();
+    /** 账户持仓模式缓存（"apiKey:USDM" → true=hedge/false=one-way） */
+    private final ConcurrentHashMap<String, Boolean> hedgeModeCache = new ConcurrentHashMap<>();
 
     // ─── 公开方法 ──────────────────────────────────────────
 
@@ -98,7 +100,19 @@ public class BinanceFuturesClient {
             params.append("&timeInForce=GTC");
             params.append("&price=").append(alignedPrice.stripTrailingZeros().toPlainString());
         }
-        if (reduceOnly) {
+        if (isHedgeMode(apiKey, apiSecret, marketType)) {
+            // 对冲模式（Hedge/Dual Position Mode）：所有订单必须携带 positionSide，不支持 reduceOnly
+            // 开仓：BUY → positionSide=LONG，SELL → positionSide=SHORT
+            // 平仓：BUY（平空）→ positionSide=SHORT，SELL（平多）→ positionSide=LONG
+            String positionSide;
+            if (reduceOnly) {
+                positionSide = "SELL".equals(side) ? "LONG" : "SHORT";
+            } else {
+                positionSide = "BUY".equals(side) ? "LONG" : "SHORT";
+            }
+            params.append("&positionSide=").append(positionSide);
+            log.info("[Futures] Hedge mode: positionSide={}, reduceOnly={}", positionSide, reduceOnly);
+        } else if (reduceOnly) {
             params.append("&reduceOnly=true");
         }
         params.append("&recvWindow=").append(properties.getBinance().getRecvWindow());
@@ -412,6 +426,42 @@ public class BinanceFuturesClient {
         return ticks.multiply(tickSize).stripTrailingZeros();
     }
 
+    // ─── 账户模式 ──────────────────────────────────────────
+
+    /**
+     * 查询账户是否为对冲模式（Hedge/Dual Position Mode）。
+     * 结果按 apiKey+marketType 缓存，避免重复调用。
+     * <p>
+     * 对冲模式下不支持 reduceOnly，平仓需使用 positionSide=LONG/SHORT。
+     * 查询失败时默认返回 false（单向模式），保持现有行为。
+     */
+    private boolean isHedgeMode(String apiKey, String apiSecret, MarketType marketType) {
+        String cacheKey = apiKey + ":" + marketType.name();
+        return hedgeModeCache.computeIfAbsent(cacheKey, k -> {
+            try {
+                String base = baseUrl(marketType);
+                String endpoint = marketType == MarketType.USDM
+                        ? "/fapi/v1/positionSide/dual"
+                        : "/dapi/v1/positionSide/dual";
+                long ts = System.currentTimeMillis();
+                String query = "timestamp=" + ts + "&recvWindow=" + properties.getBinance().getRecvWindow();
+                String sig = sign(query, apiSecret);
+                Request req = new Request.Builder()
+                        .url(base + endpoint + "?" + query + "&signature=" + sig)
+                        .get()
+                        .addHeader("X-MBX-APIKEY", apiKey)
+                        .build();
+                JSONObject resp = executeRequest(req, "getPositionMode");
+                boolean hedge = Boolean.TRUE.equals(resp.getBoolean("dualSidePosition"));
+                log.info("[Futures] Account position mode: {}", hedge ? "HEDGE" : "ONE-WAY");
+                return hedge;
+            } catch (Exception e) {
+                log.warn("[Futures] Failed to query position mode, assuming ONE-WAY: {}", e.getMessage());
+                return false;
+            }
+        });
+    }
+
     // ─── HTTP 辅助 ─────────────────────────────────────────
 
     private JSONObject executeRequest(Request request, String op) {
@@ -420,8 +470,9 @@ public class BinanceFuturesClient {
             String bodyStr = rb != null ? rb.string() : "";
 
             if (!response.isSuccessful()) {
+                String binanceMsg = extractBinanceMsg(bodyStr);
                 log.error("[Futures] {} failed, code={}, body={}", op, response.code(), bodyStr);
-                throw new BizException(GlobalError.TRADE_API_ERROR);
+                throw new BizException(GlobalError.TRADE_API_ERROR, binanceMsg);
             }
             return JSON.parseObject(bodyStr);
         } catch (BizException e) {
@@ -438,8 +489,9 @@ public class BinanceFuturesClient {
             String bodyStr = rb != null ? rb.string() : "";
 
             if (!response.isSuccessful()) {
+                String binanceMsg = extractBinanceMsg(bodyStr);
                 log.error("[Futures] {} failed, code={}, body={}", op, response.code(), bodyStr);
-                throw new BizException(GlobalError.TRADE_API_ERROR);
+                throw new BizException(GlobalError.TRADE_API_ERROR, binanceMsg);
             }
             return JSON.parseArray(bodyStr);
         } catch (BizException e) {
@@ -447,6 +499,18 @@ public class BinanceFuturesClient {
         } catch (Exception e) {
             log.error("[Futures] {} error: {}", op, e.getMessage(), e);
             throw new BizException(GlobalError.TRADE_API_ERROR);
+        }
+    }
+
+    /** 从 Binance 错误响应体中提取 msg 字段，格式：{"code":-1111,"msg":"..."} */
+    private String extractBinanceMsg(String body) {
+        try {
+            JSONObject obj = JSON.parseObject(body);
+            String msg = obj.getString("msg");
+            int code = obj.getIntValue("code");
+            return code != 0 ? "[" + code + "] " + msg : msg;
+        } catch (Exception ignored) {
+            return body;
         }
     }
 

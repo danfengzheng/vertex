@@ -39,4 +39,10 @@ public class BizException extends RuntimeException {
         this.code = errorCode.getCode();
         this.message = errorCode.getMessage();
     }
+
+    public BizException(ErrorCode errorCode, String detail) {
+        super(detail != null && !detail.isEmpty() ? detail : errorCode.getMessage());
+        this.code = errorCode.getCode();
+        this.message = detail != null && !detail.isEmpty() ? detail : errorCode.getMessage();
+    }
 }
