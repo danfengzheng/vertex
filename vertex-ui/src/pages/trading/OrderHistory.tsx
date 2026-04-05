@@ -6,6 +6,7 @@ import {
   CheckOutlined,
   CloseOutlined,
   StopOutlined,
+  SyncOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import {
@@ -80,6 +81,16 @@ export const OrderHistory = () => {
     await orderApi.cancel(id);
     message.success(t('text.trading.cancel') + ' OK');
     fetchOrders();
+  };
+
+  const handleSyncFill = async (id: string) => {
+    try {
+      await orderApi.syncFill(id);
+      message.success(t('text.trading.syncFillSuccess'));
+      fetchOrders();
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || t('text.trading.syncFillFailed'));
+    }
   };
 
   const columns = [
@@ -182,6 +193,14 @@ export const OrderHistory = () => {
           {(record.status === 'PENDING' || record.status === 'SUBMITTED') && (
             <Popconfirm title={t('text.trading.cancel') + '?'} onConfirm={() => handleCancel(record.id)}>
               <Button type="link" icon={<StopOutlined />}>{t('text.trading.cancel')}</Button>
+            </Popconfirm>
+          )}
+          {record.status === 'SUBMITTED' && record.tradeMode === 'LIVE'
+            && record.marketType !== 'SPOT' && record.marketType != null && (
+            <Popconfirm title={t('text.trading.syncFillConfirm')} onConfirm={() => handleSyncFill(record.id)}>
+              <Button type="link" icon={<SyncOutlined />} style={{ color: '#1677ff' }}>
+                {t('text.trading.syncFill')}
+              </Button>
             </Popconfirm>
           )}
         </Space>

@@ -6,6 +6,7 @@ import com.vertex.model.dto.trading.OrderCreateDTO;
 import com.vertex.model.dto.trading.OrderQueryDTO;
 import com.vertex.model.vo.trading.OrderVO;
 import com.vertex.service.order.service.impl.TradeExecutionService;
+import com.vertex.service.order.task.FuturesOrderFillTask;
 import com.vertex.web.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +27,7 @@ public class OrderController {
 
     private final IOrderService orderService;
     private final TradeExecutionService tradeExecutionService;
+    private final FuturesOrderFillTask futuresOrderFillTask;
 
     @RequiresPermission("trade:order")
     @Operation(summary = "手动下单")
@@ -55,6 +57,14 @@ public class OrderController {
     @PostMapping("/{id}/cancel")
     public Result<Void> cancel(@PathVariable Long id) {
         orderService.cancel(id);
+        return Result.success();
+    }
+
+    @RequiresPermission("trade:order")
+    @Operation(summary = "同步合约订单成交状态（补录实盘持仓）")
+    @PostMapping("/{id}/sync-fill")
+    public Result<Void> syncFill(@PathVariable Long id) {
+        futuresOrderFillTask.syncOrderById(id);
         return Result.success();
     }
 

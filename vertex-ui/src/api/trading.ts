@@ -49,6 +49,7 @@ export interface OrderVO {
   fee: string;
   status: OrderStatus;
   tradeMode: ExecutionMode;
+  marketType?: MarketType;
   exchangeOrderId: string;
   errorMsg: string;
   createTime: string;
@@ -225,6 +226,9 @@ export const orderApi = {
 
   cancel: (id: string): Promise<ApiResponse<void>> =>
     request.post(`/trade/order/${id}/cancel`),
+
+  syncFill: (id: string): Promise<ApiResponse<void>> =>
+    request.post(`/trade/order/${id}/sync-fill`),
 
   page: (params: OrderQueryDTO): Promise<ApiResponse<PageResult<OrderVO>>> =>
     request.get('/trade/order/page', { params }),

@@ -134,6 +134,36 @@ public class BinanceFuturesClient {
     }
 
     /**
+     * 查询单笔合约订单状态
+     *
+     * @param exchangeOrderId Binance 返回的订单号
+     * @return Binance 订单详情 JSON（含 status / executedQty / avgPrice / cumQuote）
+     */
+    public JSONObject queryOrder(String apiKey, String apiSecret,
+                                 String symbol, String exchangeOrderId, MarketType marketType) {
+        String base = baseUrl(marketType);
+        String binanceSymbol = toBinanceSymbol(symbol);
+        String endpoint = marketType == MarketType.USDM ? "/fapi/v1/order" : "/dapi/v1/order";
+
+        StringBuilder params = new StringBuilder();
+        params.append("symbol=").append(binanceSymbol);
+        params.append("&orderId=").append(exchangeOrderId);
+        params.append("&recvWindow=").append(properties.getBinance().getRecvWindow());
+        params.append("&timestamp=").append(System.currentTimeMillis());
+
+        String signature = sign(params.toString(), apiSecret);
+        params.append("&signature=").append(signature);
+
+        Request request = new Request.Builder()
+                .url(base + endpoint + "?" + params)
+                .get()
+                .addHeader("X-MBX-APIKEY", apiKey)
+                .build();
+
+        return executeRequest(request, "queryOrder");
+    }
+
+    /**
      * 设置杠杆（开仓前调用，幂等安全）
      *
      * @param leverage   杠杆倍数（1-125）
