@@ -14,6 +14,7 @@ import com.vertex.service.order.mapper.OrderMapper;
 import com.vertex.service.order.mapper.StrategyRefMapper;
 import com.vertex.service.order.service.impl.ExchangeAccountServiceImpl;
 import com.vertex.service.order.service.impl.PositionManagementService;
+import com.vertex.service.order.service.impl.TradeExecutionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -49,6 +50,7 @@ public class FuturesOrderFillTask {
     private final PositionManagementService positionManagementService;
     private final ExchangeAccountServiceImpl accountService;
     private final StrategyRefMapper strategyRefMapper;
+    private final TradeExecutionService tradeExecutionService;
 
     /**
      * 手动同步指定订单的 Binance 成交状态，并补录持仓。
@@ -166,9 +168,10 @@ public class FuturesOrderFillTask {
         }
         order.setReduceOnly(reduceOnly);
 
-        // 开仓时从策略读取杠杆和保证金模式，写入持仓
+        // 开仓时从策略读取杠杆、保证金模式，并设置止损止盈
+        Strategy strategy = null;
         if (!reduceOnly && order.getStrategyId() != null) {
-            Strategy strategy = strategyRefMapper.selectById(order.getStrategyId());
+            strategy = strategyRefMapper.selectById(order.getStrategyId());
             if (strategy != null) {
                 order.setLeverage(strategy.getLeverage());
                 order.setMarginType(strategy.getMarginType());
@@ -180,6 +183,16 @@ public class FuturesOrderFillTask {
 
         // 创建/更新持仓
         positionManagementService.updatePosition(order);
+
+        // 开仓后设置止损止盈（与 doExecute 正常流程保持一致）
+        if (!reduceOnly && strategy != null) {
+            try {
+                tradeExecutionService.setStopLossTakeProfit(order, strategy);
+                log.info("[FillPoller] SL/TP set for order {}", order.getId());
+            } catch (Exception e) {
+                log.error("[FillPoller] Failed to set SL/TP for order {}: {}", order.getId(), e.getMessage(), e);
+            }
+        }
 
         log.info("[FillPoller] Order {} processed: side={} qty={} avgPrice={} reduceOnly={}",
                 order.getId(), order.getSide(), executedQty, avgPrice, reduceOnly);

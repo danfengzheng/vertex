@@ -731,7 +731,7 @@ public class TradeExecutionService {
      * 同时支持 LONG 和 SHORT 持仓方向。
      * </p>
      */
-    private void setStopLossTakeProfit(Order order, Strategy strategy) {
+    public void setStopLossTakeProfit(Order order, Strategy strategy) {
         boolean hasTrailingStop = strategy.getInitialStopMultiplier() != null
                 && strategy.getInitialStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
         boolean hasAtrStop   = strategy.getAtrStopMultiplier() != null
