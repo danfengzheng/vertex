@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Table, Button, Space, message, Tag, Select, Popconfirm } from 'antd';
 import { formatServerTime } from '../../utils/date';
-import { ReloadOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { ReloadOutlined, CloseCircleOutlined, ReconciliationOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import {
   positionApi,
@@ -60,6 +60,16 @@ export const PositionMonitor = () => {
     await positionApi.close(id);
     message.success(t('text.trading.closePosition') + ' OK');
     fetchPositions();
+  };
+
+  const handleResetSltp = async (id: string) => {
+    try {
+      await positionApi.resetSltp(id);
+      message.success(t('text.trading.resetSltpSuccess'));
+      fetchPositions();
+    } catch (e: any) {
+      message.error(e?.response?.data?.message || t('text.trading.resetSltpFailed'));
+    }
   };
 
   const pnlColor = (val: string | number | null) => {
@@ -225,14 +235,21 @@ export const PositionMonitor = () => {
     {
       title: t('common.operation'),
       key: 'action',
-      width: 120,
+      width: 200,
       render: (_: any, record: PositionVO) => (
         record.status === 'OPEN' ? (
-          <Popconfirm title={t('text.trading.closePosition') + '?'} onConfirm={() => handleClose(record.id)}>
-            <Button type="link" danger icon={<CloseCircleOutlined />}>
-              {t('text.trading.closePosition')}
-            </Button>
-          </Popconfirm>
+          <Space>
+            <Popconfirm title={t('text.trading.resetSltpConfirm')} onConfirm={() => handleResetSltp(record.id)}>
+              <Button type="link" icon={<ReconciliationOutlined />} style={{ color: '#faad14' }}>
+                {t('text.trading.resetSltp')}
+              </Button>
+            </Popconfirm>
+            <Popconfirm title={t('text.trading.closePosition') + '?'} onConfirm={() => handleClose(record.id)}>
+              <Button type="link" danger icon={<CloseCircleOutlined />}>
+                {t('text.trading.closePosition')}
+              </Button>
+            </Popconfirm>
+          </Space>
         ) : null
       ),
     },

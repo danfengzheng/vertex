@@ -247,6 +247,9 @@ export const positionApi = {
 
   close: (id: string): Promise<ApiResponse<void>> =>
     request.post(`/trade/position/${id}/close`),
+
+  resetSltp: (id: string): Promise<ApiResponse<void>> =>
+    request.post(`/trade/position/${id}/reset-sltp`),
 };
 
 /** 盈亏分析 API */
