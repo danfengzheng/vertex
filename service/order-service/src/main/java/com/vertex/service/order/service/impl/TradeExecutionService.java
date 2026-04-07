@@ -626,7 +626,7 @@ public class TradeExecutionService {
         BigDecimal netAmount = tradeAmount.multiply(BigDecimal.ONE.subtract(feeRate));
 
         if (strategy.getExecutionMode() == ExecutionMode.LIVE) {
-            netAmount = netAmount.multiply(new BigDecimal("0.95"));
+            netAmount = netAmount.multiply(new BigDecimal("0.98"));
         }
 
         // 合约杠杆：名义价值 = 保证金 × 杠杆，实际持仓数量按名义价值计算
