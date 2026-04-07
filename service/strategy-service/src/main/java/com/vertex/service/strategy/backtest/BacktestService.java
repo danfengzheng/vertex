@@ -200,13 +200,11 @@ public class BacktestService {
                 && strategy.getTrailingDropPct().compareTo(BigDecimal.ZERO) > 0;
 
         // ── 日亏损熔断 ────────────────────────────────────────────────────────────────
-        // 仅统计止损（STOP_LOSS / TRAILING_DROP）触发且实际亏损的交易，
-        // 当日累计止损亏损额超过 initialCapital × dailyLossLimitPct% 时暂停开仓 24 小时。
-        // 信号出场、止盈、时间止损、指标出场不计入，移动止损在盈利区间触发也不计入。
+        // 止损（STOP_LOSS / TRAILING_DROP）触发且为实际亏损时，
+        // 若单笔亏损额 >= initialCapital × dailyLossLimitPct% 则暂停开仓 24 小时。
+        // 信号出场、止盈、时间止损、指标出场不触发，移动止损在盈利区间触发也不触发。
         boolean hasDailyLossLimit = strategy.getDailyLossLimitPct() != null
                 && strategy.getDailyLossLimitPct().compareTo(BigDecimal.ZERO) > 0;
-        BigDecimal dailySLLoss = BigDecimal.ZERO;      // 当日止损累计亏损额（每UTC日重置）
-        long lastBarDayUtc = -1;                       // 上一根 K 线所属 UTC 日（ms / 86400000）
         long tradingPausedUntilMs = -1;                // 熔断结束时间戳（-1=未暂停）
 
         BigDecimal peakEquity = capital;
@@ -234,15 +232,6 @@ public class BacktestService {
                 continue;
             }
 
-            // ── 日亏损熔断：每日重置起始资金 ───────────────────────────────────────────
-            if (hasDailyLossLimit) {
-                long barDayUtc = currentKline.getOpenTime() / 86_400_000L;
-                if (barDayUtc != lastBarDayUtc) {
-                    // 新的 UTC 日：重置当日止损亏损计数（熔断暂停状态不随日期重置）
-                    dailySLLoss = BigDecimal.ZERO;
-                    lastBarDayUtc = barDayUtc;
-                }
-            }
 
             // 调用指标计算引擎（每周期取一次 bar，追加 PartialBar，计算所有指标）
             List<IndicatorResult> results = indicatorEngine.computeAll(strategy, configs, barProvider);
@@ -326,17 +315,18 @@ public class BacktestService {
                     // 止损/止盈当根 K 线权益以出场价结算
                     currentPrice = exitPrice;
 
-                    // 日亏损熔断：仅止损（非止盈）且实际亏损时累计
+                    // 日亏损熔断：仅止损（非止盈）且单笔亏损 >= initialCapital×pct% 时触发
                     if (hasDailyLossLimit && stopHit && profit.compareTo(BigDecimal.ZERO) < 0) {
-                        dailySLLoss = dailySLLoss.add(profit.abs());
                         BigDecimal threshold = config.getInitialCapital()
                                 .multiply(strategy.getDailyLossLimitPct())
                                 .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
-                        if (dailySLLoss.compareTo(threshold) >= 0 && tradingPausedUntilMs <= 0) {
+                        boolean notPaused = tradingPausedUntilMs <= 0
+                                || currentKline.getOpenTime() >= tradingPausedUntilMs;
+                        if (profit.abs().compareTo(threshold) >= 0 && notPaused) {
                             tradingPausedUntilMs = currentKline.getOpenTime() + 24 * 3_600_000L;
-                            log.info("[DailyLoss] Backtest 熔断(SL): strategy={} 当日止损亏损={} >= 限制={} ({}% of {}), 暂停至 {}",
+                            log.info("[DailyLoss] Backtest 熔断(SL): strategy={} 单笔止损={} >= 限制={} ({}% of {}), 暂停至 {}",
                                     strategy.getName(),
-                                    dailySLLoss.setScale(2, RoundingMode.HALF_UP),
+                                    profit.abs().setScale(2, RoundingMode.HALF_UP),
                                     threshold.setScale(2, RoundingMode.HALF_UP),
                                     strategy.getDailyLossLimitPct(), config.getInitialCapital(),
                                     tradingPausedUntilMs);
@@ -394,17 +384,18 @@ public class BacktestService {
                         closedByStopOrTp = true;
                         currentPrice = dropExitPrice;
 
-                        // 日亏损熔断：峰值回撤止损仅在实际亏损时累计（盈利锁仓不触发）
+                        // 日亏损熔断：峰值回撤止损在实际亏损且单笔 >= initialCapital×pct% 时触发
                         if (hasDailyLossLimit && profit.compareTo(BigDecimal.ZERO) < 0) {
-                            dailySLLoss = dailySLLoss.add(profit.abs());
                             BigDecimal threshold = config.getInitialCapital()
                                     .multiply(strategy.getDailyLossLimitPct())
                                     .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
-                            if (dailySLLoss.compareTo(threshold) >= 0 && tradingPausedUntilMs <= 0) {
+                            boolean notPaused = tradingPausedUntilMs <= 0
+                                    || currentKline.getOpenTime() >= tradingPausedUntilMs;
+                            if (profit.abs().compareTo(threshold) >= 0 && notPaused) {
                                 tradingPausedUntilMs = currentKline.getOpenTime() + 24 * 3_600_000L;
-                                log.info("[DailyLoss] Backtest 熔断(TrailingDrop): strategy={} 当日止损亏损={} >= 限制={} ({}% of {}), 暂停至 {}",
+                                log.info("[DailyLoss] Backtest 熔断(TrailingDrop): strategy={} 单笔止损={} >= 限制={} ({}% of {}), 暂停至 {}",
                                         strategy.getName(),
-                                        dailySLLoss.setScale(2, RoundingMode.HALF_UP),
+                                        profit.abs().setScale(2, RoundingMode.HALF_UP),
                                         threshold.setScale(2, RoundingMode.HALF_UP),
                                         strategy.getDailyLossLimitPct(), config.getInitialCapital(),
                                         tradingPausedUntilMs);
