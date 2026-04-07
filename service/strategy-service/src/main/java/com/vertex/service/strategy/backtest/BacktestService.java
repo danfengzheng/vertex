@@ -199,6 +199,16 @@ public class BacktestService {
         boolean hasTrailingDrop = strategy.getTrailingDropPct() != null
                 && strategy.getTrailingDropPct().compareTo(BigDecimal.ZERO) > 0;
 
+        // ── 日亏损熔断 ────────────────────────────────────────────────────────────────
+        // 仅统计止损（STOP_LOSS / TRAILING_DROP）触发且实际亏损的交易，
+        // 当日累计止损亏损额超过 initialCapital × dailyLossLimitPct% 时暂停开仓 24 小时。
+        // 信号出场、止盈、时间止损、指标出场不计入，移动止损在盈利区间触发也不计入。
+        boolean hasDailyLossLimit = strategy.getDailyLossLimitPct() != null
+                && strategy.getDailyLossLimitPct().compareTo(BigDecimal.ZERO) > 0;
+        BigDecimal dailySLLoss = BigDecimal.ZERO;      // 当日止损累计亏损额（每UTC日重置）
+        long lastBarDayUtc = -1;                       // 上一根 K 线所属 UTC 日（ms / 86400000）
+        long tradingPausedUntilMs = -1;                // 熔断结束时间戳（-1=未暂停）
+
         BigDecimal peakEquity = capital;
         BigDecimal maxDrawdown = BigDecimal.ZERO;
         int maxDrawdownDuration = 0;
@@ -222,6 +232,16 @@ public class BacktestService {
             // 仅处理回测时间范围内的K线（指针推进不受此限制）
             if (currentKline.getOpenTime() < config.getStartTime()) {
                 continue;
+            }
+
+            // ── 日亏损熔断：每日重置起始资金 ───────────────────────────────────────────
+            if (hasDailyLossLimit) {
+                long barDayUtc = currentKline.getOpenTime() / 86_400_000L;
+                if (barDayUtc != lastBarDayUtc) {
+                    // 新的 UTC 日：重置当日止损亏损计数（熔断暂停状态不随日期重置）
+                    dailySLLoss = BigDecimal.ZERO;
+                    lastBarDayUtc = barDayUtc;
+                }
             }
 
             // 调用指标计算引擎（每周期取一次 bar，追加 PartialBar，计算所有指标）
@@ -305,6 +325,23 @@ public class BacktestService {
                     closedByStopOrTp = true;
                     // 止损/止盈当根 K 线权益以出场价结算
                     currentPrice = exitPrice;
+
+                    // 日亏损熔断：仅止损（非止盈）且实际亏损时累计
+                    if (hasDailyLossLimit && stopHit && profit.compareTo(BigDecimal.ZERO) < 0) {
+                        dailySLLoss = dailySLLoss.add(profit.abs());
+                        BigDecimal threshold = config.getInitialCapital()
+                                .multiply(strategy.getDailyLossLimitPct())
+                                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+                        if (dailySLLoss.compareTo(threshold) >= 0 && tradingPausedUntilMs <= 0) {
+                            tradingPausedUntilMs = currentKline.getOpenTime() + 24 * 3_600_000L;
+                            log.info("[DailyLoss] Backtest 熔断(SL): strategy={} 当日止损亏损={} >= 限制={} ({}% of {}), 暂停至 {}",
+                                    strategy.getName(),
+                                    dailySLLoss.setScale(2, RoundingMode.HALF_UP),
+                                    threshold.setScale(2, RoundingMode.HALF_UP),
+                                    strategy.getDailyLossLimitPct(), config.getInitialCapital(),
+                                    tradingPausedUntilMs);
+                        }
+                    }
                 }
 
                 // ── 峰值回撤止损检查（SL/TP 未触发时才执行）────────────────────
@@ -356,6 +393,23 @@ public class BacktestService {
                         openBarCount = 0;
                         closedByStopOrTp = true;
                         currentPrice = dropExitPrice;
+
+                        // 日亏损熔断：峰值回撤止损仅在实际亏损时累计（盈利锁仓不触发）
+                        if (hasDailyLossLimit && profit.compareTo(BigDecimal.ZERO) < 0) {
+                            dailySLLoss = dailySLLoss.add(profit.abs());
+                            BigDecimal threshold = config.getInitialCapital()
+                                    .multiply(strategy.getDailyLossLimitPct())
+                                    .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+                            if (dailySLLoss.compareTo(threshold) >= 0 && tradingPausedUntilMs <= 0) {
+                                tradingPausedUntilMs = currentKline.getOpenTime() + 24 * 3_600_000L;
+                                log.info("[DailyLoss] Backtest 熔断(TrailingDrop): strategy={} 当日止损亏损={} >= 限制={} ({}% of {}), 暂停至 {}",
+                                        strategy.getName(),
+                                        dailySLLoss.setScale(2, RoundingMode.HALF_UP),
+                                        threshold.setScale(2, RoundingMode.HALF_UP),
+                                        strategy.getDailyLossLimitPct(), config.getInitialCapital(),
+                                        tradingPausedUntilMs);
+                            }
+                        }
                     }
                 }
             }
@@ -568,6 +622,17 @@ public class BacktestService {
                     // 合约：无仓位 → 开空
                     if (isFutures && !inPosition) toOpen = PositionSide.SHORT;
                 }
+            }
+
+            // ── 日亏损熔断：若处于暂停期则拦截本根 K 线的开仓 ──────────────────────────
+            // 熔断由各止损出场块（STOP_LOSS / TRAILING_DROP 且亏损）写入 tradingPausedUntilMs。
+            // 信号出场、止盈、时间止损、指标出场不触发熔断，移动止损在盈利区间触发亦不触发。
+            if (hasDailyLossLimit && tradingPausedUntilMs > 0
+                    && currentKline.getOpenTime() < tradingPausedUntilMs) {
+                if (toOpen != null) {
+                    log.debug("[DailyLoss] Backtest: 暂停期内跳过开仓 strategy={}", strategy.getName());
+                }
+                toOpen = null;
             }
 
             // ── 开仓执行（LONG 或 SHORT）──────────────────────────────────────────────

@@ -161,4 +161,22 @@ public class Strategy extends BaseEntity {
      */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private KLineInterval atrInterval;
+
+    /**
+     * 日亏损限制百分比（如 5.0 = 5%）。
+     * 当日累计已实现亏损占 initialCapital 的比例超过此值时，
+     * 暂停该策略交易 24 小时（设置 tradingPausedUntil = now + 24h）。
+     * null = 不启用日亏损熔断。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal dailyLossLimitPct;
+
+    /**
+     * 交易暂停截止时间（UTC）。
+     * 由日亏损熔断自动写入，重启后仍有效。
+     * 在此时间之前 executeSignal 不允许开新仓。
+     * null = 未暂停。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private java.time.LocalDateTime tradingPausedUntil;
 }

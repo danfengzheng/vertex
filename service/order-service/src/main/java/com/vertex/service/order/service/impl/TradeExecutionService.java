@@ -14,6 +14,7 @@ import com.vertex.service.order.client.BinanceFuturesClient;
 import com.vertex.service.order.client.BinanceTradeClient;
 import com.vertex.service.order.config.TradingProperties;
 import com.vertex.service.order.mapper.OrderMapper;
+import com.vertex.service.order.mapper.StrategyRefMapper;
 import com.vertex.service.order.notify.CompositeTradeNotifier;
 import com.vertex.service.quote.store.KLineStore;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,8 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -47,6 +50,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class TradeExecutionService {
 
     private final OrderMapper orderMapper;
+    private final StrategyRefMapper strategyRefMapper;
     private final ExchangeAccountServiceImpl accountService;
     private final PaperTradingService paperTradingService;
     private final PositionManagementService positionManagementService;
@@ -114,6 +118,14 @@ public class TradeExecutionService {
             return;
         }
 
+        // 日亏损熔断：无持仓时的 BUY（开仓）被暂停拦截；持仓 SELL（平仓）不受限
+        if (openPosition == null && signal.getSignalType() == SignalType.BUY
+                && isStrategyTradingPaused(strategy)) {
+            log.info("[DailyLoss] Strategy [{}] trading paused until {} UTC, skip BUY open",
+                    strategy.getName(), strategy.getTradingPausedUntil());
+            return;
+        }
+
         OrderSide side = signal.getSignalType() == SignalType.BUY ? OrderSide.BUY : OrderSide.SELL;
         BigDecimal quantity;
         if (side == OrderSide.SELL && openPosition != null) {
@@ -156,6 +168,12 @@ public class TradeExecutionService {
                         strategy.getName(), strategy.getExchange(), strategy.getSymbol());
                 return;
             }
+            // 日亏损熔断：平仓（Step 1）正常执行，开新仓（Step 2）被暂停拦截
+            if (isStrategyTradingPaused(strategy)) {
+                log.info("[DailyLoss] Strategy [{}] trading paused until {} UTC, skip LONG open",
+                        strategy.getName(), strategy.getTradingPausedUntil());
+                return;
+            }
             BigDecimal quantity = calculateBuyQuantity(strategy, signal);
             if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
                 log.warn("[Futures] Strategy [{}] invalid quantity for LONG open", strategy.getName());
@@ -180,6 +198,12 @@ public class TradeExecutionService {
             if (shortPos != null) {
                 log.debug("[Futures] Strategy [{}] already has SHORT for {} {}, ignoring SELL",
                         strategy.getName(), strategy.getExchange(), strategy.getSymbol());
+                return;
+            }
+            // 日亏损熔断：平仓（Step 1）正常执行，开新仓（Step 2）被暂停拦截
+            if (isStrategyTradingPaused(strategy)) {
+                log.info("[DailyLoss] Strategy [{}] trading paused until {} UTC, skip SHORT open",
+                        strategy.getName(), strategy.getTradingPausedUntil());
                 return;
             }
             BigDecimal quantity = calculateBuyQuantity(strategy, signal);
@@ -1088,6 +1112,126 @@ public class TradeExecutionService {
     }
 
     // ─── 工具方法 ─────────────────────────────────────────────
+
+    // ─── 日亏损熔断 ───────────────────────────────────────────
+
+    /**
+     * 判断策略当前是否处于日亏损熔断暂停期。
+     * <p>
+     * 每次均从 DB 重新读取最新状态，避免信号处理与 StopLossTakeProfitTask
+     * 并发写入之间的竞态——两者可能在同一根 K 线内分别读写 tradingPausedUntil。
+     * tradingPausedUntil 在 DB 中持久化（ALWAYS 策略），重启后仍有效。
+     * </p>
+     */
+    private boolean isStrategyTradingPaused(Strategy strategy) {
+        try {
+            Strategy fresh = strategyRefMapper.selectById(strategy.getId());
+            if (fresh == null || fresh.getTradingPausedUntil() == null) return false;
+            return LocalDateTime.now(ZoneOffset.UTC).isBefore(fresh.getTradingPausedUntil());
+        } catch (Exception e) {
+            log.warn("[DailyLoss] Failed to reload strategy {} for pause check, using cached value: {}",
+                    strategy.getId(), e.getMessage());
+            // 降级：使用传入对象的缓存值，保证不因 DB 异常阻塞交易
+            if (strategy.getTradingPausedUntil() == null) return false;
+            return LocalDateTime.now(ZoneOffset.UTC).isBefore(strategy.getTradingPausedUntil());
+        }
+    }
+
+    /**
+     * 止损专用平仓入口：执行平仓后，仅当仓位实际亏损时检查日亏损熔断。
+     * <p>
+     * 仅应由止损机制调用（固定止损、ATR移动止损、峰值回撤止损），不应由信号出场、止盈、时间止损调用。
+     * 移动止损在盈利区间触发（如追踪锁利）不会激活熔断。
+     * </p>
+     */
+    public void executeStopLossClose(Position position) {
+        executeClose(position);
+        // 仅当止损后仓位实际亏损时才检查日亏损熔断
+        if (isPositionAtLoss(position)) {
+            checkAndApplyDailyLossLimit(position);
+        }
+    }
+
+    /**
+     * 判断仓位是否以亏损状态平仓。
+     * <ul>
+     *   <li>PAPER 模式：{@code closePosition()} 执行后 realizedPnl 已更新，直接使用。</li>
+     *   <li>LIVE 模式：{@code StopLossTakeProfitTask} 在调用前已更新 unrealizedPnl，以此作为代理。</li>
+     *   <li>兜底：比较止损价与入场价方向判断。</li>
+     * </ul>
+     */
+    private boolean isPositionAtLoss(Position position) {
+        // PAPER：closePosition() 已将 realizedPnl 写入 position 对象
+        if (position.getTradeMode() == ExecutionMode.PAPER) {
+            return position.getRealizedPnl() != null
+                    && position.getRealizedPnl().compareTo(BigDecimal.ZERO) < 0;
+        }
+        // LIVE：StopLossTakeProfitTask 在调用前刷新了 unrealizedPnl，以此估算方向
+        if (position.getUnrealizedPnl() != null) {
+            return position.getUnrealizedPnl().compareTo(BigDecimal.ZERO) < 0;
+        }
+        // 兜底：止损价与入场价的方向关系
+        // LONG  SL < entryPrice → 亏损区; LONG  SL > entryPrice → 移动止损已锁利
+        // SHORT SL > entryPrice → 亏损区; SHORT SL < entryPrice → 移动止损已锁利
+        if (position.getEntryPrice() != null && position.getStopLoss() != null) {
+            boolean isShort = position.getSide() == PositionSide.SHORT;
+            return isShort
+                    ? position.getStopLoss().compareTo(position.getEntryPrice()) > 0
+                    : position.getStopLoss().compareTo(position.getEntryPrice()) < 0;
+        }
+        return false; // 无法判断时保守处理：不触发熔断
+    }
+
+    /**
+     * 平仓后检查当日累计亏损是否触及熔断线。
+     * <p>
+     * 仅由 {@link #executeStopLossClose} 调用，确保只在止损实际亏损时触发。
+     * 触发条件：dailyLossLimitPct 已配置 且 initialCapital > 0
+     *            且 当日已实现盈亏 / initialCapital <= -(dailyLossLimitPct/100)
+     * 触发动作：将 tradingPausedUntil 设置为 now+24h 并写入 DB，
+     *            下一根 K 线的信号执行时会自动检测并跳过开仓。
+     * </p>
+     */
+    private void checkAndApplyDailyLossLimit(Position position) {
+        if (position.getStrategyId() == null) return;
+        try {
+            Strategy strategy = strategyRefMapper.selectById(position.getStrategyId());
+            if (strategy == null
+                    || strategy.getDailyLossLimitPct() == null
+                    || strategy.getDailyLossLimitPct().compareTo(BigDecimal.ZERO) <= 0) return;
+            if (strategy.getInitialCapital() == null
+                    || strategy.getInitialCapital().compareTo(BigDecimal.ZERO) <= 0) {
+                log.debug("[DailyLoss] strategy={} has no initialCapital, skipping daily loss check",
+                        strategy.getName());
+                return;
+            }
+
+            BigDecimal todayPnl = positionManagementService.calculateTodayRealizedPnl(
+                    position.getStrategyId(), position.getAccountId());
+            if (todayPnl.compareTo(BigDecimal.ZERO) >= 0) return; // 今日盈利，无需熔断
+
+            // threshold 为负值，如 initialCapital=10000, limitPct=5% → threshold=-500
+            BigDecimal threshold = strategy.getInitialCapital()
+                    .multiply(strategy.getDailyLossLimitPct())
+                    .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+                    .negate();
+
+            if (todayPnl.compareTo(threshold) <= 0) {
+                // 亏损已超过限制，触发熔断
+                LocalDateTime pauseUntil = LocalDateTime.now(ZoneOffset.UTC).plusHours(24);
+                strategy.setTradingPausedUntil(pauseUntil);
+                strategyRefMapper.updateById(strategy);
+                log.warn("[DailyLoss] 熔断触发 strategy=[{}] todayPnl={} threshold={} ({} % of {})，" +
+                        "暂停交易至 {} UTC",
+                        strategy.getName(), todayPnl.setScale(4, RoundingMode.HALF_UP),
+                        threshold.setScale(4, RoundingMode.HALF_UP),
+                        strategy.getDailyLossLimitPct(), strategy.getInitialCapital(), pauseUntil);
+            }
+        } catch (Exception e) {
+            log.error("[DailyLoss] Error checking daily loss limit for position {}: {}",
+                    position.getId(), e.getMessage(), e);
+        }
+    }
 
     private MarketType getAccountMarketType(Long accountId) {
         if (accountId == null) return null;

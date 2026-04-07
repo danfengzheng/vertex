@@ -673,6 +673,7 @@ export const StrategyConfig = () => {
         trailingDistanceMultiplier: record.trailingDistanceMultiplier,
         atrInterval: record.atrInterval ?? undefined,
         trailingDropPct: record.trailingDropPct,
+        dailyLossLimitPct: record.dailyLossLimitPct,
       });
     }, 0);
   };
@@ -733,7 +734,7 @@ export const StrategyConfig = () => {
           'feeRate', 'atrStopMultiplier', 'atrTakeProfitMultiplier',
           'initialStopMultiplier', 'breakevenActivationMultiplier',
           'trailingActivationMultiplier', 'trailingDistanceMultiplier',
-          'atrInterval', 'maxHoldingBars', 'trailingDropPct',
+          'atrInterval', 'maxHoldingBars', 'trailingDropPct', 'dailyLossLimitPct',
         ] as const;
         const payload: Record<string, unknown> = { id: editingId, ...values };
         CLEARABLE_FIELDS.forEach((key) => {
@@ -792,14 +793,30 @@ export const StrategyConfig = () => {
     {
       title: t('text.strategy.enabled'),
       key: 'enabled',
-      render: (_: unknown, record: StrategyVO) => (
-        <Switch
-          checked={record.enabled === 1}
-          onChange={() => handleToggleEnabled(record)}
-          checkedChildren={t('common.enabled')}
-          unCheckedChildren={t('common.disabled')}
-        />
-      ),
+      render: (_: unknown, record: StrategyVO) => {
+        const isPaused = record.tradingPausedUntil
+          && new Date(record.tradingPausedUntil) > new Date();
+        return (
+          <Space direction="vertical" size={2}>
+            <Switch
+              checked={record.enabled === 1}
+              onChange={() => handleToggleEnabled(record)}
+              checkedChildren={t('common.enabled')}
+              unCheckedChildren={t('common.disabled')}
+            />
+            {isPaused && (
+              <Tooltip title={(() => {
+                const d = new Date(record.tradingPausedUntil!);
+                const local = d.toLocaleString(undefined, { hour12: false });
+                const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                return `${t('text.trading.dailyLossLimitPaused')}: ${local} (${tz})`;
+              })()}>
+                <Tag color="orange" style={{ fontSize: 11 }}>🔒 {t('text.trading.paused')}</Tag>
+              </Tooltip>
+            )}
+          </Space>
+        );
+      },
     },
     {
       title: t('text.trading.autoTrade'),
@@ -1598,6 +1615,14 @@ export const StrategyConfig = () => {
                   name="trailingDropPct"
                   label={t('text.trading.trailingDropPct')}
                   tooltip={t('text.trading.trailingDropPctTip')}
+                >
+                  <InputNumber min={0.1} max={100} step={0.1} style={{ width: 140 }} addonAfter="%" placeholder="5.0" />
+                </Form.Item>
+
+                <Form.Item
+                  name="dailyLossLimitPct"
+                  label={t('text.trading.dailyLossLimitPct')}
+                  tooltip={t('text.trading.dailyLossLimitPctTip')}
                 >
                   <InputNumber min={0.1} max={100} step={0.1} style={{ width: 140 }} addonAfter="%" placeholder="5.0" />
                 </Form.Item>

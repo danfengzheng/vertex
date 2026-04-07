@@ -422,6 +422,27 @@ public class PositionManagementService {
     }
 
     /**
+     * 计算策略当日（UTC 自然日）已实现盈亏之和。
+     * <p>
+     * 用于日亏损熔断：当日累计亏损 / initialCapital >= dailyLossLimitPct 时触发暂停。
+     * 使用 updateTime 近似平仓时间（平仓时会更新此字段）。
+     * </p>
+     */
+    public BigDecimal calculateTodayRealizedPnl(Long strategyId, Long accountId) {
+        LocalDateTime startOfDay = LocalDateTime.now(ZoneOffset.UTC).toLocalDate().atStartOfDay();
+        LambdaQueryWrapper<Position> wrapper = new LambdaQueryWrapper<Position>()
+                .eq(Position::getStrategyId, strategyId)
+                .eq(Position::getAccountId, accountId)
+                .eq(Position::getStatus, PositionStatus.CLOSED)
+                .ge(Position::getUpdateTime, startOfDay)
+                .eq(Position::getDeleted, 0);
+        List<Position> todayPositions = positionMapper.selectList(wrapper);
+        return todayPositions.stream()
+                .map(p -> p.getRealizedPnl() != null ? p.getRealizedPnl() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
      * 计算策略所有已关闭仓位的累计已实现盈亏
      */
     public BigDecimal getTotalRealizedPnl(Long strategyId, Long accountId) {

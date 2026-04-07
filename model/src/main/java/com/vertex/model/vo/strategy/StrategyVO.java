@@ -75,6 +75,12 @@ public class StrategyVO implements Serializable {
     /** 峰值回撤止损百分比（如 5.0 = 5%），从最高价(多)/最低价(空)回撤超过此值时止损，null=不启用 */
     private BigDecimal trailingDropPct;
 
+    /** 日亏损限制百分比（如 5.0 = 5%），当日累计亏损超过此值时暂停交易 24 小时，null=不启用 */
+    private BigDecimal dailyLossLimitPct;
+
+    /** 交易暂停截止时间（UTC），用于前端展示"暂停中"状态，null=未暂停 */
+    private LocalDateTime tradingPausedUntil;
+
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

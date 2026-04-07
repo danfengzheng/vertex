@@ -98,7 +98,7 @@ public class StopLossTakeProfitTask {
                                 log.info("[Peak Drop SL] LONG triggered: {} {} peak={} dropPct={}% currentPrice={}",
                                         position.getExchange(), position.getSymbol(),
                                         peak, strategy.getTrailingDropPct(), currentPrice);
-                                tradeExecutionService.executeClose(position);
+                                tradeExecutionService.executeStopLossClose(position);
                                 triggered = true;
                             }
                         } else {
@@ -115,7 +115,7 @@ public class StopLossTakeProfitTask {
                                 log.info("[Peak Drop SL] SHORT triggered: {} {} trough={} dropPct={}% currentPrice={}",
                                         position.getExchange(), position.getSymbol(),
                                         trough, strategy.getTrailingDropPct(), currentPrice);
-                                tradeExecutionService.executeClose(position);
+                                tradeExecutionService.executeStopLossClose(position);
                                 triggered = true;
                             }
                         }
@@ -137,7 +137,7 @@ public class StopLossTakeProfitTask {
                         log.info("[SL/TP Task] Stop loss triggered: {} {} side={} currentPrice={} stopLoss={}",
                                 position.getExchange(), position.getSymbol(), position.getSide(),
                                 currentPrice, position.getStopLoss());
-                        tradeExecutionService.executeClose(position);
+                        tradeExecutionService.executeStopLossClose(position);
                         triggered = true;
                     }
                 }

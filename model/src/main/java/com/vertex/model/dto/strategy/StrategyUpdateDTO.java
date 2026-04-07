@@ -78,4 +78,7 @@ public class StrategyUpdateDTO {
 
     /** 峰值回撤止损百分比（如 5.0 = 5%），从最高价(多)/最低价(空)回撤超过此值时止损，null=清除 */
     private BigDecimal trailingDropPct;
+
+    /** 日亏损限制百分比（如 5.0 = 5%），当日累计亏损超过此值时暂停交易 24 小时，null=清除 */
+    private BigDecimal dailyLossLimitPct;
 }
