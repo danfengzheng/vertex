@@ -821,7 +821,10 @@ public class TradeExecutionService {
             BigDecimal stopLoss = isShort
                     ? entryPrice.multiply(BigDecimal.ONE.add(pct))
                     : entryPrice.multiply(BigDecimal.ONE.subtract(pct));
-            position.setStopLoss(stopLoss);
+            position.setStopLoss(stopLoss.setScale(8, RoundingMode.HALF_UP));
+            log.info("[Fixed SL] strategy={} side={} entryPrice={} pct={}% stopLoss={}",
+                    strategy.getName(), position.getSide(), entryPrice,
+                    strategy.getStopLossPct(), position.getStopLoss());
         }
 
         // ── 非ATR路径：固定百分比止盈 ────────────────────────
@@ -831,7 +834,10 @@ public class TradeExecutionService {
             BigDecimal takeProfit = isShort
                     ? entryPrice.multiply(BigDecimal.ONE.subtract(pct))
                     : entryPrice.multiply(BigDecimal.ONE.add(pct));
-            position.setTakeProfit(takeProfit);
+            position.setTakeProfit(takeProfit.setScale(8, RoundingMode.HALF_UP));
+            log.info("[Fixed TP] strategy={} side={} entryPrice={} pct={}% takeProfit={}",
+                    strategy.getName(), position.getSide(), entryPrice,
+                    strategy.getTakeProfitPct(), position.getTakeProfit());
         }
 
         // ── 峰值回撤止损：初始化极值追踪（与移动ATR止损独立并存）────────

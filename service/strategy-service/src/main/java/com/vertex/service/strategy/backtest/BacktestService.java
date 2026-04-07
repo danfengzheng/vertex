@@ -601,6 +601,9 @@ public class BacktestService {
                 inPosition = true;
                 positionSide = toOpen;
                 openBarCount = 0;
+                // 峰值回撤止损：开仓时初始化峰值为入场价，与实盘 StopLossTakeProfitTask 行为一致
+                // 实盘 fallback：position.getHighestPrice() != null ? ... : position.getEntryPrice()
+                peakPrice = hasTrailingDrop ? entryPrice : null;
 
                 // ── 止损止盈计算（LONG：SL 下方 TP 上方；SHORT：SL 上方 TP 下方）──────
                 // dir = 1（多）或 -1（空），统一公式：SL = entry - dir×mult×ATR，TP = entry + dir×mult×ATR

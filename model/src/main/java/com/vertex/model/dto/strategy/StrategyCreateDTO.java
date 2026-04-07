@@ -92,4 +92,7 @@ public class StrategyCreateDTO {
 
     /** ATR止损专用K线周期（留空则使用策略默认周期） */
     private KLineInterval atrInterval;
+
+    /** 峰值回撤止损百分比（如 5.0 = 5%），从最高价(多)/最低价(空)回撤超过此值时止损，null=不启用 */
+    private BigDecimal trailingDropPct;
 }

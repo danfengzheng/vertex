@@ -129,7 +129,7 @@ public class StopLossTakeProfitTask {
                 // 止损检查（区分方向）
                 // LONG：价格下跌触达止损（currentPrice <= stopLoss）
                 // SHORT：价格上涨触达止损（currentPrice >= stopLoss）
-                if (position.getStopLoss() != null) {
+                if (!triggered && position.getStopLoss() != null) {
                     boolean slTriggered = isShort
                             ? currentPrice.compareTo(position.getStopLoss()) >= 0
                             : currentPrice.compareTo(position.getStopLoss()) <= 0;

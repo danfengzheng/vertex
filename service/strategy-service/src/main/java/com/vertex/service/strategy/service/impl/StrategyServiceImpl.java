@@ -81,6 +81,7 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setTrailingActivationMultiplier(dto.getTrailingActivationMultiplier());
         strategy.setTrailingDistanceMultiplier(dto.getTrailingDistanceMultiplier());
         strategy.setAtrInterval(dto.getAtrInterval());
+        strategy.setTrailingDropPct(dto.getTrailingDropPct());
         strategyMapper.insert(strategy);
         return strategy.getId();
     }
@@ -135,6 +136,7 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setTrailingActivationMultiplier(dto.getTrailingActivationMultiplier());
         strategy.setTrailingDistanceMultiplier(dto.getTrailingDistanceMultiplier());
         strategy.setAtrInterval(dto.getAtrInterval());
+        strategy.setTrailingDropPct(dto.getTrailingDropPct());
         // 出场配置：传 null=不改；传空列表=清除；传非空列表=更新
         if (dto.getExitIndicatorConfigs() != null) {
             strategy.setExitIndicatorConfigs(dto.getExitIndicatorConfigs().isEmpty()
@@ -216,6 +218,7 @@ public class StrategyServiceImpl implements IStrategyService {
         copy.setTrailingActivationMultiplier(source.getTrailingActivationMultiplier());
         copy.setTrailingDistanceMultiplier(source.getTrailingDistanceMultiplier());
         copy.setAtrInterval(source.getAtrInterval());
+        copy.setTrailingDropPct(source.getTrailingDropPct());
 
         strategyMapper.insert(copy);
         log.info("策略复制成功: 源={} → 副本={} (id={})", source.getName(), copyName, copy.getId());
