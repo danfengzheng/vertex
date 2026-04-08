@@ -698,6 +698,16 @@ public class TradeExecutionService {
             return true;
         }
 
+        // 平仓订单不做滑点转限价：reduceOnly 合约平仓，或无信号价格的平仓单
+        // 始终保持 MARKET 单，确保立即成交，避免限价单未成交导致仓位无法平掉
+        if (order.isReduceOnly()
+                || order.getPrice() == null
+                || order.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            log.debug("[Slippage] Close order detected, skipping LIMIT conversion for {} {}",
+                    order.getSide(), order.getSymbol());
+            return true;
+        }
+
         BigDecimal currentPrice = paperTradingService.getCurrentPrice(
                 order.getExchange(), order.getSymbol());
         if (currentPrice == null) {
