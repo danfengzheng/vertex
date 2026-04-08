@@ -82,7 +82,7 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setTrailingDistanceMultiplier(dto.getTrailingDistanceMultiplier());
         strategy.setAtrInterval(dto.getAtrInterval());
         strategy.setTrailingDropPct(dto.getTrailingDropPct());
-        strategy.setDailyLossLimitPct(dto.getDailyLossLimitPct());
+        strategy.setPauseOnStopLoss(dto.getPauseOnStopLoss() != null && dto.getPauseOnStopLoss() ? 1 : 0);
         strategyMapper.insert(strategy);
         return strategy.getId();
     }
@@ -138,7 +138,13 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setTrailingDistanceMultiplier(dto.getTrailingDistanceMultiplier());
         strategy.setAtrInterval(dto.getAtrInterval());
         strategy.setTrailingDropPct(dto.getTrailingDropPct());
-        strategy.setDailyLossLimitPct(dto.getDailyLossLimitPct());
+        if (dto.getPauseOnStopLoss() != null) {
+            strategy.setPauseOnStopLoss(dto.getPauseOnStopLoss() ? 1 : 0);
+            // 关闭止损熔断时同步清除暂停状态，否则已在暂停期内的策略仍无法开仓
+            if (!dto.getPauseOnStopLoss()) {
+                strategy.setTradingPausedUntil(null);
+            }
+        }
         // 出场配置：传 null=不改；传空列表=清除；传非空列表=更新
         if (dto.getExitIndicatorConfigs() != null) {
             strategy.setExitIndicatorConfigs(dto.getExitIndicatorConfigs().isEmpty()
@@ -221,7 +227,7 @@ public class StrategyServiceImpl implements IStrategyService {
         copy.setTrailingDistanceMultiplier(source.getTrailingDistanceMultiplier());
         copy.setAtrInterval(source.getAtrInterval());
         copy.setTrailingDropPct(source.getTrailingDropPct());
-        copy.setDailyLossLimitPct(source.getDailyLossLimitPct());
+        copy.setPauseOnStopLoss(source.getPauseOnStopLoss());
         // tradingPausedUntil 不复制：副本是新策略，不继承暂停状态
 
         strategyMapper.insert(copy);

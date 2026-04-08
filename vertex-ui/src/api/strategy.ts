@@ -140,9 +140,9 @@ export interface StrategyVO {
   atrInterval?: KLineInterval;
   /** 峰值回撤止损百分比（如 5.0 = 5%），从峰值回撤超过此值时止损 */
   trailingDropPct?: number;
-  /** 日亏损限制百分比（如 5.0 = 5%），当日累计亏损超过此值时暂停交易 24 小时 */
-  dailyLossLimitPct?: number;
-  /** 交易暂停截止时间（UTC ISO字符串），非 null 表示当前处于日亏损熔断期 */
+  /** 止损熔断开关（1=启用），止损触发且亏损时暂停开仓 24 小时 */
+  pauseOnStopLoss?: number;
+  /** 交易暂停截止时间（UTC ISO字符串），非 null 表示当前处于止损熔断期 */
   tradingPausedUntil?: string | null;
   createTime: string;
   updateTime: string;
@@ -201,8 +201,8 @@ export interface StrategyCreateDTO {
   atrInterval?: KLineInterval;
   /** 峰值回撤止损百分比（如 5.0 = 5%） */
   trailingDropPct?: number;
-  /** 日亏损限制百分比（如 5.0 = 5%），当日累计亏损超过此值时暂停交易 24 小时 */
-  dailyLossLimitPct?: number;
+  /** 止损熔断开关（true=启用），止损触发且亏损时暂停开仓 24 小时 */
+  pauseOnStopLoss?: boolean;
 }
 
 /** 策略更新参数 */
@@ -242,8 +242,8 @@ export interface StrategyUpdateDTO {
   atrInterval?: KLineInterval;
   /** 峰值回撤止损百分比（如 5.0 = 5%） */
   trailingDropPct?: number;
-  /** 日亏损限制百分比（如 5.0 = 5%），当日累计亏损超过此值时暂停交易 24 小时，null=清除 */
-  dailyLossLimitPct?: number | null;
+  /** 止损熔断开关（true=启用，false=关闭） */
+  pauseOnStopLoss?: boolean;
   minSignalStrength?: number;
 }
 

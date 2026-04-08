@@ -121,7 +121,7 @@ public class TradeExecutionService {
         // 日亏损熔断：无持仓时的 BUY（开仓）被暂停拦截；持仓 SELL（平仓）不受限
         if (openPosition == null && signal.getSignalType() == SignalType.BUY
                 && isStrategyTradingPaused(strategy)) {
-            log.info("[DailyLoss] Strategy [{}] trading paused until {} UTC, skip BUY open",
+            log.info("[StopLossPause] Strategy [{}] trading paused until {} UTC, skip BUY open",
                     strategy.getName(), strategy.getTradingPausedUntil());
             return;
         }
@@ -170,7 +170,7 @@ public class TradeExecutionService {
             }
             // 日亏损熔断：平仓（Step 1）正常执行，开新仓（Step 2）被暂停拦截
             if (isStrategyTradingPaused(strategy)) {
-                log.info("[DailyLoss] Strategy [{}] trading paused until {} UTC, skip LONG open",
+                log.info("[StopLossPause] Strategy [{}] trading paused until {} UTC, skip LONG open",
                         strategy.getName(), strategy.getTradingPausedUntil());
                 return;
             }
@@ -202,7 +202,7 @@ public class TradeExecutionService {
             }
             // 日亏损熔断：平仓（Step 1）正常执行，开新仓（Step 2）被暂停拦截
             if (isStrategyTradingPaused(strategy)) {
-                log.info("[DailyLoss] Strategy [{}] trading paused until {} UTC, skip SHORT open",
+                log.info("[StopLossPause] Strategy [{}] trading paused until {} UTC, skip SHORT open",
                         strategy.getName(), strategy.getTradingPausedUntil());
                 return;
             }
@@ -1129,7 +1129,7 @@ public class TradeExecutionService {
             if (fresh == null || fresh.getTradingPausedUntil() == null) return false;
             return LocalDateTime.now(ZoneOffset.UTC).isBefore(fresh.getTradingPausedUntil());
         } catch (Exception e) {
-            log.warn("[DailyLoss] Failed to reload strategy {} for pause check, using cached value: {}",
+            log.warn("[StopLossPause] Failed to reload strategy {} for pause check, using cached value: {}",
                     strategy.getId(), e.getMessage());
             // 降级：使用传入对象的缓存值，保证不因 DB 异常阻塞交易
             if (strategy.getTradingPausedUntil() == null) return false;
@@ -1138,7 +1138,7 @@ public class TradeExecutionService {
     }
 
     /**
-     * 止损专用平仓入口：执行平仓后，仅当仓位实际亏损时检查日亏损熔断。
+     * 止损专用平仓入口：执行平仓后，若策略启用了止损熔断开关且仓位实际亏损，则触发 24h 暂停。
      * <p>
      * 仅应由止损机制调用（固定止损、ATR移动止损、峰值回撤止损），不应由信号出场、止盈、时间止损调用。
      * 移动止损在盈利区间触发（如追踪锁利）不会激活熔断。
@@ -1146,9 +1146,9 @@ public class TradeExecutionService {
      */
     public void executeStopLossClose(Position position) {
         executeClose(position);
-        // 仅当止损后仓位实际亏损时才检查日亏损熔断
+        // 仅当策略开启止损熔断 且 仓位实际亏损时触发暂停
         if (isPositionAtLoss(position)) {
-            checkAndApplyDailyLossLimit(position);
+            checkAndApplyStopLossPause(position);
         }
     }
 
@@ -1183,52 +1183,32 @@ public class TradeExecutionService {
     }
 
     /**
-     * 平仓后检查当日累计亏损是否触及熔断线。
+     * 止损平仓后触发熔断暂停。
      * <p>
-     * 仅由 {@link #executeStopLossClose} 调用，确保只在止损实际亏损时触发。
-     * 触发条件：dailyLossLimitPct 已配置 且 initialCapital > 0
-     *            且 当日已实现盈亏 / initialCapital <= -(dailyLossLimitPct/100)
-     * 触发动作：将 tradingPausedUntil 设置为 now+24h 并写入 DB，
-     *            下一根 K 线的信号执行时会自动检测并跳过开仓。
+     * 触发条件：策略启用了 pauseOnStopLoss 开关（=1）
+     * 触发动作：将 tradingPausedUntil 设置为 now+24h 并写入 DB，重启后仍有效。
      * </p>
      */
-    private void checkAndApplyDailyLossLimit(Position position) {
+    private void checkAndApplyStopLossPause(Position position) {
         if (position.getStrategyId() == null) return;
         try {
             Strategy strategy = strategyRefMapper.selectById(position.getStrategyId());
             if (strategy == null
-                    || strategy.getDailyLossLimitPct() == null
-                    || strategy.getDailyLossLimitPct().compareTo(BigDecimal.ZERO) <= 0) return;
-            if (strategy.getInitialCapital() == null
-                    || strategy.getInitialCapital().compareTo(BigDecimal.ZERO) <= 0) {
-                log.debug("[DailyLoss] strategy={} has no initialCapital, skipping daily loss check",
-                        strategy.getName());
+                    || strategy.getPauseOnStopLoss() == null
+                    || strategy.getPauseOnStopLoss() != 1) return;
+
+            // 已处于有效暂停期内则跳过（不重复写库）
+            if (strategy.getTradingPausedUntil() != null
+                    && LocalDateTime.now(ZoneOffset.UTC).isBefore(strategy.getTradingPausedUntil())) {
                 return;
             }
-
-            BigDecimal todayPnl = positionManagementService.calculateTodayRealizedPnl(
-                    position.getStrategyId(), position.getAccountId());
-            if (todayPnl.compareTo(BigDecimal.ZERO) >= 0) return; // 今日盈利，无需熔断
-
-            // threshold 为负值，如 initialCapital=10000, limitPct=5% → threshold=-500
-            BigDecimal threshold = strategy.getInitialCapital()
-                    .multiply(strategy.getDailyLossLimitPct())
-                    .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
-                    .negate();
-
-            if (todayPnl.compareTo(threshold) <= 0) {
-                // 亏损已超过限制，触发熔断
-                LocalDateTime pauseUntil = LocalDateTime.now(ZoneOffset.UTC).plusHours(24);
-                strategy.setTradingPausedUntil(pauseUntil);
-                strategyRefMapper.updateById(strategy);
-                log.warn("[DailyLoss] 熔断触发 strategy=[{}] todayPnl={} threshold={} ({} % of {})，" +
-                        "暂停交易至 {} UTC",
-                        strategy.getName(), todayPnl.setScale(4, RoundingMode.HALF_UP),
-                        threshold.setScale(4, RoundingMode.HALF_UP),
-                        strategy.getDailyLossLimitPct(), strategy.getInitialCapital(), pauseUntil);
-            }
+            LocalDateTime pauseUntil = LocalDateTime.now(ZoneOffset.UTC).plusHours(24);
+            strategy.setTradingPausedUntil(pauseUntil);
+            strategyRefMapper.updateById(strategy);
+            log.warn("[StopLossPause] 熔断触发 strategy=[{}] 止损亏损，暂停开仓至 {} UTC",
+                    strategy.getName(), pauseUntil);
         } catch (Exception e) {
-            log.error("[DailyLoss] Error checking daily loss limit for position {}: {}",
+            log.error("[StopLossPause] Error applying stop-loss pause for position {}: {}",
                     position.getId(), e.getMessage(), e);
         }
     }

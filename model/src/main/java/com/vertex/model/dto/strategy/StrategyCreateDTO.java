@@ -96,6 +96,6 @@ public class StrategyCreateDTO {
     /** 峰值回撤止损百分比（如 5.0 = 5%），从最高价(多)/最低价(空)回撤超过此值时止损，null=不启用 */
     private BigDecimal trailingDropPct;
 
-    /** 日亏损限制百分比（如 5.0 = 5%），当日累计亏损占 initialCapital 超过此值时暂停交易 24 小时，null=不启用 */
-    private BigDecimal dailyLossLimitPct;
+    /** 止损熔断开关（true=启用），止损触发且亏损时暂停开仓 24 小时 */
+    private Boolean pauseOnStopLoss;
 }
