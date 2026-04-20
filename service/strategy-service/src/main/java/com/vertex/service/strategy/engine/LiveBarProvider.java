@@ -55,9 +55,12 @@ public class LiveBarProvider implements BarProvider {
                 exchange, symbol, interval, null, triggerTime, querySize, false);
 
         // 过滤未收盘 bar
+        // 使用 !Boolean.FALSE.equals() 而非 Boolean.TRUE.equals()：
+        // 历史 K 线（RocksDB 旧数据）closed 字段可能为 null（早期序列化未写入该字段），
+        // null 应视为已收盘（历史数据必然已收盘），仅显式 closed=false 的实时推送 bar 才排除。
         if (properties.getEngine().isOnlyClosedKlines()) {
             klines = klines.stream()
-                    .filter(k -> Boolean.TRUE.equals(k.getClosed()))
+                    .filter(k -> !Boolean.FALSE.equals(k.getClosed()))
                     .toList();
         }
 

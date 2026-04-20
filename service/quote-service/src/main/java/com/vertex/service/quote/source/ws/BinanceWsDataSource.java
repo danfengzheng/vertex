@@ -14,16 +14,20 @@ import com.vertex.service.quote.aggregator.InMemoryKLineAggregator;
 import com.vertex.service.quote.converter.KLineConverter;
 import com.vertex.service.quote.handler.KLineFlushOnNextHandler;
 import com.vertex.service.quote.notify.CompositeNotifier;
+import com.vertex.service.quote.notify.KLineNotifyGate;
 import com.vertex.service.quote.source.QuoteDataSource;
+import com.vertex.service.quote.source.rest.KLineRestClient;
 import com.vertex.service.quote.store.KLineStore;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Executors;
@@ -49,6 +53,10 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
     private final KLineFlushOnNextHandler klineFlushOnNextHandler;
     /** 可选：注入后日 K 以下用 trade 流 + 内存聚合 */
     private final InMemoryKLineAggregator aggregator;
+    /** 重连后缺口补充所需的 REST 客户端列表 */
+    private final List<KLineRestClient> restClients;
+    /** WS 重连期间阻止策略收到不完整数据的通知门控 */
+    private final KLineNotifyGate notifyGate;
 
     /** 记录已订阅的主题及其 interval 映射（kline） */
     private final Map<String, KLineInterval> topicIntervalMap = new ConcurrentHashMap<>();
@@ -68,12 +76,20 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
     private final AtomicReference<ScheduledFuture<?>> pendingBatchRef = new AtomicReference<>();
     private static final long BATCH_DEBOUNCE_MS = 80;
 
+    /** 重连缺口补充专用单线程执行器，避免多次重连并发执行 backfill */
+    private final ExecutorService backfillExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "binance-reconnect-backfill");
+        t.setDaemon(true);
+        return t;
+    });
+
     public BinanceWsDataSource(ExchangeConfig config,
                                KLineConverter klineConverter,
                                KLineStore klineStore,
                                CompositeNotifier notifier,
                                KLineFlushOnNextHandler klineFlushOnNextHandler) {
-        this(config, klineConverter, klineStore, notifier, klineFlushOnNextHandler, null);
+        this(config, klineConverter, klineStore, notifier, klineFlushOnNextHandler,
+                null, List.of(), null);
     }
 
     public BinanceWsDataSource(ExchangeConfig config,
@@ -82,12 +98,26 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
                                CompositeNotifier notifier,
                                KLineFlushOnNextHandler klineFlushOnNextHandler,
                                InMemoryKLineAggregator aggregator) {
+        this(config, klineConverter, klineStore, notifier, klineFlushOnNextHandler,
+                aggregator, List.of(), null);
+    }
+
+    public BinanceWsDataSource(ExchangeConfig config,
+                               KLineConverter klineConverter,
+                               KLineStore klineStore,
+                               CompositeNotifier notifier,
+                               KLineFlushOnNextHandler klineFlushOnNextHandler,
+                               InMemoryKLineAggregator aggregator,
+                               List<KLineRestClient> restClients,
+                               KLineNotifyGate notifyGate) {
         super(config);
         this.klineConverter = klineConverter;
         this.klineStore = klineStore;
         this.notifier = notifier;
         this.klineFlushOnNextHandler = klineFlushOnNextHandler;
         this.aggregator = aggregator;
+        this.restClients = restClients != null ? restClients : List.of();
+        this.notifyGate = notifyGate;
     }
 
     @Override
@@ -107,6 +137,16 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
 
     @Override
     public void stop() {
+        backfillExecutor.shutdownNow();
+        try {
+            // 最多等待 5 秒，让正在执行的 backfill 任务有机会完成清理（forceRelease）。
+            // OkHttpClient 调用不响应 interrupt，因此不无限等待，超时后继续关闭流程。
+            if (!backfillExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.warn("[Binance] Backfill executor did not terminate in 5s, proceeding with disconnect");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         disconnect();
         topicIntervalMap.clear();
         topicSymbolMap.clear();
@@ -315,7 +355,45 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
         super.onConnectionReady();
         connected = true;
         log.info("[Binance] WebSocket data source connected");
-        resubscribeAll();
+
+        // 收集当前已有的订阅列表（初次连接时为空；重连时非空）
+        List<SymbolInterval> pairs = getSubscribedPairs();
+
+        if (!pairs.isEmpty()) {
+            // ── 重连场景 ──────────────────────────────────────────────────────────
+            // 1. 先对所有订阅开启门控，此后到来的 WS 通知将进入缓冲，策略不会被触发
+            //    gate() 返回版本号，传递给 backfill 任务，确保快速重连时旧任务不会
+            //    误释放新一轮的门控
+            Map<String, Long> gateVersions = new HashMap<>();
+            if (notifyGate != null) {
+                for (SymbolInterval si : pairs) {
+                    long version = notifyGate.gate(exchangeCode(), si.symbol(), si.interval());
+                    gateVersions.put(si.symbol() + ":" + si.interval().getCode(), version);
+                }
+                log.info("[Binance] Reconnected, gated {} symbol-interval pair(s) for backfill", pairs.size());
+            }
+
+            // 2. 重新订阅 WS → Binance 开始推送数据（推送进入缓冲）
+            resubscribeAll();
+
+            // 3. 异步补充缺口数据 → 完成后推送最新 bar → 释放门控排空缓冲
+            //    notifyGate 为 null 时无门控，无需补充，直接跳过
+            if (notifyGate != null) {
+                try {
+                    backfillExecutor.submit(() -> doReconnectBackfill(pairs, gateVersions));
+                } catch (java.util.concurrent.RejectedExecutionException e) {
+                    // stop() 后调用 start() 重启时，executor 已 shutdown，无法接受新任务。
+                    // 此时门控已开启但永远不会被释放 → 必须强制解锁，避免策略永久阻塞。
+                    log.warn("[Binance] Backfill executor is shutdown, force-releasing {} gate(s)", pairs.size());
+                    for (SymbolInterval si : pairs) {
+                        notifyGate.forceRelease(exchangeCode(), si.symbol(), si.interval());
+                    }
+                }
+            }
+        } else {
+            // ── 初次连接场景（订阅列表为空，warmup 由 StrategyStartupRecovery 负责）──
+            resubscribeAll();
+        }
     }
 
     @Override
@@ -329,6 +407,177 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
     private void resubscribeAll() {
         sendBatchSubscribe();
     }
+
+    // ==================== 重连缺口补充 ====================
+
+    /**
+     * 重连后异步执行的缺口数据补充流程：
+     * <ol>
+     *   <li>找到对应交易所的 REST 客户端</li>
+     *   <li>对每个 (symbol, interval) 查询 RocksDB 最新 bar，通过 REST 补充缺口</li>
+     *   <li>找到 REST 补充数据中最新的已收盘 bar，通知策略（触发以完整数据重算信号）</li>
+     *   <li>释放门控，排空门控期间缓冲的 WS bar（保持数据连续性）</li>
+     * </ol>
+     */
+    private void doReconnectBackfill(List<SymbolInterval> pairs, Map<String, Long> gateVersions) {
+        if (notifyGate == null) {
+            log.debug("[Binance] notifyGate not configured, skipping reconnect backfill");
+            return;
+        }
+
+        KLineRestClient restClient = restClients.stream()
+                .filter(c -> exchangeCode().equalsIgnoreCase(c.exchangeCode()))
+                .findFirst()
+                .orElse(null);
+
+        if (restClient == null) {
+            log.warn("[Binance] No REST client found, releasing all gates without backfill");
+            for (SymbolInterval si : pairs) {
+                notifyGate.forceRelease(exchangeCode(), si.symbol(), si.interval());
+            }
+            return;
+        }
+
+        for (SymbolInterval si : pairs) {
+            if (Thread.currentThread().isInterrupted()) {
+                log.warn("[Binance] Backfill interrupted, force-releasing remaining gates");
+                notifyGate.forceRelease(exchangeCode(), si.symbol(), si.interval());
+                continue;
+            }
+            long version = gateVersions.getOrDefault(
+                    si.symbol() + ":" + si.interval().getCode(), -1L);
+            try {
+                backfillOne(restClient, si.symbol(), si.interval(), version);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();  // 恢复中断标志
+                log.warn("[Binance] Backfill interrupted for {}:{}", si.symbol(), si.interval().getCode());
+                notifyGate.forceRelease(exchangeCode(), si.symbol(), si.interval());
+            } catch (Exception e) {
+                log.error("[Binance] Backfill failed for {}:{}: {}",
+                        si.symbol(), si.interval().getCode(), e.getMessage(), e);
+                // 出错时强制释放，避免门控永久锁住
+                notifyGate.forceRelease(exchangeCode(), si.symbol(), si.interval());
+            }
+        }
+    }
+
+    /**
+     * 补充单个 (symbol, interval) 的缺口数据并释放门控。
+     *
+     * @param version 门控版本号（由 gate() 返回），版本不匹配时 releaseAndDrain 会静默跳过
+     * @throws InterruptedException 当 backfillExecutor 被 shutdownNow 中断时抛出
+     */
+    private void backfillOne(KLineRestClient restClient, String symbol,
+                             KLineInterval interval, long version) throws InterruptedException {
+        String exchange = exchangeCode();
+
+        // 查询 RocksDB 中最新的 bar
+        KLine latestInStore = klineStore.getLatest(exchange, symbol, interval);
+        if (latestInStore == null) {
+            // Store 为空：warmup 负责初始化，此处仅释放门控
+            log.debug("[Binance] No existing data for {}:{}, releasing gate without backfill",
+                    symbol, interval.getCode());
+            notifyGate.releaseAndDrain(exchange, symbol, interval, version, null, notifier::notifyKLine);
+            return;
+        }
+
+        // closeTime 在旧历史数据中可能为 null，兜底用 openTime + interval 估算
+        Long rawCloseTime = latestInStore.getCloseTime();
+        long lastCloseTime = rawCloseTime != null
+                ? rawCloseTime
+                : latestInStore.getOpenTime() + interval.getMillis() - 1;
+
+        long now = System.currentTimeMillis();
+
+        // 若 Store 数据已是最新（缺口不超过 2 个周期），直接释放
+        if (lastCloseTime >= now - interval.getMillis() * 2) {
+            log.debug("[Binance] No gap for {}:{} (lastClose={} now={}), releasing gate",
+                    symbol, interval.getCode(), lastCloseTime, now);
+            notifyGate.releaseAndDrain(exchange, symbol, interval, version, null, notifier::notifyKLine);
+            return;
+        }
+
+        // ── 存在缺口：通过 REST 分批补充 ──────────────────────────────────
+        log.info("[Binance] Gap detected for {}:{} lastClose={} now={}, starting REST backfill",
+                symbol, interval.getCode(), lastCloseTime, now);
+
+        List<KLine> allFetched = new ArrayList<>();
+        long startTime = lastCloseTime + 1;
+        int batchLimit = 1000;
+
+        while (true) {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new InterruptedException("Backfill interrupted during REST fetch for " + symbol);
+            }
+            List<KLine> batch = restClient.fetchKLines(symbol, interval, startTime, null, batchLimit);
+            if (batch.isEmpty()) {
+                break;
+            }
+            allFetched.addAll(batch);
+            if (batch.size() < batchLimit) {
+                break; // REST 返回不足一批，说明已到最新
+            }
+            // 游标向后推进，防止 closeTime 为 null 导致 NPE
+            KLine lastInBatch = batch.get(batch.size() - 1);
+            Long batchCloseTime = lastInBatch.getCloseTime();
+            if (batchCloseTime == null) {
+                batchCloseTime = lastInBatch.getOpenTime() + interval.getMillis() - 1;
+            }
+            startTime = batchCloseTime + 1;
+        }
+
+        if (allFetched.isEmpty()) {
+            log.debug("[Binance] REST returned no bars for {}:{}, releasing gate",
+                    symbol, interval.getCode());
+            notifyGate.releaseAndDrain(exchange, symbol, interval, version, null, notifier::notifyKLine);
+            return;
+        }
+
+        // 写入 RocksDB（仅填缺口，不覆盖已有的 trade 聚合数据）
+        klineStore.saveBatchFillingGapsOnly(allFetched);
+        log.info("[Binance] Backfilled {} bar(s) for {}:{}", allFetched.size(), symbol, interval.getCode());
+
+        // 找到 REST 补充数据中最新的已收盘 bar，作为触发策略重算的锚点
+        KLine latestClosedBar = null;
+        for (int i = allFetched.size() - 1; i >= 0; i--) {
+            KLine k = allFetched.get(i);
+            if (Boolean.TRUE.equals(k.getClosed())) {
+                latestClosedBar = k;
+                break;
+            }
+        }
+
+        if (latestClosedBar != null) {
+            log.info("[Binance] Backfill done for {}:{}, latest closed bar openTime={}",
+                    symbol, interval.getCode(), latestClosedBar.getOpenTime());
+        }
+
+        // 释放门控：先推最新 bar 触发策略重算，再排空缓冲的 WS bar
+        notifyGate.releaseAndDrain(exchange, symbol, interval, version, latestClosedBar, notifier::notifyKLine);
+    }
+
+    /**
+     * 收集当前所有已订阅的 (symbol, interval) 对。
+     * kline 路径取自 topicIntervalMap；trade 路径取自 tradeSymbolIntervals。
+     */
+    private List<SymbolInterval> getSubscribedPairs() {
+        List<SymbolInterval> pairs = new ArrayList<>();
+        topicIntervalMap.forEach((topic, interval) -> {
+            String symbol = topicSymbolMap.get(topic);
+            if (symbol != null) {
+                pairs.add(new SymbolInterval(symbol, interval));
+            }
+        });
+        tradeSymbolIntervals.forEach((symbol, intervals) -> {
+            for (KLineInterval interval : intervals) {
+                pairs.add(new SymbolInterval(symbol, interval));
+            }
+        });
+        return pairs;
+    }
+
+    /** (symbol, interval) 元组，用于表示一个订阅对 */
+    private record SymbolInterval(String symbol, KLineInterval interval) {}
 
     /** 单次请求最多订阅的 stream 数，避免超过交易所限制 */
     private static final int BATCH_SUBSCRIBE_LIMIT = 200;
