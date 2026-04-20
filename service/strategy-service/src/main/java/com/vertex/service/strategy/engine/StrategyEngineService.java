@@ -222,9 +222,9 @@ public class StrategyEngineService {
         }
 
         // 跳过 NEUTRAL 信号，不写库不推送
-        if (signal.getSignalType() == SignalType.NEUTRAL) {
-            return;
-        }
+//        if (signal.getSignalType() == SignalType.NEUTRAL) {
+//            return;
+//        }
         if(signal.getPrice().compareTo(BigDecimal.ZERO) == 0){
             KLine latest = klineStore.getLatest(strategy.getExchange(), strategy.getSymbol(), strategy.getInterval());
             signal.setPrice(latest.getClose());
