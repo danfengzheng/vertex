@@ -50,6 +50,12 @@ public class PositionVO implements Serializable {
     private BigDecimal liquidationPrice;
     private BigDecimal fundingRate;
 
+    /**
+     * SuperTrend 动态止损价（null = 未启用或未触发首次更新）。
+     * 由 StrategyEngineService 在每根 K 线收盘后写入，用于前端展示动态止损价。
+     */
+    private BigDecimal superTrendStopLoss;
+
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

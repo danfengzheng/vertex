@@ -12,6 +12,7 @@ import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.service.quote.store.KLineStore;
 import com.vertex.service.strategy.config.StrategyProperties;
+import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.service.strategy.indicator.IndicatorResult;
 import com.vertex.service.strategy.mapper.SignalMapper;
 import com.vertex.service.strategy.mapper.StrategyMapper;
@@ -189,6 +190,32 @@ public class StrategyEngineService {
                 }
             } catch (Exception e) {
                 log.error("Trailing stop update failed for strategy [{}]: {}", strategy.getName(), e.getMessage(), e);
+            }
+        }
+
+        // ── SuperTrend 动态止损更新（每根K线收盘后触发，与信号方向无关）──────────
+        // 仅当策略配置了 superTrendSlOffsetPct 且指标结果中包含 SUPERTREND 数据时执行。
+        // 趋势与持仓方向一致时更新 position.superTrendStopLoss；反转时冻结，不更新。
+        if (tradeExecutionListener != null
+                && strategy.getSuperTrendSlOffsetPct() != null
+                && strategy.getSuperTrendSlOffsetPct().compareTo(BigDecimal.ZERO) > 0) {
+            try {
+                IndicatorResult superTrendResult = results.stream()
+                        .filter(r -> r.getType() == IndicatorType.SUPERTREND && r.getValues() != null)
+                        .findFirst()
+                        .orElse(null);
+                if (superTrendResult != null) {
+                    Double superTrendVal = superTrendResult.getValues().get("superTrend");
+                    Double trendVal      = superTrendResult.getValues().get("trend");
+                    // superTrendVal > 0 防御：若指标输出 0（数据不足/异常），不触发止损写入
+                    if (superTrendVal != null && superTrendVal > 0 && trendVal != null) {
+                        BigDecimal superTrendValue = BigDecimal.valueOf(superTrendVal);
+                        boolean trendUp = trendVal > 0;
+                        tradeExecutionListener.onSuperTrendStopUpdate(strategy, superTrendValue, trendUp);
+                    }
+                }
+            } catch (Exception e) {
+                log.error("[SuperTrend SL] Update failed for strategy [{}]: {}", strategy.getName(), e.getMessage(), e);
             }
         }
 

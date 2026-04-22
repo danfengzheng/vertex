@@ -1,6 +1,7 @@
 package com.vertex.service.order.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.vertex.model.entity.trading.*;
 import com.vertex.service.order.mapper.PositionMapper;
 import lombok.RequiredArgsConstructor;
@@ -405,10 +406,19 @@ public class PositionManagementService {
     }
 
     /**
-     * 更新持仓当前价格和未实现盈亏
+     * 更新持仓当前价格、未实现盈亏以及峰值价格（highestPrice / lowestPrice）。
+     * <p>
+     * 使用列级精确更新，只写入本方法关心的字段，
+     * 避免与 {@link #updateSuperTrendStopLoss} 等并发更新产生 {@code updateById} 全量覆盖竞态。
+     * </p>
      */
     public void updateCurrentPrice(Position position) {
-        positionMapper.updateById(position);
+        positionMapper.update(null, new LambdaUpdateWrapper<Position>()
+                .eq(Position::getId, position.getId())
+                .set(Position::getCurrentPrice,  position.getCurrentPrice())
+                .set(Position::getUnrealizedPnl, position.getUnrealizedPnl())
+                .set(Position::getHighestPrice,  position.getHighestPrice())
+                .set(Position::getLowestPrice,   position.getLowestPrice()));
     }
 
     /**
@@ -422,6 +432,29 @@ public class PositionManagementService {
     }
 
     /**
+     * 仅更新 open_bar_count（K线计数），避免全量 updateById 覆盖其他并发写入的字段。
+     */
+    public void updateOpenBarCount(Position position) {
+        positionMapper.update(null, new LambdaUpdateWrapper<Position>()
+                .eq(Position::getId, position.getId())
+                .set(Position::getOpenBarCount, position.getOpenBarCount()));
+    }
+
+    /**
+     * 精准更新 SuperTrend 动态止损价（仅更新 super_trend_stop_loss 列，不影响其他字段）。
+     * <p>
+     * 使用 {@code LambdaUpdateWrapper} 做列级更新，避免 {@code updateById} 全量覆盖
+     * 导致与 {@link #updateCurrentPrice} 等并发更新产生竞态写入。
+     * </p>
+     */
+    public void updateSuperTrendStopLoss(Position position) {
+        positionMapper.update(null, new LambdaUpdateWrapper<Position>()
+                .eq(Position::getId, position.getId())
+                .set(Position::getSuperTrendStopLoss, position.getSuperTrendStopLoss()));
+        log.debug("[SuperTrend SL] Persisted position={} superTrendStopLoss={}",
+                position.getId(), position.getSuperTrendStopLoss());
+    }
+
     /**
      * 计算策略所有已关闭仓位的累计已实现盈亏
      */

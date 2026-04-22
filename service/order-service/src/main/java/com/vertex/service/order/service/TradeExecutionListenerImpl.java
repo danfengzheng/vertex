@@ -9,6 +9,7 @@ import com.vertex.service.order.service.impl.TradeExecutionService;
 
 import java.math.BigDecimal;
 import java.util.List;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -54,6 +55,15 @@ public class TradeExecutionListenerImpl implements ITradeExecutionListener {
             tradeExecutionService.processExitConditions(strategy, exitSignalType, signalStrength);
         } catch (Exception e) {
             log.error("Exit condition check failed for strategy [{}]: {}", strategy.getName(), e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void onSuperTrendStopUpdate(Strategy strategy, BigDecimal superTrendValue, boolean trendUp) {
+        try {
+            tradeExecutionService.updateSuperTrendStopLoss(strategy, superTrendValue, trendUp);
+        } catch (Exception e) {
+            log.error("SuperTrend stop update failed for strategy [{}]: {}", strategy.getName(), e.getMessage(), e);
         }
     }
 }

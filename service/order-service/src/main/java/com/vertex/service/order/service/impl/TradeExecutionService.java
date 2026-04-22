@@ -924,6 +924,77 @@ public class TradeExecutionService {
         }
     }
 
+    // ─── SuperTrend 动态止损 ──────────────────────────────────────────
+
+    /**
+     * K线收盘后更新该策略所有 OPEN 持仓的 SuperTrend 动态止损价。
+     * <p>
+     * 由 {@link com.vertex.service.order.service.TradeExecutionListenerImpl#onSuperTrendStopUpdate} 触发。
+     * <ul>
+     *   <li>趋势方向与持仓方向一致时：计算并写入 position.superTrendStopLoss</li>
+     *   <li>趋势反转时：跳过，冻结当前止损值，等待其他止损机制或反向信号平仓</li>
+     * </ul>
+     * </p>
+     *
+     * @param strategy        策略（含 superTrendSlOffsetPct 配置）
+     * @param superTrendValue SuperTrend 当前值（上升=lowerBand；下降=upperBand）
+     * @param trendUp         true=上升趋势，false=下降趋势
+     */
+    public void updateSuperTrendStopLoss(Strategy strategy, BigDecimal superTrendValue, boolean trendUp) {
+        if (strategy.getSuperTrendSlOffsetPct() == null
+                || strategy.getSuperTrendSlOffsetPct().compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        List<Position> openPositions = positionManagementService.findOpenPositionsByStrategy(strategy.getId());
+        if (openPositions.isEmpty()) {
+            return;
+        }
+
+        BigDecimal pct = strategy.getSuperTrendSlOffsetPct()
+                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+
+        for (Position position : openPositions) {
+            try {
+                boolean isShort = position.getSide() == PositionSide.SHORT;
+
+                // 趋势反转时冻结止损，不更新
+                if (isShort && trendUp) {
+                    log.debug("[SuperTrend SL] Trend reversed (up) for SHORT position {}, skipping", position.getId());
+                    continue;
+                }
+                if (!isShort && !trendUp) {
+                    log.debug("[SuperTrend SL] Trend reversed (down) for LONG position {}, skipping", position.getId());
+                    continue;
+                }
+
+                // 多仓：支撑位下方偏移；空仓：阻力位上方偏移
+                BigDecimal stopLossPrice = isShort
+                        ? superTrendValue.multiply(BigDecimal.ONE.add(pct)).setScale(8, RoundingMode.HALF_UP)
+                        : superTrendValue.multiply(BigDecimal.ONE.subtract(pct)).setScale(8, RoundingMode.HALF_UP);
+
+                // 止损价只向有利方向移动（LONG 只升不降 / SHORT 只降不升），防止 ATR 扩张时止损倒退
+                BigDecimal existing = position.getSuperTrendStopLoss();
+                boolean shouldUpdate = existing == null
+                        || (isShort  && stopLossPrice.compareTo(existing) < 0)   // SHORT：止损价下降才更新
+                        || (!isShort && stopLossPrice.compareTo(existing) > 0);  // LONG ：止损价上升才更新
+                if (!shouldUpdate) {
+                    log.debug("[SuperTrend SL] Skipped (unfavorable move): position={} existing={} new={}",
+                            position.getId(), existing, stopLossPrice);
+                    continue;
+                }
+
+                position.setSuperTrendStopLoss(stopLossPrice);
+                positionManagementService.updateSuperTrendStopLoss(position);
+                log.info("[SuperTrend SL] Updated: strategy={} position={} side={} superTrend={} trendUp={} stopLoss={}",
+                        strategy.getName(), position.getId(), position.getSide(),
+                        superTrendValue, trendUp, stopLossPrice);
+            } catch (Exception e) {
+                log.error("[SuperTrend SL] Error updating position {}: {}", position.getId(), e.getMessage(), e);
+            }
+        }
+    }
+
     // ─── 出场条件处理 ─────────────────────────────────────────────────
 
     /**
@@ -950,10 +1021,10 @@ public class TradeExecutionService {
 
         for (Position pos : openPositions) {
             try {
-                // 1. 更新持仓K线计数
+                // 1. 更新持仓K线计数（列级精确写入，避免覆盖并发更新的 superTrendStopLoss 等字段）
                 int barCount = (pos.getOpenBarCount() != null ? pos.getOpenBarCount() : 0) + 1;
                 pos.setOpenBarCount(barCount);
-                positionManagementService.updateStopLossTakeProfit(pos);
+                positionManagementService.updateOpenBarCount(pos);
 
                 // 2. 时间止损：超过最大持仓K线数强制平仓
                 if (strategy.getMaxHoldingBars() != null && barCount >= strategy.getMaxHoldingBars()) {

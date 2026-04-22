@@ -79,6 +79,9 @@ public class StrategyUpdateDTO {
     /** 峰值回撤止损百分比（如 5.0 = 5%），从最高价(多)/最低价(空)回撤超过此值时止损，null=清除 */
     private BigDecimal trailingDropPct;
 
+    /** SuperTrend 动态止损偏移百分比（如 1.0 = 1%），null=清除/禁用 */
+    private BigDecimal superTrendSlOffsetPct;
+
     /** 止损熔断开关（true=启用，null/false=关闭） */
     private Boolean pauseOnStopLoss;
 }

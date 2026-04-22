@@ -73,8 +73,44 @@ public class StopLossTakeProfitTask {
 
                 boolean triggered = false;
                 boolean isShort = position.getSide() == PositionSide.SHORT;
+                // 标记本次循环是否已在峰值追踪块中提前持久化，避免末尾重复写入
+                boolean priceUpdated = false;
 
-                // ── 峰值回撤止损：更新最优价格并检查触发 ─────────────────────
+                // ── ① 固定止损（固定百分比 / ATR）── 优先级最高 ──────────────
+                // LONG：价格下跌触达止损（currentPrice <= stopLoss）
+                // SHORT：价格上涨触达止损（currentPrice >= stopLoss）
+                if (!triggered && position.getStopLoss() != null) {
+                    boolean slTriggered = isShort
+                            ? currentPrice.compareTo(position.getStopLoss()) >= 0
+                            : currentPrice.compareTo(position.getStopLoss()) <= 0;
+                    if (slTriggered) {
+                        log.info("[SL/TP Task] Stop loss triggered: {} {} side={} currentPrice={} stopLoss={}",
+                                position.getExchange(), position.getSymbol(), position.getSide(),
+                                currentPrice, position.getStopLoss());
+                        tradeExecutionService.executeStopLossClose(position);
+                        triggered = true;
+                    }
+                }
+
+                // ── ② SuperTrend 动态止损 ── 优先级次之 ──────────────────────
+                // 由 StrategyEngineService 在每根 K 线收盘后写入，null / <= 0 表示未启用。
+                // LONG：currentPrice <= superTrendStopLoss 触发
+                // SHORT：currentPrice >= superTrendStopLoss 触发
+                if (!triggered && position.getSuperTrendStopLoss() != null
+                        && position.getSuperTrendStopLoss().compareTo(BigDecimal.ZERO) > 0) {
+                    boolean stTriggered = isShort
+                            ? currentPrice.compareTo(position.getSuperTrendStopLoss()) >= 0
+                            : currentPrice.compareTo(position.getSuperTrendStopLoss()) <= 0;
+                    if (stTriggered) {
+                        log.info("[SL/TP Task] SuperTrend stop triggered: {} {} side={} currentPrice={} superTrendStopLoss={}",
+                                position.getExchange(), position.getSymbol(), position.getSide(),
+                                currentPrice, position.getSuperTrendStopLoss());
+                        tradeExecutionService.executeStopLossClose(position);
+                        triggered = true;
+                    }
+                }
+
+                // ── ③ 峰值回撤止损（trailingDropPct）── 优先级最低 ───────────
                 // 每次价格刷新时：多头追踪最高价，空头追踪最低价；
                 // 从峰值回撤超过 trailingDropPct% 时触发平仓。
                 if (!triggered && position.getStrategyId() != null) {
@@ -119,26 +155,11 @@ public class StopLossTakeProfitTask {
                                 triggered = true;
                             }
                         }
-                        // 峰值更新但未触发止损：持久化新峰值
+                        // 峰值更新但未触发止损：持久化新峰值（设置标记，避免末尾重复写入）
                         if (!triggered && peakUpdated) {
                             positionManagementService.updateCurrentPrice(position);
+                            priceUpdated = true;
                         }
-                    }
-                }
-
-                // 止损检查（区分方向）
-                // LONG：价格下跌触达止损（currentPrice <= stopLoss）
-                // SHORT：价格上涨触达止损（currentPrice >= stopLoss）
-                if (!triggered && position.getStopLoss() != null) {
-                    boolean slTriggered = isShort
-                            ? currentPrice.compareTo(position.getStopLoss()) >= 0
-                            : currentPrice.compareTo(position.getStopLoss()) <= 0;
-                    if (slTriggered) {
-                        log.info("[SL/TP Task] Stop loss triggered: {} {} side={} currentPrice={} stopLoss={}",
-                                position.getExchange(), position.getSymbol(), position.getSide(),
-                                currentPrice, position.getStopLoss());
-                        tradeExecutionService.executeStopLossClose(position);
-                        triggered = true;
                     }
                 }
 
@@ -158,8 +179,8 @@ public class StopLossTakeProfitTask {
                     }
                 }
 
-                // 未触发止盈止损 → 持久化价格更新到数据库
-                if (!triggered) {
+                // 未触发止盈止损，且峰值追踪块未提前写入 → 持久化价格更新到数据库
+                if (!triggered && !priceUpdated) {
                     positionManagementService.updateCurrentPrice(position);
                 }
 

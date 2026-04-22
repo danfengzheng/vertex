@@ -157,6 +157,16 @@ export const PositionMonitor = () => {
       ),
     },
     {
+      title: t('text.trading.superTrendStopLoss'),
+      dataIndex: 'superTrendStopLoss',
+      key: 'superTrendStopLoss',
+      width: 140,
+      render: (val: string) =>
+        val && parseFloat(val) > 0
+          ? <span style={{ color: '#fa8c16' }}>{parseFloat(val).toFixed(4)}</span>
+          : <span style={{ color: '#999' }}>-</span>,
+    },
+    {
       title: '杠杆',
       dataIndex: 'leverage',
       key: 'leverage',
@@ -305,7 +315,7 @@ export const PositionMonitor = () => {
         dataSource={positions}
         loading={loading}
         rowKey="id"
-        scroll={{ x: 1950 }}
+        scroll={{ x: 2090 }}
         pagination={{
           current: query.pageNum,
           pageSize: query.pageSize,

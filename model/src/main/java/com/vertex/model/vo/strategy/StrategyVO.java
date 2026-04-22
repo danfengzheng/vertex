@@ -75,6 +75,9 @@ public class StrategyVO implements Serializable {
     /** 峰值回撤止损百分比（如 5.0 = 5%），从最高价(多)/最低价(空)回撤超过此值时止损，null=不启用 */
     private BigDecimal trailingDropPct;
 
+    /** SuperTrend 动态止损偏移百分比（如 1.0 = 1%），需同时配置 SUPERTREND 指标，null/<=0=不启用 */
+    private BigDecimal superTrendSlOffsetPct;
+
     /** 止损熔断开关（1=启用，0/null=关闭） */
     private Integer pauseOnStopLoss;
 

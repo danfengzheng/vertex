@@ -73,6 +73,8 @@ export interface PositionVO {
   realizedPnl: string;
   stopLoss: string;
   takeProfit: string;
+  /** SuperTrend 动态止损价（null = 未启用）*/
+  superTrendStopLoss?: string;
   closePrice: string;
   closedAt: string;
   status: PositionStatus;

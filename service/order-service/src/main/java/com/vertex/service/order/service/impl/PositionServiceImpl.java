@@ -169,6 +169,7 @@ public class PositionServiceImpl implements IPositionService {
                 .marginType(position.getMarginType())
                 .liquidationPrice(position.getLiquidationPrice())
                 .fundingRate(position.getFundingRate())
+                .superTrendStopLoss(position.getSuperTrendStopLoss())
                 .createTime(position.getCreateTime())
                 .updateTime(position.getUpdateTime())
                 .build();

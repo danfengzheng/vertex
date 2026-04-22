@@ -140,6 +140,8 @@ export interface StrategyVO {
   atrInterval?: KLineInterval;
   /** 峰值回撤止损百分比（如 5.0 = 5%），从峰值回撤超过此值时止损 */
   trailingDropPct?: number;
+  /** SuperTrend 动态止损偏移百分比（如 1.0 = 1%）。需同时配置 SUPERTREND 指标才生效 */
+  superTrendSlOffsetPct?: number;
   /** 止损熔断开关（1=启用），止损触发且亏损时暂停开仓 24 小时 */
   pauseOnStopLoss?: number;
   /** 交易暂停截止时间（UTC ISO字符串），非 null 表示当前处于止损熔断期 */
@@ -201,6 +203,8 @@ export interface StrategyCreateDTO {
   atrInterval?: KLineInterval;
   /** 峰值回撤止损百分比（如 5.0 = 5%） */
   trailingDropPct?: number;
+  /** SuperTrend 动态止损偏移百分比（如 1.0 = 1%） */
+  superTrendSlOffsetPct?: number;
   /** 止损熔断开关（true=启用），止损触发且亏损时暂停开仓 24 小时 */
   pauseOnStopLoss?: boolean;
 }
@@ -242,6 +246,8 @@ export interface StrategyUpdateDTO {
   atrInterval?: KLineInterval;
   /** 峰值回撤止损百分比（如 5.0 = 5%） */
   trailingDropPct?: number;
+  /** SuperTrend 动态止损偏移百分比（如 1.0 = 1%） */
+  superTrendSlOffsetPct?: number;
   /** 止损熔断开关（true=启用，false=关闭） */
   pauseOnStopLoss?: boolean;
   minSignalStrength?: number;

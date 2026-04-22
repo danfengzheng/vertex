@@ -163,6 +163,20 @@ public class Strategy extends BaseEntity {
     private KLineInterval atrInterval;
 
     /**
+     * SuperTrend 动态止损偏移百分比（如 1.0 = 1%）。
+     * <p>
+     * 不为 null 且 > 0 时启用 SuperTrend 动态止损：
+     * <ul>
+     *   <li>持有多仓（LONG）：stopLoss = superTrend × (1 - offset%)</li>
+     *   <li>持有空仓（SHORT）：stopLoss = superTrend × (1 + offset%)</li>
+     * </ul>
+     * 止损优先级：固定百分比止损 &gt; SuperTrend 动态止损 &gt; 峰值回撤止损。
+     * </p>
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal superTrendSlOffsetPct;
+
+    /**
      * 止损熔断开关（1=启用，0/null=关闭）。
      * 启用后，任意一笔止损触发且实际亏损时，暂停该策略开仓 24 小时。
      */

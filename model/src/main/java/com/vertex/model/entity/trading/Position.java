@@ -113,4 +113,18 @@ public class Position extends BaseEntity {
      * LONG 持仓使用 highestPrice，此字段对多头无实际意义（开仓时会初始化为入场价）。
      */
     private BigDecimal lowestPrice;
+
+    /**
+     * SuperTrend 动态止损价。
+     * <p>
+     * 由 StrategyEngineService 在每次 K 线收盘评估时写入：
+     * <ul>
+     *   <li>LONG：superTrend × (1 - offsetPct%)，即支撑位下方</li>
+     *   <li>SHORT：superTrend × (1 + offsetPct%)，即阻力位上方</li>
+     * </ul>
+     * 趋势反转时冻结（不更新），等待其他止损机制或反向信号平仓。
+     * null 或 &lt;= 0 表示未启用，StopLossTakeProfitTask 将跳过此止损检查。
+     * </p>
+     */
+    private BigDecimal superTrendStopLoss;
 }

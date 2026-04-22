@@ -41,6 +41,23 @@ public interface ITradeExecutionListener {
     }
 
     /**
+     * K线收盘后 SuperTrend 动态止损价更新。
+     * <p>
+     * 仅当策略配置了 superTrendSlOffsetPct（&gt; 0）且指标结果中包含 SUPERTREND 数据时，
+     * 由 StrategyEngineService 在每次 K 线收盘评估后调用。
+     * 实现方需：① 查找该策略的 OPEN 持仓；② 校验趋势方向与持仓方向是否一致；
+     * ③ 一致时计算并写入 position.superTrendStopLoss；④ 趋势反转时跳过（冻结当前值）。
+     * </p>
+     *
+     * @param strategy        策略（含 superTrendSlOffsetPct 配置）
+     * @param superTrendValue SuperTrend 当前值（上升趋势=lowerBand，下降趋势=upperBand）
+     * @param trendUp         true=上升趋势，false=下降趋势
+     */
+    default void onSuperTrendStopUpdate(Strategy strategy, BigDecimal superTrendValue, boolean trendUp) {
+        // 默认空实现：未启用交易时无需处理
+    }
+
+    /**
      * 每根K线收盘后检查出场条件（时间止损 + 指标出场）。
      * <p>
      * 仅当 autoTrade=1 时由 StrategyEngineService 调用，与 K 线收盘事件联动。

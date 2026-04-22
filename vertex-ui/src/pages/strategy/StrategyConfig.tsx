@@ -673,6 +673,7 @@ export const StrategyConfig = () => {
         trailingDistanceMultiplier: record.trailingDistanceMultiplier,
         atrInterval: record.atrInterval ?? undefined,
         trailingDropPct: record.trailingDropPct,
+        superTrendSlOffsetPct: record.superTrendSlOffsetPct,
         pauseOnStopLoss: record.pauseOnStopLoss === 1,
       });
     }, 0);
@@ -734,7 +735,7 @@ export const StrategyConfig = () => {
           'feeRate', 'atrStopMultiplier', 'atrTakeProfitMultiplier',
           'initialStopMultiplier', 'breakevenActivationMultiplier',
           'trailingActivationMultiplier', 'trailingDistanceMultiplier',
-          'atrInterval', 'maxHoldingBars', 'trailingDropPct',
+          'atrInterval', 'maxHoldingBars', 'trailingDropPct', 'superTrendSlOffsetPct',
         ] as const;
         const payload: Record<string, unknown> = { id: editingId, ...values };
         CLEARABLE_FIELDS.forEach((key) => {
@@ -1617,6 +1618,14 @@ export const StrategyConfig = () => {
                   tooltip={t('text.trading.trailingDropPctTip')}
                 >
                   <InputNumber min={0.1} max={100} step={0.1} style={{ width: 140 }} addonAfter="%" placeholder="5.0" />
+                </Form.Item>
+
+                <Form.Item
+                  name="superTrendSlOffsetPct"
+                  label={t('text.trading.superTrendSlOffsetPct')}
+                  tooltip={t('text.trading.superTrendSlOffsetPctTip')}
+                >
+                  <InputNumber min={0} max={20} step={0.1} style={{ width: 140 }} addonAfter="%" placeholder="1.0" />
                 </Form.Item>
 
                 <Form.Item
