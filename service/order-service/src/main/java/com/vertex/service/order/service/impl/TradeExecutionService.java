@@ -21,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
@@ -71,6 +73,16 @@ public class TradeExecutionService {
      * 同一策略的委托必须串行执行，防止并发导致重复开仓。
      */
     private final ConcurrentHashMap<Long, ReentrantLock> strategyLocks = new ConcurrentHashMap<>();
+
+    /**
+     * 同一持仓的平仓必须串行执行，消除 StopLossTakeProfitTask（10s 轮询线程）与
+     * processExitConditions / executeSignal（K 线事件线程）并发触发时的双重平仓竞态。
+     * <p>
+     * 采用 tryLock 而非 lock：若另一线程正在关闭同一持仓，当前线程直接跳过，无需排队等待。
+     * 锁在持仓关闭后通过 remove(key, value) 清理，防止无限积累。
+     * </p>
+     */
+    private final ConcurrentHashMap<Long, ReentrantLock> positionCloseLocks = new ConcurrentHashMap<>();
 
     private ReentrantLock getLockForStrategy(Long strategyId) {
         return strategyLocks.computeIfAbsent(strategyId, id -> new ReentrantLock(true));
@@ -129,6 +141,39 @@ public class TradeExecutionService {
         OrderSide side = signal.getSignalType() == SignalType.BUY ? OrderSide.BUY : OrderSide.SELL;
         BigDecimal quantity;
         if (side == OrderSide.SELL && openPosition != null) {
+            if (strategy.getExecutionMode() == ExecutionMode.LIVE) {
+                // LIVE SPOT 平仓：获取与 executeClose()（Task 止损路径）相同的 per-position 锁，
+                // 完全消除两个路径之间的 TOCTOU 竞态。
+                // strategyLocks（本方法持有）→ positionCloseLocks（内部再获取），
+                // Task 路径只持有 positionCloseLocks，不涉及 strategyLocks，故无死锁风险。
+                ReentrantLock posLock = positionCloseLocks.computeIfAbsent(
+                        openPosition.getId(), id -> new ReentrantLock(true));
+                if (!posLock.tryLock()) {
+                    log.info("[Spot] Position {} is already being closed by stop-loss task, skipping SELL signal",
+                            openPosition.getId());
+                    return;
+                }
+                try {
+                    // 锁内二次确认：防止 Task 在我们拿锁前已完成关单
+                    if (!positionManagementService.isStillOpen(openPosition.getId())) {
+                        log.info("[Spot] Position {} already closed, skipping SELL signal close",
+                                openPosition.getId());
+                        return;
+                    }
+                    BigDecimal closeQty = openPosition.getQuantity();
+                    if (closeQty == null || closeQty.compareTo(BigDecimal.ZERO) <= 0) {
+                        log.warn("Strategy [{}] has invalid close quantity for LIVE SPOT SELL", strategy.getName());
+                        return;
+                    }
+                    // 在锁内提交订单，与 Task 的 executeCloseInternal() 完全串行
+                    submitOpenOrder(strategy, signal, side, closeQty, false, null);
+                } finally {
+                    posLock.unlock();
+                    positionCloseLocks.remove(openPosition.getId(), posLock);
+                }
+                return;
+            }
+            // PAPER 模式：handleSell() 内部通过 findOpenPosition(status=OPEN) 自动幂等（已关则返回 null）
             quantity = openPosition.getQuantity();
         } else {
             quantity = calculateBuyQuantity(strategy, signal);
@@ -223,10 +268,37 @@ public class TradeExecutionService {
      * LIVE SPOT：MARKET SELL 单
      * LIVE FUTURES LONG：SELL reduceOnly 单
      * LIVE FUTURES SHORT：BUY reduceOnly 单
+     *
+     * <p><b>并发安全设计：双重防护</b></p>
+     * <ol>
+     *   <li><b>应用层 per-position 锁</b>（本方法）：tryLock 方式，同一持仓同时只允许一个线程进入；
+     *       另一线程持锁时直接跳过，消除 {@code isStillOpen} 与实际平仓之间的 TOCTOU 窗口。</li>
+     *   <li><b>数据库层 CAS</b>（{@link PositionManagementService#closePosition}）：
+     *       {@code WHERE status=OPEN} 条件更新，即使两个线程均绕过应用层锁（如多节点部署），
+     *       也只有一个线程能成功写入，另一个因 rows=0 而放弃后续结算。</li>
+     * </ol>
      */
     public void executeClose(Position position) {
-        // 重新从数据库确认持仓仍为 OPEN，防止 StopLossTakeProfitTask 与 processExitConditions
-        // 并发触发时对同一持仓执行双重平仓
+        ReentrantLock lock = positionCloseLocks.computeIfAbsent(position.getId(), id -> new ReentrantLock(true));
+        if (!lock.tryLock()) {
+            log.info("[Close] Position {} is already being closed by another thread, skipping duplicate close",
+                    position.getId());
+            return;
+        }
+        try {
+            executeCloseInternal(position);
+        } finally {
+            lock.unlock();
+            // 持仓关闭后清理锁对象，remove(key, value) 仅在 value 匹配时移除，防止误删后续线程新建的锁
+            positionCloseLocks.remove(position.getId(), lock);
+        }
+    }
+
+    /**
+     * 平仓实际执行逻辑（在 per-position 锁保护下调用）。
+     */
+    private void executeCloseInternal(Position position) {
+        // 在锁保护下再次确认持仓仍为 OPEN（双重检验：应用层串行 + DB 层 CAS 兜底）
         if (!positionManagementService.isStillOpen(position.getId())) {
             log.info("[Close] Position {} is no longer OPEN, skipping duplicate close", position.getId());
             return;
@@ -1290,9 +1362,9 @@ public class TradeExecutionService {
             LocalDateTime pauseUntil = LocalDateTime.now(ZoneOffset.UTC).plusHours(24);
             // 列级更新：只写 tradingPausedUntil，避免 updateById 覆盖并发修改的其他字段（如 enabled）
             strategyRefMapper.update(null,
-                    new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<com.vertex.model.entity.strategy.Strategy>()
-                            .eq(com.vertex.model.entity.strategy.Strategy::getId, strategy.getId())
-                            .set(com.vertex.model.entity.strategy.Strategy::getTradingPausedUntil, pauseUntil));
+                    new LambdaUpdateWrapper<Strategy>()
+                            .eq(Strategy::getId, strategy.getId())
+                            .set(Strategy::getTradingPausedUntil, pauseUntil));
             log.warn("[StopLossPause] 熔断触发 strategy=[{}] 止损亏损，暂停开仓至 {} UTC",
                     strategy.getName(), pauseUntil);
         } catch (Exception e) {

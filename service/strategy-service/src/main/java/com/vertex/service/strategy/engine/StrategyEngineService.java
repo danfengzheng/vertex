@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 策略引擎服务（编排器）
@@ -61,6 +62,17 @@ public class StrategyEngineService {
 
     /** 节流：记录每个策略的上次执行时间戳（毫秒） */
     private final ConcurrentHashMap<Long, Long> lastEvalTimeMap = new ConcurrentHashMap<>();
+
+    /**
+     * 同一策略的 runStrategy 必须串行执行，防止以下并发场景：
+     * <ul>
+     *   <li>WebSocket 断线重连时同一 K 线 close 事件被触发两次（@Async 两个线程并发）</li>
+     *   <li>同策略配置了多周期指标，不同周期 close 事件同时触发</li>
+     * </ul>
+     * 两个线程若并发通过信号幂等 SELECT-COUNT 检查，会产生重复信号并触发双重交易。
+     * 采用 tryLock（非阻塞）：若另一线程正在执行，当前线程直接跳过本次评估。
+     */
+    private final ConcurrentHashMap<Long, ReentrantLock> strategyRunLocks = new ConcurrentHashMap<>();
 
     /**
      * 处理K线更新事件
@@ -138,6 +150,26 @@ public class StrategyEngineService {
      *                            设置此值可防止 @Async 延迟导致的窗口漂移。
      */
     private void runStrategy(Strategy strategy, Long triggeringKlineTime) {
+        // 应用层 per-strategy 锁：tryLock 方式，防止同一策略被并发评估产生重复信号与双重交易。
+        // 自动触发时（triggeringKlineTime != null）直接跳过；手动触发（null）也适用。
+        ReentrantLock runLock = strategyRunLocks.computeIfAbsent(strategy.getId(), id -> new ReentrantLock(true));
+        if (!runLock.tryLock()) {
+            log.debug("Strategy [{}] is already being evaluated by another thread, skipping concurrent trigger",
+                    strategy.getName());
+            return;
+        }
+        try {
+            runStrategyInternal(strategy, triggeringKlineTime);
+        } finally {
+            runLock.unlock();
+            // 手动触发结束后清理锁，防止长期积累；自动触发频繁执行的策略保留锁实例（复用成本低）
+            if (triggeringKlineTime == null) {
+                strategyRunLocks.remove(strategy.getId(), runLock);
+            }
+        }
+    }
+
+    private void runStrategyInternal(Strategy strategy, Long triggeringKlineTime) {
         List<StrategyIndicatorConfig> configs = parseConfigs(strategy);
         if (configs == null || configs.isEmpty()) {
             log.warn("Strategy [{}] has no indicator configs", strategy.getName());
@@ -252,9 +284,16 @@ public class StrategyEngineService {
 //        if (signal.getSignalType() == SignalType.NEUTRAL) {
 //            return;
 //        }
-        if(signal.getPrice().compareTo(BigDecimal.ZERO) == 0){
+        // 信号价格兜底：若指标未输出价格（null 或 0），回退到当前最新收盘价
+        // 双重判空：signal.getPrice() 可能为 null；klineStore.getLatest() / latest.getClose() 也可能为 null
+        if (signal.getPrice() == null || signal.getPrice().compareTo(BigDecimal.ZERO) == 0) {
             KLine latest = klineStore.getLatest(strategy.getExchange(), strategy.getSymbol(), strategy.getInterval());
-            signal.setPrice(latest.getClose());
+            if (latest != null && latest.getClose() != null) {
+                signal.setPrice(latest.getClose());
+            } else {
+                log.warn("Strategy [{}] cannot resolve signal price: no latest K-line data for {} {}",
+                        strategy.getName(), strategy.getExchange(), strategy.getSymbol());
+            }
         }
 
         // 幂等检查：同一策略同一K线时间相同信号类型只保存一次，

@@ -253,28 +253,56 @@ public class PositionManagementService {
     // ─── 手动平仓 ─────────────────────────────────────────────
 
     /**
-     * 手动平仓（支持 LONG / SHORT）
+     * 手动 / 自动平仓（支持 LONG / SHORT）。
      * SHORT P&L 方向取反：(entryPrice - closePrice) × qty
+     *
+     * <p><b>DB 层 CAS 防双重平仓</b>：UPDATE 附加 {@code WHERE status='OPEN'} 条件，
+     * 若另一线程已将状态改为 CLOSED，本次影响行数为 0，方法返回 {@code false} 并跳过后续结算，
+     * 作为应用层 per-position 锁（{@link TradeExecutionService#executeClose}）的兜底保障。</p>
+     *
+     * @return {@code true} 表示本线程成功完成平仓；{@code false} 表示已被并发线程抢先关闭，调用方应跳过后续逻辑
      */
-    public void closePosition(Position position, BigDecimal closePrice) {
+    public boolean closePosition(Position position, BigDecimal closePrice) {
         BigDecimal pnl;
         if (position.getSide() == PositionSide.SHORT) {
             pnl = position.getEntryPrice().subtract(closePrice).multiply(position.getQuantity());
         } else {
             pnl = closePrice.subtract(position.getEntryPrice()).multiply(position.getQuantity());
         }
+        BigDecimal newRealizedPnl = position.getRealizedPnl().add(pnl);
+        LocalDateTime closedAt = LocalDateTime.now(ZoneOffset.UTC);
 
+        // 原子 CAS：WHERE id=? AND status='OPEN'
+        // 确保数据库层只有一个线程能成功写入，防止并发双重结算
+        int rows = positionMapper.update(null, new LambdaUpdateWrapper<Position>()
+                .eq(Position::getId,     position.getId())
+                .eq(Position::getStatus, PositionStatus.OPEN)      // ← CAS 守卫：仅 OPEN 状态允许平仓
+                .set(Position::getQuantity,      BigDecimal.ZERO)
+                .set(Position::getCurrentPrice,  closePrice)
+                .set(Position::getClosePrice,    closePrice)
+                .set(Position::getClosedAt,      closedAt)
+                .set(Position::getRealizedPnl,   newRealizedPnl)
+                .set(Position::getUnrealizedPnl, BigDecimal.ZERO)
+                .set(Position::getStatus,        PositionStatus.CLOSED));
+
+        if (rows == 0) {
+            log.info("[Close] Position {} CAS failed – already closed by concurrent thread, skipping",
+                    position.getId());
+            return false;
+        }
+
+        // 同步更新内存对象，供 isPositionAtLoss() 等上层方法读取最新 realizedPnl / status
         position.setQuantity(BigDecimal.ZERO);
         position.setCurrentPrice(closePrice);
         position.setClosePrice(closePrice);
-        position.setClosedAt(LocalDateTime.now(ZoneOffset.UTC));
-        position.setRealizedPnl(position.getRealizedPnl().add(pnl));
+        position.setClosedAt(closedAt);
+        position.setRealizedPnl(newRealizedPnl);
         position.setUnrealizedPnl(BigDecimal.ZERO);
         position.setStatus(PositionStatus.CLOSED);
 
-        positionMapper.updateById(position);
         log.info("Position {} closed: {} {} closePrice={} pnl={}",
                 position.getSide(), position.getExchange(), position.getSymbol(), closePrice, pnl);
+        return true;
     }
 
     // ─── 止盈止损检查 ─────────────────────────────────────────
@@ -282,8 +310,19 @@ public class PositionManagementService {
     /**
      * 检查止盈止损（支持 LONG / SHORT）
      *
+     * <p><b>⚠️ 已废弃，请勿调用：</b></p>
+     * <ul>
+     *   <li>此方法直接调用 {@link #closePosition}（PAPER 式关单），不提交交易所平仓订单，
+     *       若用于 LIVE 持仓会造成 DB 标记 CLOSED 而交易所仓位仍开着的数据不一致。</li>
+     *   <li>当前 {@link com.vertex.service.order.task.StopLossTakeProfitTask} 已改为通过
+     *       {@link com.vertex.service.order.service.impl.TradeExecutionService#executeStopLossClose}
+     *       执行平仓，此方法为未被调用的历史遗留代码。</li>
+     * </ul>
+     *
      * @return 是否触发了止盈止损
+     * @deprecated 已由 TradeExecutionService.executeStopLossClose() 替代，请勿新增调用
      */
+    @Deprecated
     public boolean checkStopLossTakeProfit(Position position, BigDecimal currentPrice,
                                             BigDecimal stopLossPct, BigDecimal takeProfitPct) {
         if (position.getStatus() != PositionStatus.OPEN) {
