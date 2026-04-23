@@ -219,6 +219,7 @@
       "finalCapital": "最终资金",
       "equityCurve": "资金曲线",
       "tradeRecords": "交易记录",
+      "direction": "方向",
       "entryTime": "入场时间",
       "exitTime": "出场时间",
       "entryPrice": "入场价格",

@@ -219,6 +219,7 @@
       "finalCapital": "Final Capital",
       "equityCurve": "Equity Curve",
       "tradeRecords": "Trade Records",
+      "direction": "Direction",
       "entryTime": "Entry Time",
       "exitTime": "Exit Time",
       "entryPrice": "Entry Price",

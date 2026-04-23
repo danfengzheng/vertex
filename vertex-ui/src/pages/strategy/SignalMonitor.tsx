@@ -85,14 +85,13 @@ const QuickBacktestResult = ({
       render: (v: number | string) => formatTimestamp(v, 'YYYY-MM-DD HH:mm'),
     },
     {
-      title: t('text.strategy.signalType'),
-      key: 'direction',
+      title: t('text.strategy.direction'),
+      dataIndex: 'type',
+      key: 'type',
       width: 70,
-      render: (_: unknown, record: { entryPrice: string; exitPrice: string }) => {
-        const entry = parseFloat(record.entryPrice);
-        const exit = parseFloat(record.exitPrice);
-        return <Tag color={exit >= entry ? 'success' : 'error'}>{exit >= entry ? 'LONG' : 'LONG'}</Tag>;
-      },
+      render: (v: string) => (
+        <Tag color={v === 'LONG' ? 'success' : 'blue'}>{v ?? '-'}</Tag>
+      ),
     },
     {
       title: t('text.strategy.entryPrice'),

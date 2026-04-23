@@ -182,6 +182,15 @@ export const BacktestPanel = ({ strategyId, strategyName, visible, onClose }: Ba
       render: (v: number | string) => dayjs(Number(v)).format('YYYY-MM-DD HH:mm'),
     },
     {
+      title: t('text.strategy.direction'),
+      dataIndex: 'type',
+      key: 'type',
+      width: 70,
+      render: (v: string) => (
+        <Tag color={v === 'LONG' ? 'success' : 'blue'}>{v ?? '-'}</Tag>
+      ),
+    },
+    {
       title: t('text.strategy.entryPrice'),
       dataIndex: 'entryPrice',
       key: 'entryPrice',
