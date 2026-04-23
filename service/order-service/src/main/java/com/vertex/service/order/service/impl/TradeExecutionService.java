@@ -1251,14 +1251,18 @@ public class TradeExecutionService {
         if (position.getUnrealizedPnl() != null) {
             return position.getUnrealizedPnl().compareTo(BigDecimal.ZERO) < 0;
         }
-        // 兜底：止损价与入场价的方向关系
-        // LONG  SL < entryPrice → 亏损区; LONG  SL > entryPrice → 移动止损已锁利
-        // SHORT SL > entryPrice → 亏损区; SHORT SL < entryPrice → 移动止损已锁利
-        if (position.getEntryPrice() != null && position.getStopLoss() != null) {
+        // 兜底：用有效止损价与入场价的方向关系判断是否亏损
+        // LONG  SL < entryPrice → 亏损区; LONG  SL >= entryPrice → 移动止损/SuperTrend已锁利
+        // SHORT SL > entryPrice → 亏损区; SHORT SL <= entryPrice → 移动止损/SuperTrend已锁利
+        // 优先使用 superTrendStopLoss（仅配置了SuperTrend止损、没有固定SL时生效）
+        BigDecimal effectiveSl = position.getStopLoss() != null
+                ? position.getStopLoss()
+                : position.getSuperTrendStopLoss();
+        if (position.getEntryPrice() != null && effectiveSl != null) {
             boolean isShort = position.getSide() == PositionSide.SHORT;
             return isShort
-                    ? position.getStopLoss().compareTo(position.getEntryPrice()) > 0
-                    : position.getStopLoss().compareTo(position.getEntryPrice()) < 0;
+                    ? effectiveSl.compareTo(position.getEntryPrice()) > 0
+                    : effectiveSl.compareTo(position.getEntryPrice()) < 0;
         }
         return false; // 无法判断时保守处理：不触发熔断
     }
@@ -1284,8 +1288,11 @@ public class TradeExecutionService {
                 return;
             }
             LocalDateTime pauseUntil = LocalDateTime.now(ZoneOffset.UTC).plusHours(24);
-            strategy.setTradingPausedUntil(pauseUntil);
-            strategyRefMapper.updateById(strategy);
+            // 列级更新：只写 tradingPausedUntil，避免 updateById 覆盖并发修改的其他字段（如 enabled）
+            strategyRefMapper.update(null,
+                    new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<com.vertex.model.entity.strategy.Strategy>()
+                            .eq(com.vertex.model.entity.strategy.Strategy::getId, strategy.getId())
+                            .set(com.vertex.model.entity.strategy.Strategy::getTradingPausedUntil, pauseUntil));
             log.warn("[StopLossPause] 熔断触发 strategy=[{}] 止损亏损，暂停开仓至 {} UTC",
                     strategy.getName(), pauseUntil);
         } catch (Exception e) {

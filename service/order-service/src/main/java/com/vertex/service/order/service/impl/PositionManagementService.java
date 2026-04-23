@@ -422,10 +422,22 @@ public class PositionManagementService {
     }
 
     /**
-     * 更新持仓止盈止损价格
+     * 更新持仓止盈止损相关字段（列级精确写入）。
+     * <p>
+     * 只更新止损止盈价、止损阶段、极值追踪价、K线计数，
+     * 避免 {@code updateById} 全量覆盖并发写入的
+     * {@code superTrendStopLoss}、{@code currentPrice} 等字段。
+     * </p>
      */
     public void updateStopLossTakeProfit(Position position) {
-        positionMapper.updateById(position);
+        positionMapper.update(null, new LambdaUpdateWrapper<Position>()
+                .eq(Position::getId, position.getId())
+                .set(Position::getStopLoss,      position.getStopLoss())
+                .set(Position::getTakeProfit,     position.getTakeProfit())
+                .set(Position::getStopLossStage,  position.getStopLossStage())
+                .set(Position::getHighestPrice,   position.getHighestPrice())
+                .set(Position::getLowestPrice,    position.getLowestPrice())
+                .set(Position::getOpenBarCount,   position.getOpenBarCount()));
         log.info("SL/TP updated: {} {} stopLoss={} takeProfit={}",
                 position.getExchange(), position.getSymbol(),
                 position.getStopLoss(), position.getTakeProfit());
@@ -526,7 +538,15 @@ public class PositionManagementService {
         existing.setEntryPrice(newAvgPrice);
         existing.setCurrentPrice(order.getFilledPrice());
         updateUnrealizedPnl(existing);
-        positionMapper.updateById(existing);
+
+        // 列级精确更新：只写均价相关字段，避免 updateById 全量覆盖并发写入的
+        // superTrendStopLoss / stopLossStage / openBarCount 等字段
+        positionMapper.update(null, new LambdaUpdateWrapper<Position>()
+                .eq(Position::getId, existing.getId())
+                .set(Position::getQuantity,      existing.getQuantity())
+                .set(Position::getEntryPrice,    existing.getEntryPrice())
+                .set(Position::getCurrentPrice,  existing.getCurrentPrice())
+                .set(Position::getUnrealizedPnl, existing.getUnrealizedPnl()));
     }
 
     /**

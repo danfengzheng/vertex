@@ -418,11 +418,15 @@ public class StrategyEngineService {
             return false;
         }
         long now = System.currentTimeMillis();
-        Long lastTime = lastEvalTimeMap.get(strategyId);
-        if (lastTime != null && (now - lastTime) < minInterval) {
-            return true;
-        }
-        lastEvalTimeMap.put(strategyId, now);
-        return false;
+        // 使用 compute() 原子完成"读-判断-写"，避免并发线程同时通过节流检查
+        boolean[] throttled = {false};
+        lastEvalTimeMap.compute(strategyId, (k, lastTime) -> {
+            if (lastTime != null && (now - lastTime) < minInterval) {
+                throttled[0] = true;
+                return lastTime; // 不更新时间戳
+            }
+            return now; // 允许执行，更新时间戳
+        });
+        return throttled[0];
     }
 }

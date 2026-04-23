@@ -6,6 +6,7 @@ import com.vertex.common.core.exception.BizException;
 import com.vertex.model.dto.strategy.BacktestConfigDTO;
 import com.vertex.model.dto.strategy.StrategyIndicatorConfig;
 import com.vertex.model.entity.quote.KLine;
+import com.vertex.model.entity.strategy.IndicatorType;
 import com.vertex.model.entity.strategy.Signal;
 import com.vertex.model.entity.strategy.SignalType;
 import com.vertex.model.entity.strategy.Strategy;
@@ -199,6 +200,11 @@ public class BacktestService {
         boolean hasTrailingDrop = strategy.getTrailingDropPct() != null
                 && strategy.getTrailingDropPct().compareTo(BigDecimal.ZERO) > 0;
 
+        // SuperTrend 动态止损（superTrendSlOffsetPct > 0 时启用）
+        boolean hasSuperTrendSl = strategy.getSuperTrendSlOffsetPct() != null
+                && strategy.getSuperTrendSlOffsetPct().compareTo(BigDecimal.ZERO) > 0;
+        BigDecimal superTrendStopLossPrice = null; // 当前 SuperTrend 止损价，null=未初始化/已平仓
+
         // ── 止损熔断 ─────────────────────────────────────────────────────────────────
         // 开关启用时，止损（STOP_LOSS / TRAILING_DROP）触发且实际亏损即暂停开仓 24 小时。
         // 信号出场、止盈、时间止损、指标出场不触发，移动止损在盈利区间触发也不触发。
@@ -310,6 +316,7 @@ public class BacktestService {
                     highestPrice   = null;
                     peakPrice      = null;
                     openBarCount   = 0;
+                    superTrendStopLossPrice = null;
                     closedByStopOrTp = true;
                     // 止损/止盈当根 K 线权益以出场价结算
                     currentPrice = exitPrice;
@@ -324,6 +331,57 @@ public class BacktestService {
                                     strategy.getName(),
                                     profit.setScale(2, RoundingMode.HALF_UP),
                                     tradingPausedUntilMs);
+                        }
+                    }
+                }
+
+                // ── SuperTrend 动态止损检查（SL/TP 未触发时，优先于峰值回撤）────────────────
+                // 与实盘 StopLossTakeProfitTask 优先级一致：固定SL > SuperTrend > 峰值回撤
+                if (!closedByStopOrTp && hasSuperTrendSl && superTrendStopLossPrice != null
+                        && superTrendStopLossPrice.compareTo(BigDecimal.ZERO) > 0) {
+                    boolean stHit = isShortPos
+                            ? currentKline.getHigh() != null && currentKline.getHigh().compareTo(superTrendStopLossPrice) >= 0
+                            : currentKline.getLow()  != null && currentKline.getLow().compareTo(superTrendStopLossPrice)  <= 0;
+                    if (stHit) {
+                        BigDecimal exitPrice = superTrendStopLossPrice;
+                        BigDecimal exitVal   = position.multiply(exitPrice);
+                        BigDecimal fee       = exitVal.multiply(config.getFeeRate());
+                        BigDecimal pnl       = isShortPos
+                                ? position.multiply(entryPrice.subtract(exitPrice))
+                                : position.multiply(exitPrice.subtract(entryPrice));
+                        BigDecimal profit    = pnl.subtract(fee);
+                        BigDecimal profitPct = marginPaid.compareTo(BigDecimal.ZERO) > 0
+                                ? profit.divide(marginPaid, 6, RoundingMode.HALF_UP).multiply(new BigDecimal("100"))
+                                : BigDecimal.ZERO;
+                        trades.add(TradeRecord.builder()
+                                .entryTime(entryTime).exitTime(currentKline.getOpenTime())
+                                .type(isShortPos ? "SHORT" : "LONG")
+                                .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
+                                .exitPrice(exitPrice.setScale(8, RoundingMode.HALF_UP))
+                                .quantity(position.setScale(8, RoundingMode.HALF_UP))
+                                .profit(profit.setScale(2, RoundingMode.HALF_UP))
+                                .profitPercent(profitPct.setScale(2, RoundingMode.HALF_UP))
+                                .exitReason("SUPERTREND_STOP").build());
+                        capital      = capital.add(marginPaid).add(profit);
+                        marginPaid   = BigDecimal.ZERO; position = BigDecimal.ZERO;
+                        inPosition   = false; positionSide = null;
+                        stopLossPrice = null; takeProfitPrice = null;
+                        stopLossStage = null; highestPrice = null;
+                        peakPrice     = null; openBarCount  = 0;
+                        superTrendStopLossPrice = null;
+                        closedByStopOrTp = true;
+                        currentPrice = exitPrice;
+                        // 止损熔断：SuperTrend 止损触发且实际亏损时，暂停开仓 24 小时
+                        if (hasPauseOnStopLoss && profit.compareTo(BigDecimal.ZERO) < 0) {
+                            boolean notPaused = tradingPausedUntilMs <= 0
+                                    || currentKline.getOpenTime() >= tradingPausedUntilMs;
+                            if (notPaused) {
+                                tradingPausedUntilMs = currentKline.getOpenTime() + 24 * 3_600_000L;
+                                log.info("[StopLossPause] Backtest 熔断(SuperTrendSL): strategy={} 止损亏损={}, 暂停至 {}",
+                                        strategy.getName(),
+                                        profit.setScale(2, RoundingMode.HALF_UP),
+                                        tradingPausedUntilMs);
+                            }
                         }
                     }
                 }
@@ -375,6 +433,7 @@ public class BacktestService {
                         stopLossStage = null; highestPrice = null;
                         peakPrice    = null;
                         openBarCount = 0;
+                        superTrendStopLossPrice = null;
                         closedByStopOrTp = true;
                         currentPrice = dropExitPrice;
 
@@ -440,6 +499,7 @@ public class BacktestService {
                     highestPrice    = null;
                     peakPrice       = null;
                     openBarCount    = 0;
+                    superTrendStopLossPrice = null;
                     closedByStopOrTp = true; // 当根K线已平仓，阻止信号重新开仓
                 }
 
@@ -489,6 +549,7 @@ public class BacktestService {
                             highestPrice    = null;
                             peakPrice       = null;
                             openBarCount    = 0;
+                            superTrendStopLossPrice = null;
                             closedByStopOrTp = true; // 当根K线已平仓，阻止信号重新开仓
                         }
                     }
@@ -568,6 +629,7 @@ public class BacktestService {
                         inPosition = false; positionSide = null;
                         stopLossPrice = null; takeProfitPrice = null;
                         stopLossStage = null; highestPrice = null; peakPrice = null; openBarCount = 0;
+                        superTrendStopLossPrice = null;
                     }
                     // 无仓位 → 开多
                     if (!inPosition) toOpen = PositionSide.LONG;
@@ -598,6 +660,7 @@ public class BacktestService {
                         inPosition = false; positionSide = null;
                         stopLossPrice = null; takeProfitPrice = null;
                         stopLossStage = null; highestPrice = null; peakPrice = null; openBarCount = 0;
+                        superTrendStopLossPrice = null;
                     }
                     // 合约：无仓位 → 开空
                     if (isFutures && !inPosition) toOpen = PositionSide.SHORT;
@@ -779,6 +842,39 @@ public class BacktestService {
                                         : (stopLossPrice == null || newStop.compareTo(stopLossPrice) > 0);
                                 if (improved) stopLossPrice = newStop;
                             }
+                        }
+                    }
+                }
+            }
+
+            // ── SuperTrend 动态止损价更新（每根K线收盘后，下一根K线止损检查时生效）─────────
+            // 时序与实盘一致：K线N收盘 → 更新止损价 → K线N+1的High/Low检查触发
+            if (inPosition && hasSuperTrendSl) {
+                IndicatorResult stResult = results.stream()
+                        .filter(r -> r.getType() == IndicatorType.SUPERTREND && r.getValues() != null)
+                        .findFirst().orElse(null);
+                if (stResult != null) {
+                    Double superTrendVal = stResult.getValues().get("superTrend");
+                    Double trendVal      = stResult.getValues().get("trend");
+                    // superTrendVal > 0 防御：指标输出 0（数据不足/异常）时不更新
+                    if (superTrendVal != null && superTrendVal > 0 && trendVal != null) {
+                        boolean trendUp  = trendVal > 0;
+                        boolean isShortPos = positionSide == PositionSide.SHORT;
+                        // 趋势反转时冻结，不更新（与实盘 TradeExecutionService 一致）
+                        boolean trendMatchesPosition = (!isShortPos && trendUp) || (isShortPos && !trendUp);
+                        if (trendMatchesPosition) {
+                            BigDecimal pct = strategy.getSuperTrendSlOffsetPct()
+                                    .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+                            BigDecimal newStop = isShortPos
+                                    ? BigDecimal.valueOf(superTrendVal).multiply(BigDecimal.ONE.add(pct))
+                                            .setScale(8, RoundingMode.HALF_UP)
+                                    : BigDecimal.valueOf(superTrendVal).multiply(BigDecimal.ONE.subtract(pct))
+                                            .setScale(8, RoundingMode.HALF_UP);
+                            // 止损价只向有利方向移动（与实盘 TradeExecutionService 一致）
+                            boolean favorable = superTrendStopLossPrice == null
+                                    || (isShortPos  && newStop.compareTo(superTrendStopLossPrice) < 0)
+                                    || (!isShortPos && newStop.compareTo(superTrendStopLossPrice) > 0);
+                            if (favorable) superTrendStopLossPrice = newStop;
                         }
                     }
                 }
