@@ -333,6 +333,10 @@ public class StrategyEngineService {
         }
 
         // 信号通知（分发到所有已激活渠道，内部异常隔离）
+        // 跳过 NEUTRAL 信号，不推送
+        if (signal.getSignalType() == SignalType.NEUTRAL) {
+            return;
+        }
         compositeSignalNotifier.notifySignal(signal);
 
         log.info("Strategy [{}] generated signal: {} (strength: {}) for {} {}",
