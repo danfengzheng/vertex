@@ -84,6 +84,10 @@ export interface PositionVO {
   marginType?: MarginType;
   liquidationPrice?: string;
   fundingRate?: string;
+  /** 已触发的止盈阶段计数（0/1/2/3）；null/0=未触发 */
+  takeProfitStage?: number;
+  /** 持仓建立时原始数量，用于前端展示「累计平仓百分比 = (initialQuantity - quantity) / initialQuantity」 */
+  initialQuantity?: string;
   createTime: string;
   updateTime: string;
 }

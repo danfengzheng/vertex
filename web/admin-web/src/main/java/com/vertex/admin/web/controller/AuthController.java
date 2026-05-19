@@ -6,12 +6,15 @@ import com.vertex.api.notify.INotifyConfigService;
 import com.vertex.api.rolemenu.IRoleMenuService;
 import com.vertex.api.user.IUserService;
 import com.vertex.api.userrole.IUserRoleService;
+import com.vertex.api.usersetting.IUserSettingService;
 import com.vertex.common.core.context.UserContext;
 import com.vertex.model.dto.system.LoginDTO;
 import com.vertex.model.dto.system.NotifyConfigSaveDTO;
+import com.vertex.model.dto.system.UserSettingSaveDTO;
 import com.vertex.model.vo.system.LoginVO;
 import com.vertex.model.vo.system.MenuVO;
 import com.vertex.model.vo.system.NotifyConfigVO;
+import com.vertex.model.vo.system.UserSettingVO;
 import com.vertex.model.vo.system.UserVO;
 import com.vertex.web.response.Result;
 import io.swagger.v3.oas.annotations.Operation;
@@ -41,6 +44,7 @@ public class AuthController {
     private final IUserRoleService userRoleService;
     private final IRoleMenuService roleMenuService;
     private final INotifyConfigService notifyConfigService;
+    private final IUserSettingService userSettingService;
 
     @Operation(summary = "登录")
     @PostMapping("/login")
@@ -125,6 +129,27 @@ public class AuthController {
             return Result.fail(401, "未登录");
         }
         notifyConfigService.save(userId, "TELEGRAM", dto);
+        return Result.success(null);
+    }
+
+    @Operation(summary = "获取当前用户个人设置（最大使用资金等）")
+    @GetMapping("/user-setting")
+    public Result<UserSettingVO> getUserSetting() {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            return Result.fail(401, "未登录");
+        }
+        return Result.success(userSettingService.getByUserId(userId));
+    }
+
+    @Operation(summary = "保存当前用户个人设置")
+    @PutMapping("/user-setting")
+    public Result<Void> saveUserSetting(@RequestBody UserSettingSaveDTO dto) {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            return Result.fail(401, "未登录");
+        }
+        userSettingService.save(userId, dto);
         return Result.success(null);
     }
 }

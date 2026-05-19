@@ -63,6 +63,16 @@ public class StrategyVO implements Serializable {
     /** ATR 止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
     private BigDecimal atrTakeProfitMultiplier;
 
+    // ─── 分阶段止盈配置（固定 3 档；size1>0 即启用，与单级 TP 互斥） ─────
+    private BigDecimal takeProfitPct1;
+    private BigDecimal takeProfitSize1;
+    private BigDecimal takeProfitPct2;
+    private BigDecimal takeProfitSize2;
+    private BigDecimal takeProfitPct3;
+    private BigDecimal takeProfitSize3;
+    /** 触发指定档后将止损上移到入场价（保本退出），取值 1/2/3；0/null=不启用 */
+    private Integer moveStopToBreakevenAfterStage;
+
     // ─── 移动ATR止损配置 ──────────────────────────────
     private BigDecimal initialStopMultiplier;
     private BigDecimal breakevenActivationMultiplier;

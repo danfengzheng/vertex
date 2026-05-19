@@ -2,8 +2,11 @@ package com.vertex.service.order.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.entity.trading.*;
+import com.vertex.service.order.mapper.OrderMapper;
 import com.vertex.service.order.mapper.PositionMapper;
+import com.vertex.service.order.mapper.StrategyRefMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +30,8 @@ import java.util.List;
 public class PositionManagementService {
 
     private final PositionMapper positionMapper;
+    private final OrderMapper orderMapper;
+    private final StrategyRefMapper strategyRefMapper;
 
     // ─── 核心入口 ─────────────────────────────────────────────
 
@@ -161,6 +166,10 @@ public class PositionManagementService {
             positionMapper.updateById(existing);
             log.info("[Futures] LONG reduced: {} {} remainQty={} netPnl={}",
                     order.getExchange(), order.getSymbol(), existing.getQuantity(), pnl);
+            // 分阶段止盈：减仓单成交后推进 stage（CAS 防失序）
+            if (order.getTakeProfitStage() != null && order.getTakeProfitStage() > 0) {
+                advanceTakeProfitStage(existing.getId(), order.getTakeProfitStage());
+            }
         }
     }
 
@@ -193,6 +202,10 @@ public class PositionManagementService {
             positionMapper.updateById(existing);
             log.info("[Futures] SHORT reduced: {} {} remainQty={} netPnl={}",
                     order.getExchange(), order.getSymbol(), existing.getQuantity(), pnl);
+            // 分阶段止盈：减仓单成交后推进 stage（CAS 防失序）
+            if (order.getTakeProfitStage() != null && order.getTakeProfitStage() > 0) {
+                advanceTakeProfitStage(existing.getId(), order.getTakeProfitStage());
+            }
         }
     }
 
@@ -247,6 +260,10 @@ public class PositionManagementService {
             positionMapper.updateById(existing);
             log.info("Position reduced: {} {} remainQty={} grossPnl={} fee={} netPnl={}",
                     order.getExchange(), order.getSymbol(), existing.getQuantity(), grossPnl, fee, pnl);
+            // 分阶段止盈：现货部分卖出（SELL 数量 < 持仓）成交后推进 stage
+            if (order.getTakeProfitStage() != null && order.getTakeProfitStage() > 0) {
+                advanceTakeProfitStage(existing.getId(), order.getTakeProfitStage());
+            }
         }
     }
 
@@ -445,6 +462,143 @@ public class PositionManagementService {
     }
 
     /**
+     * 读取持仓（含已关闭），供分阶段止盈在锁内复查 stage 用。
+     */
+    public Position getById(Long positionId) {
+        return positionMapper.selectById(positionId);
+    }
+
+    /**
+     * 读取持仓当前的 takeProfitStage（DB 视角）。
+     */
+    public Integer getTakeProfitStage(Long positionId) {
+        Position fresh = positionMapper.selectById(positionId);
+        return fresh == null ? null : fresh.getTakeProfitStage();
+    }
+
+    /**
+     * 是否存在该持仓未结算的减仓订单（SUBMITTED / PARTIALLY_FILLED）。
+     * 用于分阶段止盈和全平的 inflight 防重：
+     * 若上一档/上一笔平仓订单还在路上，本轮跳过避免重复下单。
+     */
+    public boolean hasInflightReduceOrder(Position position) {
+        MarketType mt = position.getMarketType();
+        boolean isFutures = mt != null && mt.isFutures();
+        OrderSide reduceSide = (isFutures && position.getSide() == PositionSide.SHORT)
+                ? OrderSide.BUY : OrderSide.SELL;
+        Long count = orderMapper.selectCount(new LambdaQueryWrapper<Order>()
+                .eq(Order::getStrategyId, position.getStrategyId())
+                .eq(Order::getExchange,  position.getExchange())
+                .eq(Order::getSymbol,    position.getSymbol())
+                .eq(Order::getSide,      reduceSide)
+                .in(Order::getStatus,
+                        OrderStatus.SUBMITTED, OrderStatus.PARTIALLY_FILLED));
+        return count != null && count > 0;
+    }
+
+    /**
+     * 分阶段止盈 PAPER 路径的部分减仓。
+     * <p>
+     * 仅在 PAPER 模式下直接调用：写减仓量、累加 realizedPnl、推进 takeProfitStage（CAS）、
+     * 同步更新 takeProfit 字段为下一档触发价（runner 模式 / 末档已扫尾时写 null）。
+     * LIVE 模式则通过 reduceOnly 单走 fill 回调（{@link #updatePosition(Order)} 的减仓分支）。
+     * </p>
+     */
+    public void reducePosition(Position position, BigDecimal closeQty,
+                                BigDecimal closePrice, int targetStage) {
+        BigDecimal pnl;
+        if (position.getSide() == PositionSide.SHORT) {
+            pnl = position.getEntryPrice().subtract(closePrice).multiply(closeQty);
+        } else {
+            pnl = closePrice.subtract(position.getEntryPrice()).multiply(closeQty);
+        }
+        BigDecimal newRealizedPnl = position.getRealizedPnl() == null
+                ? pnl : position.getRealizedPnl().add(pnl);
+        BigDecimal remain = position.getQuantity().subtract(closeQty);
+        BigDecimal nextTakeProfit = computeNextTakeProfit(position, targetStage);
+
+        int rows = positionMapper.update(null, new LambdaUpdateWrapper<Position>()
+                .eq(Position::getId, position.getId())
+                .eq(Position::getStatus, PositionStatus.OPEN)
+                .eq(Position::getTakeProfitStage, targetStage - 1)
+                .set(Position::getQuantity,        remain)
+                .set(Position::getCurrentPrice,    closePrice)
+                .set(Position::getRealizedPnl,     newRealizedPnl)
+                .set(Position::getTakeProfitStage, targetStage)
+                .set(Position::getTakeProfit,      nextTakeProfit));
+        if (rows == 0) {
+            log.info("[PartialClose PAPER] CAS failed for position {} stage {} (already advanced?), skip",
+                    position.getId(), targetStage);
+            return;
+        }
+
+        position.setQuantity(remain);
+        position.setCurrentPrice(closePrice);
+        position.setRealizedPnl(newRealizedPnl);
+        position.setTakeProfitStage(targetStage);
+        position.setTakeProfit(nextTakeProfit);
+        updateUnrealizedPnl(position);
+
+        log.info("[PartialClose PAPER] position={} stage={} closeQty={} closePrice={} pnl={} remain={} nextTp={}",
+                position.getId(), targetStage, closeQty, closePrice, pnl, remain, nextTakeProfit);
+    }
+
+    /**
+     * 推进持仓的 takeProfitStage（在 LIVE reduceOnly 单成交后调用），
+     * 同时把 takeProfit 字段同步更新为下一档触发价（或末档 runner 模式时写 null）。
+     * 使用 CAS（WHERE take_profit_stage = targetStage - 1）防止 fill 回调失序。
+     */
+    public void advanceTakeProfitStage(Long positionId, int targetStage) {
+        Position fresh = positionMapper.selectById(positionId);
+        if (fresh == null) return;
+        BigDecimal nextTakeProfit = computeNextTakeProfit(fresh, targetStage);
+        int rows = positionMapper.update(null, new LambdaUpdateWrapper<Position>()
+                .eq(Position::getId, positionId)
+                .eq(Position::getTakeProfitStage, targetStage - 1)
+                .set(Position::getTakeProfitStage, targetStage)
+                .set(Position::getTakeProfit,      nextTakeProfit));
+        if (rows == 0) {
+            log.info("[Staged TP] advanceTakeProfitStage CAS failed: position={} target={} (likely already advanced)",
+                    positionId, targetStage);
+        } else {
+            log.info("[Staged TP] position={} stage advanced to {} nextTp={}",
+                    positionId, targetStage, nextTakeProfit);
+        }
+    }
+
+    /**
+     * 计算分阶段止盈推进到 newStage 之后，下一档（newStage+1）的触发价。
+     * <ul>
+     *   <li>仍有后续档：返回基于入场价计算的下一档 trigger（LONG: entry×(1+pct%)，SHORT: entry×(1-pct%)）。</li>
+     *   <li>已是最后已配置档：返回 null（runner 模式或全平后，DB 中 takeProfit 字段清空）。</li>
+     * </ul>
+     */
+    private BigDecimal computeNextTakeProfit(Position position, int newStage) {
+        if (position.getStrategyId() == null) return null;
+        Strategy s = strategyRefMapper.selectById(position.getStrategyId());
+        if (s == null) return null;
+        BigDecimal nextPct;
+        switch (newStage) {
+            case 1 -> nextPct = isPositive(s.getTakeProfitSize2()) ? s.getTakeProfitPct2() : null;
+            case 2 -> nextPct = isPositive(s.getTakeProfitSize3()) ? s.getTakeProfitPct3() : null;
+            default -> nextPct = null; // newStage >= 3 → 无后续档
+        }
+        if (nextPct == null || nextPct.compareTo(BigDecimal.ZERO) <= 0) return null;
+        BigDecimal entry = position.getEntryPrice();
+        if (entry == null) return null;
+        BigDecimal pct = nextPct.divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+        boolean isShort = position.getSide() == PositionSide.SHORT;
+        BigDecimal next = isShort
+                ? entry.multiply(BigDecimal.ONE.subtract(pct))
+                : entry.multiply(BigDecimal.ONE.add(pct));
+        return next.setScale(8, RoundingMode.HALF_UP);
+    }
+
+    private static boolean isPositive(BigDecimal v) {
+        return v != null && v.compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    /**
      * 更新持仓当前价格、未实现盈亏以及峰值价格（highestPrice / lowestPrice）。
      * <p>
      * 使用列级精确更新，只写入本方法关心的字段，
@@ -471,15 +625,18 @@ public class PositionManagementService {
     public void updateStopLossTakeProfit(Position position) {
         positionMapper.update(null, new LambdaUpdateWrapper<Position>()
                 .eq(Position::getId, position.getId())
-                .set(Position::getStopLoss,      position.getStopLoss())
-                .set(Position::getTakeProfit,     position.getTakeProfit())
-                .set(Position::getStopLossStage,  position.getStopLossStage())
-                .set(Position::getHighestPrice,   position.getHighestPrice())
-                .set(Position::getLowestPrice,    position.getLowestPrice())
-                .set(Position::getOpenBarCount,   position.getOpenBarCount()));
-        log.info("SL/TP updated: {} {} stopLoss={} takeProfit={}",
+                .set(Position::getStopLoss,        position.getStopLoss())
+                .set(Position::getTakeProfit,      position.getTakeProfit())
+                .set(Position::getStopLossStage,   position.getStopLossStage())
+                .set(Position::getHighestPrice,    position.getHighestPrice())
+                .set(Position::getLowestPrice,     position.getLowestPrice())
+                .set(Position::getOpenBarCount,    position.getOpenBarCount())
+                .set(Position::getTakeProfitStage, position.getTakeProfitStage())
+                .set(Position::getInitialQuantity, position.getInitialQuantity()));
+        log.info("SL/TP updated: {} {} stopLoss={} takeProfit={} stage={} initialQty={}",
                 position.getExchange(), position.getSymbol(),
-                position.getStopLoss(), position.getTakeProfit());
+                position.getStopLoss(), position.getTakeProfit(),
+                position.getTakeProfitStage(), position.getInitialQuantity());
     }
 
     /**
@@ -549,6 +706,9 @@ public class PositionManagementService {
         position.setEntryPrice(order.getFilledPrice());
         position.setCurrentPrice(order.getFilledPrice());
         position.setUnrealizedPnl(BigDecimal.ZERO);
+        // 分阶段止盈基准量：记录开仓时的原始数量，作为各档平仓量分母
+        position.setInitialQuantity(order.getFilledQuantity());
+        position.setTakeProfitStage(0);
 
         // 合约手续费以报价资产（USDT）计量，不从数量扣减。
         // 开仓手续费记入初始已实现亏损，使 realizedPnl 从一开始就反映真实成本。
@@ -576,16 +736,22 @@ public class PositionManagementService {
         existing.setQuantity(totalQty);
         existing.setEntryPrice(newAvgPrice);
         existing.setCurrentPrice(order.getFilledPrice());
+        // 加仓时重置分阶段止盈基准：initialQuantity 取新合计量，takeProfitStage 清零；
+        // 后续 setStopLossTakeProfit 会基于新均价重新计算 TP1 触发价。
+        existing.setInitialQuantity(totalQty);
+        existing.setTakeProfitStage(0);
         updateUnrealizedPnl(existing);
 
         // 列级精确更新：只写均价相关字段，避免 updateById 全量覆盖并发写入的
         // superTrendStopLoss / stopLossStage / openBarCount 等字段
         positionMapper.update(null, new LambdaUpdateWrapper<Position>()
                 .eq(Position::getId, existing.getId())
-                .set(Position::getQuantity,      existing.getQuantity())
-                .set(Position::getEntryPrice,    existing.getEntryPrice())
-                .set(Position::getCurrentPrice,  existing.getCurrentPrice())
-                .set(Position::getUnrealizedPnl, existing.getUnrealizedPnl()));
+                .set(Position::getQuantity,        existing.getQuantity())
+                .set(Position::getEntryPrice,      existing.getEntryPrice())
+                .set(Position::getCurrentPrice,    existing.getCurrentPrice())
+                .set(Position::getUnrealizedPnl,   existing.getUnrealizedPnl())
+                .set(Position::getInitialQuantity, existing.getInitialQuantity())
+                .set(Position::getTakeProfitStage, existing.getTakeProfitStage()));
     }
 
     /**

@@ -121,6 +121,42 @@ public class Strategy extends BaseEntity {
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal atrTakeProfitMultiplier;
 
+    // ─── 分阶段止盈配置（固定 3 档；启用后与 takeProfitPct / atrTakeProfitMultiplier 互斥） ──
+    /**
+     * 分阶段止盈：第 1 档触发价百分比（相对入场价，多头 +X% / 空头 -X%）。
+     * size1 > 0 即视为启用分阶段止盈，此时 takeProfitPct 与 atrTakeProfitMultiplier 被忽略。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal takeProfitPct1;
+
+    /** 分阶段止盈：第 1 档平仓比例（占 initialQuantity 的百分比，0-100；为 0/null 即未启用分阶段）。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal takeProfitSize1;
+
+    /** 分阶段止盈：第 2 档触发价百分比；null/0 = 未配置该档（仅 TP1）。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal takeProfitPct2;
+
+    /** 分阶段止盈：第 2 档平仓比例；null/0 = 未配置该档。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal takeProfitSize2;
+
+    /** 分阶段止盈：第 3 档触发价百分比；null/0 = 未配置该档。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal takeProfitPct3;
+
+    /** 分阶段止盈：第 3 档平仓比例；null/0 = 未配置该档。 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal takeProfitSize3;
+
+    /**
+     * 分阶段止盈联动：触发指定档后将止损上移到入场价（保本退出）。
+     * 取值 1/2/3 表示触发该档后保本，0 / null = 不启用。
+     * 与移动 ATR 止损（initialStopMultiplier 等四参数）互斥，需在配置层校验。
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Integer moveStopToBreakevenAfterStage;
+
     // ─── 移动ATR止损配置（四参数联动，任一不为null时启用移动止损） ──────
 
     /** 阶段1：初始止损倍数（如 3.5），开仓时 stopLoss = entry ∓ ATR × 此值 */

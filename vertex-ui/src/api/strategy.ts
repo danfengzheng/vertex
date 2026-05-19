@@ -146,6 +146,20 @@ export interface StrategyVO {
   pauseOnStopLoss?: number;
   /** 交易暂停截止时间（UTC ISO字符串），非 null 表示当前处于止损熔断期 */
   tradingPausedUntil?: string | null;
+  /** 分阶段止盈：第1档触发价百分比 */
+  takeProfitPct1?: number;
+  /** 分阶段止盈：第1档平仓比例（0-100）。>0 即启用，启用后单级止盈被忽略 */
+  takeProfitSize1?: number;
+  /** 分阶段止盈：第2档触发价百分比（可选） */
+  takeProfitPct2?: number;
+  /** 分阶段止盈：第2档平仓比例（可选） */
+  takeProfitSize2?: number;
+  /** 分阶段止盈：第3档触发价百分比（可选） */
+  takeProfitPct3?: number;
+  /** 分阶段止盈：第3档平仓比例（可选） */
+  takeProfitSize3?: number;
+  /** 触发指定档后将止损上移到入场价（保本退出）：1/2/3；0/null=不启用 */
+  moveStopToBreakevenAfterStage?: number;
   createTime: string;
   updateTime: string;
 }
@@ -207,6 +221,17 @@ export interface StrategyCreateDTO {
   superTrendSlOffsetPct?: number;
   /** 止损熔断开关（true=启用），止损触发且亏损时暂停开仓 24 小时 */
   pauseOnStopLoss?: boolean;
+  /** 分阶段止盈第1档 */
+  takeProfitPct1?: number;
+  takeProfitSize1?: number;
+  /** 分阶段止盈第2档（可选） */
+  takeProfitPct2?: number;
+  takeProfitSize2?: number;
+  /** 分阶段止盈第3档（可选） */
+  takeProfitPct3?: number;
+  takeProfitSize3?: number;
+  /** 触发指定档后将止损上移到入场价：1/2/3；0/null=不启用 */
+  moveStopToBreakevenAfterStage?: number;
 }
 
 /** 策略更新参数 */
@@ -251,6 +276,17 @@ export interface StrategyUpdateDTO {
   /** 止损熔断开关（true=启用，false=关闭） */
   pauseOnStopLoss?: boolean;
   minSignalStrength?: number;
+  /** 分阶段止盈第1档 */
+  takeProfitPct1?: number;
+  takeProfitSize1?: number;
+  /** 分阶段止盈第2档（可选） */
+  takeProfitPct2?: number;
+  takeProfitSize2?: number;
+  /** 分阶段止盈第3档（可选） */
+  takeProfitPct3?: number;
+  takeProfitSize3?: number;
+  /** 触发指定档后将止损上移到入场价：1/2/3；0/null=不启用 */
+  moveStopToBreakevenAfterStage?: number;
 }
 
 /** 策略查询参数 */

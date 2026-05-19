@@ -163,19 +163,27 @@ public class StopLossTakeProfitTask {
                     }
                 }
 
-                // 止盈检查（区分方向）
-                // LONG：价格上涨触达止盈（currentPrice >= takeProfit）
-                // SHORT：价格下跌触达止盈（currentPrice <= takeProfit）
-                if (!triggered && position.getTakeProfit() != null) {
-                    boolean tpTriggered = isShort
-                            ? currentPrice.compareTo(position.getTakeProfit()) <= 0
-                            : currentPrice.compareTo(position.getTakeProfit()) >= 0;
-                    if (tpTriggered) {
-                        log.info("[SL/TP Task] Take profit triggered: {} {} side={} currentPrice={} takeProfit={}",
-                                position.getExchange(), position.getSymbol(), position.getSide(),
-                                currentPrice, position.getTakeProfit());
-                        tradeExecutionService.executeClose(position);
-                        triggered = true;
+                // 止盈检查（区分方向 + 分阶段优先）
+                // ── 分阶段止盈（size1>0 即启用）：按 takeProfitStage 推进，
+                //    Σ size = 100% → 末档扫尾全平；Σ size < 100% → 末档部分平剩 runner，
+                //    runner 由后续止损族（固定止损 / SuperTrend / 峰值回撤）接管退出。
+                // ── 单级止盈（旧逻辑）：分阶段未启用时保留向后兼容。
+                if (!triggered) {
+                    Strategy stratForTp = position.getStrategyId() != null
+                            ? strategyRefMapper.selectById(position.getStrategyId()) : null;
+                    if (stratForTp != null && isStagedTpEnabled(stratForTp)) {
+                        triggered = handleStagedTakeProfit(position, currentPrice, isShort, stratForTp);
+                    } else if (position.getTakeProfit() != null) {
+                        boolean tpTriggered = isShort
+                                ? currentPrice.compareTo(position.getTakeProfit()) <= 0
+                                : currentPrice.compareTo(position.getTakeProfit()) >= 0;
+                        if (tpTriggered) {
+                            log.info("[SL/TP Task] Take profit triggered: {} {} side={} currentPrice={} takeProfit={}",
+                                    position.getExchange(), position.getSymbol(), position.getSide(),
+                                    currentPrice, position.getTakeProfit());
+                            tradeExecutionService.executeClose(position);
+                            triggered = true;
+                        }
                     }
                 }
 
@@ -188,6 +196,90 @@ public class StopLossTakeProfitTask {
                 log.error("[SL/TP Task] Error checking position {}: {}",
                         position.getId(), e.getMessage(), e);
             }
+        }
+    }
+
+    /**
+     * 是否启用了分阶段止盈：size1 > 0 即启用，启用后与 takeProfitPct / atrTakeProfitMultiplier 互斥。
+     */
+    private boolean isStagedTpEnabled(Strategy s) {
+        return s.getTakeProfitSize1() != null
+                && s.getTakeProfitSize1().compareTo(BigDecimal.ZERO) > 0
+                && s.getTakeProfitPct1() != null
+                && s.getTakeProfitPct1().compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    /**
+     * 处理分阶段止盈：检查下一档是否触达，若触达则部分平 / 末档扫尾。
+     * 「一次扫描只推进一级」：单根 K 线穿越多档时分多轮处理，避免跨阶段状态耦合。
+     *
+     * @return 本轮是否触发了平仓动作（true = 已触发，外层 triggered 置 true）
+     */
+    private boolean handleStagedTakeProfit(Position position, BigDecimal currentPrice,
+                                            boolean isShort, Strategy strategy) {
+        int currentStage = position.getTakeProfitStage() == null ? 0 : position.getTakeProfitStage();
+        // 收集已配置的档（pct & size 均 > 0，且必须是连续前缀）
+        java.util.List<BigDecimal> pcts  = new java.util.ArrayList<>(3);
+        java.util.List<BigDecimal> sizes = new java.util.ArrayList<>(3);
+        appendStageIfConfigured(pcts, sizes, strategy.getTakeProfitPct1(), strategy.getTakeProfitSize1());
+        if (!pcts.isEmpty()) {
+            appendStageIfConfigured(pcts, sizes, strategy.getTakeProfitPct2(), strategy.getTakeProfitSize2());
+        }
+        if (pcts.size() == 2) {
+            appendStageIfConfigured(pcts, sizes, strategy.getTakeProfitPct3(), strategy.getTakeProfitSize3());
+        }
+        int totalStages = pcts.size();
+        if (currentStage >= totalStages) return false;   // 全部档已触发完毕（理论上仓位已平）
+
+        int nextStage = currentStage + 1;
+        BigDecimal nextPct = pcts.get(currentStage)
+                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+        BigDecimal entry = position.getEntryPrice();
+        BigDecimal trigger = isShort
+                ? entry.multiply(BigDecimal.ONE.subtract(nextPct))
+                : entry.multiply(BigDecimal.ONE.add(nextPct));
+
+        boolean hit = isShort
+                ? currentPrice.compareTo(trigger) <= 0
+                : currentPrice.compareTo(trigger) >= 0;
+        if (!hit) return false;
+
+        boolean isLastConfigured = (nextStage == totalStages);
+        BigDecimal sumSize = BigDecimal.ZERO;
+        for (BigDecimal s : sizes) sumSize = sumSize.add(s);
+        boolean sumIsFull = sumSize.compareTo(BigDecimal.valueOf(100)) >= 0;
+
+        // 末档扫尾条件：是最后已配置档 + Σ ≥ 100% → 调 executeClose 平剩余全部；
+        // 否则按 size_i × initialQuantity 计算 partialQty 走 executePartialClose
+        if (isLastConfigured && sumIsFull) {
+            log.info("[Staged TP] Last stage sweep: position={} stage {}->{} price={} trigger={}",
+                    position.getId(), currentStage, nextStage, currentPrice, trigger);
+            tradeExecutionService.executeClose(position);
+            return true;
+        }
+
+        BigDecimal initialQty = position.getInitialQuantity() != null
+                ? position.getInitialQuantity() : position.getQuantity();
+        BigDecimal sizePct = sizes.get(currentStage)
+                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+        BigDecimal partialQty = initialQty.multiply(sizePct)
+                .setScale(10, RoundingMode.HALF_UP);
+
+        log.info("[Staged TP] Stage {}->{} triggered: position={} pct={}% size={}% price={} trigger={} partialQty={}",
+                currentStage, nextStage, position.getId(),
+                pcts.get(currentStage), sizes.get(currentStage),
+                currentPrice, trigger, partialQty);
+
+        tradeExecutionService.executePartialClose(position, partialQty, nextStage);
+        return true;
+    }
+
+    private void appendStageIfConfigured(java.util.List<BigDecimal> pcts, java.util.List<BigDecimal> sizes,
+                                          BigDecimal pct, BigDecimal size) {
+        if (pct != null && pct.compareTo(BigDecimal.ZERO) > 0
+                && size != null && size.compareTo(BigDecimal.ZERO) > 0) {
+            pcts.add(pct);
+            sizes.add(size);
         }
     }
 }

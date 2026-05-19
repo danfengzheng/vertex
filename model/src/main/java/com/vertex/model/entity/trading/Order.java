@@ -83,4 +83,15 @@ public class Order extends BaseEntity {
     /** 保证金模式（合约开仓专用，运行时从策略读取，不持久化）*/
     @TableField(exist = false)
     private MarginType marginType;
+
+    /**
+     * 分阶段止盈目标 stage（运行时透传，不持久化）。
+     * <p>
+     * 由 {@code TradeExecutionService.executePartialClose} 在创建减仓单时写入，
+     * 在 {@code PositionManagementService.updatePosition} 的减仓回调中读取，
+     * 用于幂等地把持仓的 {@code takeProfitStage} 从 N-1 推进到 N。
+     * </p>
+     */
+    @TableField(exist = false)
+    private Integer takeProfitStage;
 }

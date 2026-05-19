@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Table, Button, Space, message, Tag, Select, Popconfirm } from 'antd';
+import { Table, Button, Space, message, Tag, Select, Popconfirm, Tooltip } from 'antd';
 import { formatServerTime } from '../../utils/date';
 import { ReloadOutlined, CloseCircleOutlined, ReconciliationOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -165,6 +165,30 @@ export const PositionMonitor = () => {
         val && parseFloat(val) > 0
           ? <span style={{ color: '#fa8c16' }}>{parseFloat(val).toFixed(4)}</span>
           : <span style={{ color: '#999' }}>-</span>,
+    },
+    {
+      title: t('text.trading.tpStageProgress'),
+      key: 'tpStage',
+      width: 140,
+      render: (_: any, record: PositionVO) => {
+        const stage = record.takeProfitStage ?? 0;
+        const initial = parseFloat(record.initialQuantity || '0');
+        const remain = parseFloat(record.quantity || '0');
+        if (initial <= 0 || stage <= 0) {
+          return <span style={{ color: '#999' }}>-</span>;
+        }
+        const closedPct = Math.max(0, Math.min(100, ((initial - remain) / initial) * 100));
+        return (
+          <Tooltip title={t('text.trading.tpStageProgressTip')}>
+            <Space size={4}>
+              <Tag color="green">{stage}</Tag>
+              <span style={{ color: '#52c41a', fontSize: 12 }}>
+                {t('text.trading.tpClosedPct', { pct: closedPct.toFixed(1) })}
+              </span>
+            </Space>
+          </Tooltip>
+        );
+      },
     },
     {
       title: '杠杆',

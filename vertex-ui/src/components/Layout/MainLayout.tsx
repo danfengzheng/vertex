@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Layout, Menu, Avatar, Dropdown, Space, theme, Modal, Form, Input, Switch, message } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Space, theme, Modal, Form, Input, InputNumber, Switch, message } from 'antd';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { notifyConfigApi, NotifyConfigVO } from '../../api/notifyConfig';
+import { userSettingApi, UserSettingVO } from '../../api/userSetting';
 import { usePermission } from '../../contexts/PermissionContext';
 import {
   MenuFoldOutlined,
@@ -79,6 +80,48 @@ export const MainLayout = () => {
   const [notifyConfig, setNotifyConfig] = useState<NotifyConfigVO | null>(null);
   const [notifySaving, setNotifySaving] = useState(false);
   const [notifyForm] = Form.useForm();
+
+  // ─── 个人设置弹窗 ────────────────────────────────
+  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileForm] = Form.useForm();
+
+  const handleOpenProfileModal = async () => {
+    setProfileModalVisible(true);
+    setProfileLoaded(false);
+    try {
+      const res = await userSettingApi.get();
+      if (res.code === 200) {
+        const v: UserSettingVO = res.data;
+        profileForm.setFieldsValue({
+          maxTradeCapital: v.maxTradeCapital ?? undefined,
+        });
+      }
+    } catch {
+      // ignore
+    } finally {
+      setProfileLoaded(true);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    try {
+      const values = await profileForm.validateFields();
+      setProfileSaving(true);
+      const raw = values.maxTradeCapital;
+      // 空 / <=0 视为清空（后端归一为 null）
+      const max = raw == null || raw === '' || Number(raw) <= 0 ? null : Number(raw);
+      await userSettingApi.save({ maxTradeCapital: max });
+      message.success(t('text.userSetting.saveSuccess'));
+      setProfileModalVisible(false);
+    } catch (e: unknown) {
+      const msg = (e as { errorFields?: unknown })?.errorFields ? '' : t('text.userSetting.saveFailed');
+      if (msg) message.error(msg);
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const handleOpenNotifyModal = async () => {
     setNotifyModalVisible(true);
@@ -255,6 +298,11 @@ export const MainLayout = () => {
   // 用户下拉菜单
   const userMenuItems: MenuProps['items'] = [
     {
+      key: 'profile',
+      icon: <SettingOutlined />,
+      label: t('text.userSetting.menuLabel'),
+    },
+    {
       key: 'notify',
       icon: <BellOutlined />,
       label: '通知设置',
@@ -280,6 +328,8 @@ export const MainLayout = () => {
       navigate('/login');
     } else if (key === 'notify') {
       handleOpenNotifyModal();
+    } else if (key === 'profile') {
+      handleOpenProfileModal();
     }
   };
 
@@ -399,6 +449,35 @@ export const MainLayout = () => {
         </Form>
         {notifyConfig === null && (
           <div style={{ color: '#999', fontSize: 12 }}>加载中...</div>
+        )}
+      </Modal>
+
+      {/* 个人设置弹窗 */}
+      <Modal
+        title={t('text.userSetting.modalTitle')}
+        open={profileModalVisible}
+        onOk={handleSaveProfile}
+        confirmLoading={profileSaving}
+        onCancel={() => setProfileModalVisible(false)}
+        destroyOnClose
+      >
+        <Form form={profileForm} layout="vertical" style={{ marginTop: 8 }}>
+          <Form.Item
+            name="maxTradeCapital"
+            label={t('text.userSetting.maxTradeCapital')}
+            extra={t('text.userSetting.maxTradeCapitalTip')}
+          >
+            <InputNumber
+              min={0}
+              step={100}
+              style={{ width: '100%' }}
+              addonAfter="U"
+              placeholder={t('text.userSetting.maxTradeCapitalPlaceholder')}
+            />
+          </Form.Item>
+        </Form>
+        {!profileLoaded && (
+          <div style={{ color: '#999', fontSize: 12 }}>{t('text.userSetting.loading')}</div>
         )}
       </Modal>
     </Layout>

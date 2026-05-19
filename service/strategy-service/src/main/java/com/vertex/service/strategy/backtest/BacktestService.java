@@ -205,6 +205,36 @@ public class BacktestService {
                 && strategy.getSuperTrendSlOffsetPct().compareTo(BigDecimal.ZERO) > 0;
         BigDecimal superTrendStopLossPrice = null; // 当前 SuperTrend 止损价，null=未初始化/已平仓
 
+        // 分阶段止盈状态（与实盘保持一致；启用条件：size1 > 0 且 pct1 > 0）
+        boolean hasStagedTp = strategy.getTakeProfitSize1() != null
+                && strategy.getTakeProfitSize1().compareTo(BigDecimal.ZERO) > 0
+                && strategy.getTakeProfitPct1() != null
+                && strategy.getTakeProfitPct1().compareTo(BigDecimal.ZERO) > 0;
+        java.util.List<BigDecimal> stagedPcts  = new java.util.ArrayList<>(3);
+        java.util.List<BigDecimal> stagedSizes = new java.util.ArrayList<>(3);
+        if (hasStagedTp) {
+            stagedPcts.add(strategy.getTakeProfitPct1());
+            stagedSizes.add(strategy.getTakeProfitSize1());
+            if (strategy.getTakeProfitSize2() != null
+                    && strategy.getTakeProfitSize2().compareTo(BigDecimal.ZERO) > 0
+                    && strategy.getTakeProfitPct2() != null
+                    && strategy.getTakeProfitPct2().compareTo(BigDecimal.ZERO) > 0) {
+                stagedPcts.add(strategy.getTakeProfitPct2());
+                stagedSizes.add(strategy.getTakeProfitSize2());
+                if (strategy.getTakeProfitSize3() != null
+                        && strategy.getTakeProfitSize3().compareTo(BigDecimal.ZERO) > 0
+                        && strategy.getTakeProfitPct3() != null
+                        && strategy.getTakeProfitPct3().compareTo(BigDecimal.ZERO) > 0) {
+                    stagedPcts.add(strategy.getTakeProfitPct3());
+                    stagedSizes.add(strategy.getTakeProfitSize3());
+                }
+            }
+        }
+        int takeProfitStage = 0;             // 已触发的档数（0/1/2/3）
+        BigDecimal initialPosition = BigDecimal.ZERO; // 持仓建立时的基线数量
+        BigDecimal initialMargin   = BigDecimal.ZERO; // 持仓建立时的保证金，用于按比例摊销 marginPaid
+        Integer breakevenAfterStage = strategy.getMoveStopToBreakevenAfterStage();
+
         // ── 止损熔断 ─────────────────────────────────────────────────────────────────
         // 开关启用时，止损（STOP_LOSS / TRAILING_DROP）触发且实际亏损即暂停开仓 24 小时。
         // 信号出场、止盈、时间止损、指标出场不触发，移动止损在盈利区间触发也不触发。
@@ -279,9 +309,106 @@ public class BacktestService {
                         : currentKline.getHigh() != null && currentKline.getHigh().compareTo(takeProfitPrice) >= 0);
 
                 if (stopHit || tpHit) {
+                    // ── 分阶段止盈：TP 命中且启用分阶段，可能是部分平仓 ─────
+                    boolean isStagedPartial = tpHit && hasStagedTp
+                            && takeProfitStage < stagedPcts.size();
                     BigDecimal exitPrice = stopHit ? stopLossPrice : takeProfitPrice;
-                    String exitReason  = stopHit ? "STOP_LOSS" : "TAKE_PROFIT";
+                    String exitReason   = stopHit ? "STOP_LOSS" : "TAKE_PROFIT";
 
+                    if (isStagedPartial) { // 分阶段 TP 部分平仓 / 末档扫尾
+                        int nextStage = takeProfitStage + 1;
+                        boolean isLastConfigured = (nextStage == stagedPcts.size());
+                        BigDecimal sumSize = BigDecimal.ZERO;
+                        for (BigDecimal sz : stagedSizes) sumSize = sumSize.add(sz);
+                        boolean sumIsFull = sumSize.compareTo(BigDecimal.valueOf(100)) >= 0;
+                        boolean sweepAll = isLastConfigured && sumIsFull;
+
+                        // 本档减仓量：末档扫尾 → 剩余全部；否则按 initialPosition × size_i / 100
+                        BigDecimal closeQty;
+                        if (sweepAll) {
+                            closeQty = position;
+                        } else {
+                            BigDecimal sizePct = stagedSizes.get(takeProfitStage)
+                                    .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+                            closeQty = initialPosition.multiply(sizePct)
+                                    .setScale(8, RoundingMode.DOWN);
+                            // 防御：partial >= 剩余 → 退化为扫尾
+                            if (closeQty.compareTo(position) >= 0) {
+                                closeQty = position;
+                                sweepAll = true;
+                            }
+                        }
+                        BigDecimal partialExitValue = closeQty.multiply(exitPrice);
+                        BigDecimal partialFee = partialExitValue.multiply(config.getFeeRate());
+                        BigDecimal partialPnl = isShortPos
+                                ? closeQty.multiply(entryPrice.subtract(exitPrice))
+                                : closeQty.multiply(exitPrice.subtract(entryPrice));
+                        BigDecimal partialProfit = partialPnl.subtract(partialFee);
+                        // 按比例返还保证金：分摊 initialMargin × (closeQty / initialPosition)
+                        BigDecimal returnedMargin = initialMargin.compareTo(BigDecimal.ZERO) > 0
+                                ? initialMargin.multiply(closeQty)
+                                        .divide(initialPosition, 8, RoundingMode.HALF_UP)
+                                : BigDecimal.ZERO;
+                        BigDecimal partialProfitPct = returnedMargin.compareTo(BigDecimal.ZERO) > 0
+                                ? partialProfit.divide(returnedMargin, 6, RoundingMode.HALF_UP)
+                                        .multiply(new BigDecimal("100"))
+                                : BigDecimal.ZERO;
+
+                        trades.add(TradeRecord.builder()
+                                .entryTime(entryTime)
+                                .exitTime(currentKline.getOpenTime())
+                                .type(isShortPos ? "SHORT" : "LONG")
+                                .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
+                                .exitPrice(exitPrice.setScale(8, RoundingMode.HALF_UP))
+                                .quantity(closeQty.setScale(8, RoundingMode.HALF_UP))
+                                .profit(partialProfit.setScale(2, RoundingMode.HALF_UP))
+                                .profitPercent(partialProfitPct.setScale(2, RoundingMode.HALF_UP))
+                                .exitReason("TAKE_PROFIT_" + nextStage)
+                                .build());
+
+                        capital  = capital.add(returnedMargin).add(partialProfit);
+                        position = position.subtract(closeQty);
+                        marginPaid = marginPaid.subtract(returnedMargin)
+                                .max(BigDecimal.ZERO);
+                        takeProfitStage = nextStage;
+                        currentPrice = exitPrice;
+
+                        // 保本钩子：触发指定档后将止损上移到入场价（与实盘一致）
+                        if (breakevenAfterStage != null && breakevenAfterStage == nextStage) {
+                            stopLossPrice = entryPrice.setScale(8, RoundingMode.HALF_UP);
+                            stopLossStage = StopLossStage.BREAKEVEN;
+                        }
+
+                        if (sweepAll || position.compareTo(BigDecimal.ZERO) <= 0) {
+                            // 已扫尾或剩余为零：完全平仓
+                            inPosition     = false;
+                            positionSide   = null;
+                            stopLossPrice  = null;
+                            takeProfitPrice = null;
+                            stopLossStage  = null;
+                            highestPrice   = null;
+                            peakPrice      = null;
+                            openBarCount   = 0;
+                            superTrendStopLossPrice = null;
+                            marginPaid     = BigDecimal.ZERO;
+                            initialPosition = BigDecimal.ZERO;
+                            initialMargin   = BigDecimal.ZERO;
+                            takeProfitStage = 0;
+                            closedByStopOrTp = true;
+                        } else if (nextStage < stagedPcts.size()) {
+                            // 仍有后续档：更新 takeProfitPrice 为下一档
+                            BigDecimal nextPct = stagedPcts.get(nextStage)
+                                    .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+                            BigDecimal dirSign = isShortPos ? new BigDecimal("-1") : BigDecimal.ONE;
+                            takeProfitPrice = entryPrice.multiply(BigDecimal.ONE.add(dirSign.multiply(nextPct)))
+                                    .setScale(8, RoundingMode.HALF_UP);
+                            // 持仓继续，不重置 inPosition
+                        } else {
+                            // 已经是最后已配置档但 Σ<100% → runner 模式：清掉 takeProfitPrice，
+                            // 持仓继续由止损族（固定 SL / SuperTrend / 峰值回撤 / 反向信号）接管。
+                            takeProfitPrice = null;
+                        }
+                    } else { // 非分阶段路径 → 全平
                     BigDecimal exitValue = position.multiply(exitPrice);
                     BigDecimal fee       = exitValue.multiply(config.getFeeRate());
                     // SHORT：价格下跌盈利；LONG：价格上涨盈利
@@ -317,6 +444,9 @@ public class BacktestService {
                     peakPrice      = null;
                     openBarCount   = 0;
                     superTrendStopLossPrice = null;
+                    initialPosition = BigDecimal.ZERO;
+                    initialMargin   = BigDecimal.ZERO;
+                    takeProfitStage = 0;
                     closedByStopOrTp = true;
                     // 止损/止盈当根 K 线权益以出场价结算
                     currentPrice = exitPrice;
@@ -333,6 +463,7 @@ public class BacktestService {
                                     tradingPausedUntilMs);
                         }
                     }
+                    } // end else (非分阶段路径)
                 }
 
                 // ── SuperTrend 动态止损检查（SL/TP 未触发时，优先于峰值回撤）────────────────
@@ -369,6 +500,7 @@ public class BacktestService {
                         stopLossStage = null; highestPrice = null;
                         peakPrice     = null; openBarCount  = 0;
                         superTrendStopLossPrice = null;
+                        initialPosition = BigDecimal.ZERO; initialMargin = BigDecimal.ZERO; takeProfitStage = 0;
                         closedByStopOrTp = true;
                         currentPrice = exitPrice;
                         // 止损熔断：SuperTrend 止损触发且实际亏损时，暂停开仓 24 小时
@@ -434,6 +566,7 @@ public class BacktestService {
                         peakPrice    = null;
                         openBarCount = 0;
                         superTrendStopLossPrice = null;
+                        initialPosition = BigDecimal.ZERO; initialMargin = BigDecimal.ZERO; takeProfitStage = 0;
                         closedByStopOrTp = true;
                         currentPrice = dropExitPrice;
 
@@ -500,6 +633,9 @@ public class BacktestService {
                     peakPrice       = null;
                     openBarCount    = 0;
                     superTrendStopLossPrice = null;
+                    initialPosition = BigDecimal.ZERO;
+                    initialMargin   = BigDecimal.ZERO;
+                    takeProfitStage = 0;
                     closedByStopOrTp = true; // 当根K线已平仓，阻止信号重新开仓
                 }
 
@@ -550,6 +686,9 @@ public class BacktestService {
                             peakPrice       = null;
                             openBarCount    = 0;
                             superTrendStopLossPrice = null;
+                            initialPosition = BigDecimal.ZERO;
+                            initialMargin   = BigDecimal.ZERO;
+                            takeProfitStage = 0;
                             closedByStopOrTp = true; // 当根K线已平仓，阻止信号重新开仓
                         }
                     }
@@ -630,6 +769,7 @@ public class BacktestService {
                         stopLossPrice = null; takeProfitPrice = null;
                         stopLossStage = null; highestPrice = null; peakPrice = null; openBarCount = 0;
                         superTrendStopLossPrice = null;
+                        initialPosition = BigDecimal.ZERO; initialMargin = BigDecimal.ZERO; takeProfitStage = 0;
                     }
                     // 无仓位 → 开多
                     if (!inPosition) toOpen = PositionSide.LONG;
@@ -661,6 +801,7 @@ public class BacktestService {
                         stopLossPrice = null; takeProfitPrice = null;
                         stopLossStage = null; highestPrice = null; peakPrice = null; openBarCount = 0;
                         superTrendStopLossPrice = null;
+                        initialPosition = BigDecimal.ZERO; initialMargin = BigDecimal.ZERO; takeProfitStage = 0;
                     }
                     // 合约：无仓位 → 开空
                     if (isFutures && !inPosition) toOpen = PositionSide.SHORT;
@@ -709,6 +850,10 @@ public class BacktestService {
                 inPosition = true;
                 positionSide = toOpen;
                 openBarCount = 0;
+                // 分阶段止盈基线：仅在启用时记录，否则保持零
+                initialPosition = hasStagedTp ? position : BigDecimal.ZERO;
+                initialMargin   = hasStagedTp ? marginPaid : BigDecimal.ZERO;
+                takeProfitStage = 0;
                 // 峰值回撤止损：开仓时初始化峰值为入场价，与实盘 StopLossTakeProfitTask 行为一致
                 // 实盘 fallback：position.getHighestPrice() != null ? ... : position.getEntryPrice()
                 peakPrice = hasTrailingDrop ? entryPrice : null;
@@ -725,9 +870,11 @@ public class BacktestService {
                 boolean hasAtrStop = strategy.getAtrStopMultiplier() != null
                         && strategy.getAtrStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
                 boolean hasPctStop = strategy.getStopLossPct() != null;
-                boolean hasAtrTp   = strategy.getAtrTakeProfitMultiplier() != null
+                // 启用分阶段止盈时与 ATR 倍数 / 固定百分比止盈互斥（与实盘 setStopLossTakeProfit 一致）
+                boolean hasAtrTp   = !hasStagedTp
+                        && strategy.getAtrTakeProfitMultiplier() != null
                         && strategy.getAtrTakeProfitMultiplier().compareTo(BigDecimal.ZERO) > 0;
-                boolean hasPctTp   = strategy.getTakeProfitPct() != null;
+                boolean hasPctTp   = !hasStagedTp && strategy.getTakeProfitPct() != null;
 
                 List<KLine> atrWindow = getAtrBars(barProvider, effectiveAtrInterval, strategy.getInterval(), maxKlineHistory);
                 if (hasTrailingStop) {
@@ -762,7 +909,14 @@ public class BacktestService {
                     stopLossPrice = entryPrice.multiply(BigDecimal.ONE.subtract(dir.multiply(pct)))
                             .setScale(8, RoundingMode.HALF_UP);
                 }
-                if (!hasAtrTp && hasPctTp) {
+                if (hasStagedTp) {
+                    // 分阶段启用：忽略 atrTakeProfitMultiplier 与 takeProfitPct，
+                    // 首档 takeProfitPrice 由 pct1 计算；后续档由 partial 命中后切换。
+                    BigDecimal pct1 = strategy.getTakeProfitPct1()
+                            .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+                    takeProfitPrice = entryPrice.multiply(BigDecimal.ONE.add(dir.multiply(pct1)))
+                            .setScale(8, RoundingMode.HALF_UP);
+                } else if (!hasAtrTp && hasPctTp) {
                     BigDecimal pct = strategy.getTakeProfitPct()
                             .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
                     // LONG: entry × (1 + pct); SHORT: entry × (1 - pct)

@@ -2,6 +2,7 @@ package com.vertex.service.order.service.impl;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.vertex.api.usersetting.IUserSettingService;
 import com.vertex.common.core.GlobalError;
 import com.vertex.common.core.exception.BizException;
 import com.vertex.model.entity.quote.KLine;
@@ -61,6 +62,9 @@ public class TradeExecutionService {
     private final CompositeTradeNotifier compositeTradeNotifier;
     private final TradingProperties tradingProperties;
     private final KLineStore klineStore;
+    /** 用户个人设置（最大使用资金截断），可选注入；user-service 未运行时降级为不限制 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private IUserSettingService userSettingService;
 
     /**
      * 合约账户参数缓存：key = accountId_symbol_marketType，避免重复调用 Binance 设置杠杆/保证金模式。
@@ -357,6 +361,185 @@ public class TradeExecutionService {
                 closeQty, order.isReduceOnly());
 
         doExecute(order, null);
+    }
+
+    /**
+     * 分阶段止盈：对持仓做部分减仓（中段或 Σ&lt;100% 的末段）。
+     * <p>
+     * 与 {@link #executeClose(Position)} 共用 per-position 锁（{@code positionCloseLocks}），
+     * 确保「部分平 / 全平 / 止损平」三路径串行。
+     * </p>
+     * <ul>
+     *   <li>partialQty 已由调用方按 stepSize 向下对齐（现货）；若 ≥ position.quantity，退化为 executeClose。</li>
+     *   <li>inflight 防重：本持仓存在未结算的 reduceOnly/SELL 订单时本轮跳过，等下一次扫描。</li>
+     *   <li>fill 回调由 {@link PositionManagementService#updatePosition} 的减仓分支推进
+     *       {@code takeProfitStage}，并按 {@code moveStopToBreakevenAfterStage} 触发保本上移。</li>
+     * </ul>
+     *
+     * @param position    要部分平仓的持仓
+     * @param partialQty  本次减仓数量（base asset）
+     * @param targetStage 本次推进到的目标 stage（1/2/3）
+     */
+    public void executePartialClose(Position position, BigDecimal partialQty, int targetStage) {
+        if (partialQty == null || partialQty.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("[PartialClose] Invalid qty {} for position {}, skipping", partialQty, position.getId());
+            return;
+        }
+        ReentrantLock lock = positionCloseLocks.computeIfAbsent(position.getId(), id -> new ReentrantLock(true));
+        if (!lock.tryLock()) {
+            log.info("[PartialClose] Position {} is busy (full close in progress), skip stage {}",
+                    position.getId(), targetStage);
+            return;
+        }
+        try {
+            executePartialCloseInternal(position, partialQty, targetStage);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void executePartialCloseInternal(Position position, BigDecimal partialQty, int targetStage) {
+        // 锁内复查：持仓仍 OPEN，stage 没被其他线程推进过
+        if (!positionManagementService.isStillOpen(position.getId())) {
+            log.info("[PartialClose] Position {} no longer OPEN, skipping stage {}",
+                    position.getId(), targetStage);
+            return;
+        }
+        Integer dbStage = positionManagementService.getTakeProfitStage(position.getId());
+        int currentStage = dbStage == null ? 0 : dbStage;
+        if (currentStage >= targetStage) {
+            log.info("[PartialClose] Position {} stage already {} (target {}), skip duplicate",
+                    position.getId(), currentStage, targetStage);
+            return;
+        }
+
+        // inflight 防重：本持仓存在未结算的减仓订单 → 本轮跳过
+        if (positionManagementService.hasInflightReduceOrder(position)) {
+            log.info("[PartialClose] Position {} has inflight reduce order, skip stage {} this round",
+                    position.getId(), targetStage);
+            return;
+        }
+
+        MarketType marketType = position.getMarketType();
+        boolean isFutures = marketType != null && marketType.isFutures();
+        BigDecimal remainQty = position.getQuantity();
+
+        // 数量退化：partial >= 剩余 → 直接全平（最后一档扫尾 / 配置异常兜底）
+        if (partialQty.compareTo(remainQty) >= 0) {
+            log.info("[PartialClose] partialQty {} >= remain {} for position {}, degrade to full close",
+                    partialQty, remainQty, position.getId());
+            executeCloseInternal(position);
+            return;
+        }
+
+        // 现货对齐 stepSize（向下截断），合约由 Binance 端对齐
+        BigDecimal closeQty = partialQty;
+        if (!isFutures) {
+            try {
+                BigDecimal stepSize = binanceTradeClient.getStepSize(position.getSymbol());
+                if (stepSize != null && stepSize.compareTo(BigDecimal.ZERO) > 0) {
+                    BigDecimal steps = closeQty.divide(stepSize, 0, RoundingMode.DOWN);
+                    closeQty = steps.multiply(stepSize).stripTrailingZeros();
+                }
+            } catch (Exception e) {
+                log.warn("[PartialClose] Failed to align qty for {}: {}, using original {}",
+                        position.getSymbol(), e.getMessage(), closeQty);
+            }
+        }
+        if (closeQty == null || closeQty.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("[PartialClose] Aligned qty is zero for position {}, skip stage {}",
+                    position.getId(), targetStage);
+            return;
+        }
+        if (closeQty.compareTo(remainQty) >= 0) {
+            // 对齐后仍 >= 剩余，走全平路径
+            log.info("[PartialClose] Aligned qty {} >= remain {}, fallback to full close for position {}",
+                    closeQty, remainQty, position.getId());
+            executeCloseInternal(position);
+            return;
+        }
+
+        if (position.getTradeMode() == ExecutionMode.PAPER) {
+            BigDecimal currentPrice = paperTradingService.getCurrentPrice(
+                    position.getExchange(), position.getSymbol());
+            if (currentPrice == null) {
+                log.warn("[PartialClose] No price for {} {}, skip stage {}",
+                        position.getExchange(), position.getSymbol(), targetStage);
+                return;
+            }
+            positionManagementService.reducePosition(position, closeQty, currentPrice, targetStage);
+            applyBreakevenIfConfigured(position, targetStage);
+            return;
+        }
+
+        // LIVE：提交 reduceOnly / SELL 减仓单
+        OrderSide closeSide = (isFutures && position.getSide() == PositionSide.SHORT)
+                ? OrderSide.BUY : OrderSide.SELL;
+        Order order = new Order();
+        order.setStrategyId(position.getStrategyId());
+        order.setAccountId(position.getAccountId());
+        order.setExchange(position.getExchange());
+        order.setSymbol(position.getSymbol());
+        order.setSide(closeSide);
+        order.setOrderType(OrderType.MARKET);
+        order.setQuantity(closeQty);
+        order.setTradeMode(ExecutionMode.LIVE);
+        order.setMarketType(marketType);
+        order.setReduceOnly(isFutures);
+        order.setStatus(OrderStatus.SUBMITTED);
+        // 借用 takeProfitStage 字段透传目标 stage 给 fill 回调（在 updatePosition 减仓分支识别）
+        order.setTakeProfitStage(targetStage);
+        orderMapper.insert(order);
+
+        log.info("[PartialClose] Submitting live {} reduce {} for position {} stage {}: qty={}",
+                closeSide, isFutures ? "(reduceOnly)" : "", position.getId(), targetStage, closeQty);
+
+        doExecute(order, null);
+
+        // doExecute → updatePosition 减仓分支已经推进 stage；此处尝试触发保本钩子
+        applyBreakevenIfConfigured(position, targetStage);
+    }
+
+    /**
+     * 分阶段止盈：触发指定档后，若策略配置了 moveStopToBreakevenAfterStage = newStage，
+     * 将止损上移到入场价并把 stopLossStage 标为 BREAKEVEN。
+     * 与移动 ATR 止损在配置层已互斥（StrategyServiceImpl 校验）。
+     * <p>
+     * 调用前提：targetStage 实际推进成功（DB 中 takeProfitStage >= newStage）。
+     * 若 LIVE 减仓单失败（REJECTED / 未 fill），fill 回调未推进 stage，本方法不应修改止损。
+     * </p>
+     */
+    private void applyBreakevenIfConfigured(Position position, int newStage) {
+        if (position.getStrategyId() == null) return;
+        Strategy strategy = strategyRefMapper.selectById(position.getStrategyId());
+        if (strategy == null || strategy.getMoveStopToBreakevenAfterStage() == null
+                || strategy.getMoveStopToBreakevenAfterStage() <= 0) {
+            return;
+        }
+        if (strategy.getMoveStopToBreakevenAfterStage() != newStage) return;
+        // 重新从 DB 读取最新持仓（部分平仓后 quantity / entryPrice 可能已变）
+        Position fresh = positionManagementService.getById(position.getId());
+        if (fresh == null || fresh.getStatus() != PositionStatus.OPEN) return;
+        // 关键校验：stage 必须已经推进到 newStage（防止 LIVE 减仓单失败时误触发保本上移）
+        if (fresh.getTakeProfitStage() == null || fresh.getTakeProfitStage() < newStage) {
+            log.info("[Staged TP] Breakeven skipped: position={} stage not advanced (db={}, expected>={})",
+                    fresh.getId(), fresh.getTakeProfitStage(), newStage);
+            return;
+        }
+        // 幂等：若止损已经在保本价（或更高，譬如已进入 TRAILING），不再下移
+        BigDecimal entry = fresh.getEntryPrice();
+        if (entry == null) return;
+        if (fresh.getStopLossStage() == StopLossStage.BREAKEVEN
+                || fresh.getStopLossStage() == StopLossStage.TRAILING) {
+            log.debug("[Staged TP] Breakeven idempotent skip: position={} already at stage={}",
+                    fresh.getId(), fresh.getStopLossStage());
+            return;
+        }
+        fresh.setStopLoss(entry.setScale(8, RoundingMode.HALF_UP));
+        fresh.setStopLossStage(StopLossStage.BREAKEVEN);
+        positionManagementService.updateStopLossTakeProfit(fresh);
+        log.info("[Staged TP] Breakeven applied: position={} stage={} stopLoss=entry={}",
+                fresh.getId(), newStage, entry);
     }
 
     /**
@@ -718,6 +901,18 @@ public class TradeExecutionService {
         }
 
         BigDecimal tradeAmount = availableCapital.multiply(positionRatio);
+
+        // ── 个人设置：单笔开仓最大使用资金（U/USDT）截断 ──────────
+        // 按策略创建者读取 sys_user_setting.max_trade_capital：
+        //   > 0 且 tradeAmount 超过此值 → 截断为此值
+        //   null / <= 0 / 服务未注入 → 不生效，保持原 tradeAmount
+        BigDecimal cappedAmount = applyUserMaxTradeCapital(strategy, tradeAmount);
+        if (cappedAmount != null && cappedAmount.compareTo(tradeAmount) < 0) {
+            log.info("[PositionSizing] tradeAmount {} exceeds user maxTradeCapital, capped to {}",
+                    tradeAmount, cappedAmount);
+            tradeAmount = cappedAmount;
+        }
+
         BigDecimal feeRate = strategy.getFeeRate() != null ? strategy.getFeeRate() : BigDecimal.ZERO;
         BigDecimal netAmount = tradeAmount.multiply(BigDecimal.ONE.subtract(feeRate));
 
@@ -736,6 +931,31 @@ public class TradeExecutionService {
         log.info("[PositionSizing] PERCENT mode: capital={}, ratio={}, tradeAmount={}, leverage={}, price={}, qty={}",
                 availableCapital, positionRatio, tradeAmount, lev, currentPrice, quantity);
         return quantity;
+    }
+
+    /**
+     * 按策略创建者读取「单笔开仓最大使用资金」并对 tradeAmount 做截断（仅 PERCENT 仓位模式调用）。
+     * <p>
+     * - 服务未注入（user-service 未启动）→ 返回原 tradeAmount，不做改动<br>
+     * - 用户未配置 / 配置 &lt;= 0 → 返回原 tradeAmount<br>
+     * - 用户配置 &gt; 0 且 tradeAmount &gt; max → 返回 max<br>
+     * - 其他 → 返回原 tradeAmount
+     * </p>
+     */
+    private BigDecimal applyUserMaxTradeCapital(Strategy strategy, BigDecimal tradeAmount) {
+        if (userSettingService == null) return tradeAmount;
+        Long ownerId = strategy.getCreateBy();
+        if (ownerId == null) return tradeAmount;
+        try {
+            BigDecimal max = userSettingService.getMaxTradeCapital(ownerId);
+            if (max == null || max.compareTo(BigDecimal.ZERO) <= 0) return tradeAmount;
+            return tradeAmount.compareTo(max) > 0 ? max : tradeAmount;
+        } catch (Exception e) {
+            // 个人设置读取失败不阻塞下单，记录日志后保持原值
+            log.warn("[PositionSizing] Failed to read user maxTradeCapital for userId={}: {}",
+                    ownerId, e.getMessage());
+            return tradeAmount;
+        }
     }
 
     private BigDecimal getAvailableCapitalLive(Strategy strategy) {
@@ -832,8 +1052,9 @@ public class TradeExecutionService {
     /**
      * 设置持仓的止损 / 止盈价格。
      * <p>
-     * 优先级：移动ATR止损（四参数） > 固定ATR止损 > 固定百分比止损<br>
-     * 止盈优先级：ATR倍数止盈 > 固定百分比止盈<br>
+     * 止损优先级：移动ATR止损（四参数） > 固定ATR止损 > 固定百分比止损<br>
+     * 止盈优先级：<b>分阶段止盈（size1>0 即启用）</b> &gt; ATR倍数止盈 > 固定百分比止盈
+     * （分阶段启用时 ATR / 固定百分比止盈被忽略，互斥语义）。<br>
      * 同时支持 LONG 和 SHORT 持仓方向。
      * </p>
      */
@@ -843,11 +1064,17 @@ public class TradeExecutionService {
         boolean hasAtrStop   = strategy.getAtrStopMultiplier() != null
                 && strategy.getAtrStopMultiplier().compareTo(BigDecimal.ZERO) > 0;
         boolean hasPctStop   = strategy.getStopLossPct() != null;
-        boolean hasAtrTp     = strategy.getAtrTakeProfitMultiplier() != null
+        boolean hasStagedTp  = strategy.getTakeProfitSize1() != null
+                && strategy.getTakeProfitSize1().compareTo(BigDecimal.ZERO) > 0
+                && strategy.getTakeProfitPct1() != null
+                && strategy.getTakeProfitPct1().compareTo(BigDecimal.ZERO) > 0;
+        boolean hasAtrTp     = !hasStagedTp
+                && strategy.getAtrTakeProfitMultiplier() != null
                 && strategy.getAtrTakeProfitMultiplier().compareTo(BigDecimal.ZERO) > 0;
-        boolean hasPctTp     = strategy.getTakeProfitPct() != null;
+        boolean hasPctTp     = !hasStagedTp && strategy.getTakeProfitPct() != null;
 
-        if (!hasTrailingStop && !hasAtrStop && !hasPctStop && !hasAtrTp && !hasPctTp) {
+        if (!hasTrailingStop && !hasAtrStop && !hasPctStop
+                && !hasAtrTp && !hasPctTp && !hasStagedTp) {
             return;
         }
 
@@ -933,8 +1160,8 @@ public class TradeExecutionService {
                     strategy.getStopLossPct(), position.getStopLoss());
         }
 
-        // ── 非ATR路径：固定百分比止盈 ────────────────────────
-        if (!hasAtrTp && hasPctTp) {
+        // ── 非ATR路径：固定百分比止盈（仅在未启用分阶段时生效）─────
+        if (!hasStagedTp && !hasAtrTp && hasPctTp) {
             BigDecimal pct = strategy.getTakeProfitPct()
                     .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
             BigDecimal takeProfit = isShort
@@ -944,6 +1171,27 @@ public class TradeExecutionService {
             log.info("[Fixed TP] strategy={} side={} entryPrice={} pct={}% takeProfit={}",
                     strategy.getName(), position.getSide(), entryPrice,
                     strategy.getTakeProfitPct(), position.getTakeProfit());
+        }
+
+        // ── 分阶段止盈：写入第 1 档为 takeProfit（task 检测下一档触发用），
+        //    initialQuantity 作为各档平仓量基准，stage 初始化为 0。─────
+        if (hasStagedTp) {
+            BigDecimal pct1 = strategy.getTakeProfitPct1()
+                    .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+            BigDecimal tp1 = isShort
+                    ? entryPrice.multiply(BigDecimal.ONE.subtract(pct1))
+                    : entryPrice.multiply(BigDecimal.ONE.add(pct1));
+            position.setTakeProfit(tp1.setScale(8, RoundingMode.HALF_UP));
+            position.setTakeProfitStage(0);
+            if (position.getInitialQuantity() == null
+                    || position.getInitialQuantity().compareTo(BigDecimal.ZERO) <= 0) {
+                position.setInitialQuantity(position.getQuantity());
+            }
+            log.info("[Staged TP] strategy={} side={} entry={} initialQty={} stage1=({}%,{}%) tp1={}",
+                    strategy.getName(), position.getSide(), entryPrice,
+                    position.getInitialQuantity(),
+                    strategy.getTakeProfitPct1(), strategy.getTakeProfitSize1(),
+                    position.getTakeProfit());
         }
 
         // ── 峰值回撤止损：初始化极值追踪（与移动ATR止损独立并存）────────

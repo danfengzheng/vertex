@@ -114,6 +114,27 @@ public class Position extends BaseEntity {
      */
     private BigDecimal lowestPrice;
 
+    // ─── 分阶段止盈追踪字段 ─────────────────────────────────────────
+
+    /**
+     * 已触发的止盈阶段计数（0 = 尚未触发；1/2/3 = 已平掉第 N 档）。
+     * <p>
+     * 由 StopLossTakeProfitTask 通过 CAS（WHERE take_profit_stage = stage）方式推进，
+     * 在分阶段止盈的 reduceOnly 减仓单成交回调中递增；防止 10s 扫描周期内重复触发同一阶段。
+     * </p>
+     */
+    private Integer takeProfitStage;
+
+    /**
+     * 持仓首次建立时的原始数量（initial quantity）。
+     * <p>
+     * 分阶段止盈的每档平仓数量 = initialQuantity × sizeRatio_i / 100，
+     * 不能用 quantity 作为分母（quantity 在每次部分平仓后衰减）。
+     * 加仓（averageIntoPosition）时会重置为新的合计 quantity，并清零 takeProfitStage。
+     * </p>
+     */
+    private BigDecimal initialQuantity;
+
     /**
      * SuperTrend 动态止损价。
      * <p>

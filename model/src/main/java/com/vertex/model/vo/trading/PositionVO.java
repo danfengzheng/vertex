@@ -56,6 +56,12 @@ public class PositionVO implements Serializable {
      */
     private BigDecimal superTrendStopLoss;
 
+    // ─── 分阶段止盈进度（null/0 = 未触发） ───────────────────────────
+    /** 已触发档数（0/1/2/3） */
+    private Integer takeProfitStage;
+    /** 持仓建立时原始数量，用于前端展示「累计平仓百分比 = (initialQuantity - quantity) / initialQuantity」 */
+    private BigDecimal initialQuantity;
+
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

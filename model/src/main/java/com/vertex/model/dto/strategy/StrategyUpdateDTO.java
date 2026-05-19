@@ -63,6 +63,22 @@ public class StrategyUpdateDTO {
     /** ATR 止盈倍数（如 3.0），设置后优先于固定止盈百分比 */
     private BigDecimal atrTakeProfitMultiplier;
 
+    // ─── 分阶段止盈（固定3档；size1>0 即启用，启用后与 takeProfitPct/atrTakeProfitMultiplier 互斥） ──
+    /** 第 1 档触发价百分比 */
+    private BigDecimal takeProfitPct1;
+    /** 第 1 档平仓比例（0-100），>0 即启用分阶段 */
+    private BigDecimal takeProfitSize1;
+    /** 第 2 档触发价百分比（可选） */
+    private BigDecimal takeProfitPct2;
+    /** 第 2 档平仓比例（可选） */
+    private BigDecimal takeProfitSize2;
+    /** 第 3 档触发价百分比（可选） */
+    private BigDecimal takeProfitPct3;
+    /** 第 3 档平仓比例（可选） */
+    private BigDecimal takeProfitSize3;
+    /** 触发指定档后将止损上移到入场价（保本退出）：1/2/3；0/null=不启用 */
+    private Integer moveStopToBreakevenAfterStage;
+
     // ─── 移动ATR止损配置（四参数联动） ────────────────────
     /** 阶段1：初始止损倍数（如 3.5） */
     private BigDecimal initialStopMultiplier;

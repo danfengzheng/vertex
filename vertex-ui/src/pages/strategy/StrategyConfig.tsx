@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import {
   Table, Button, Space, message, Tag, Modal, Form, Select, Input, Switch,
   InputNumber, Card, Popconfirm, Divider, Tooltip, AutoComplete,
@@ -675,6 +675,14 @@ export const StrategyConfig = () => {
         trailingDropPct: record.trailingDropPct,
         superTrendSlOffsetPct: record.superTrendSlOffsetPct,
         pauseOnStopLoss: record.pauseOnStopLoss === 1,
+        // 分阶段止盈
+        takeProfitPct1: record.takeProfitPct1,
+        takeProfitSize1: record.takeProfitSize1,
+        takeProfitPct2: record.takeProfitPct2,
+        takeProfitSize2: record.takeProfitSize2,
+        takeProfitPct3: record.takeProfitPct3,
+        takeProfitSize3: record.takeProfitSize3,
+        moveStopToBreakevenAfterStage: record.moveStopToBreakevenAfterStage ?? 0,
       });
     }, 0);
   };
@@ -736,6 +744,10 @@ export const StrategyConfig = () => {
           'initialStopMultiplier', 'breakevenActivationMultiplier',
           'trailingActivationMultiplier', 'trailingDistanceMultiplier',
           'atrInterval', 'maxHoldingBars', 'trailingDropPct', 'superTrendSlOffsetPct',
+          'takeProfitPct1', 'takeProfitSize1',
+          'takeProfitPct2', 'takeProfitSize2',
+          'takeProfitPct3', 'takeProfitSize3',
+          'moveStopToBreakevenAfterStage',
         ] as const;
         const payload: Record<string, unknown> = { id: editingId, ...values };
         CLEARABLE_FIELDS.forEach((key) => {
@@ -1637,6 +1649,92 @@ export const StrategyConfig = () => {
                   <Switch />
                 </Form.Item>
               </Space>
+
+              <Divider titlePlacement="left" style={{ marginTop: 8 }}>
+                {t('text.trading.stagedTakeProfit')}
+                <Tooltip title={t('text.trading.stagedTpEnableTip')}>
+                  <span style={{ marginLeft: 8, color: '#999', fontSize: 12, cursor: 'help' }}>?</span>
+                </Tooltip>
+              </Divider>
+              <Form.Item shouldUpdate noStyle>
+                {({ getFieldValue }) => {
+                  const s1 = Number(getFieldValue('takeProfitSize1') || 0);
+                  const s2 = Number(getFieldValue('takeProfitSize2') || 0);
+                  const s3 = Number(getFieldValue('takeProfitSize3') || 0);
+                  const sum = s1 + s2 + s3;
+                  const maxStage = s3 > 0 ? 3 : (s2 > 0 ? 2 : (s1 > 0 ? 1 : 0));
+                  let hint: ReactNode = null;
+                  if (s1 > 0) {
+                    if (sum > 100) {
+                      hint = <span style={{ color: '#ff4d4f' }}>{t('text.trading.stagedTpSumExceed')}</span>;
+                    } else if (sum >= 100) {
+                      hint = <span style={{ color: '#52c41a' }}>{t('text.trading.stagedTpSumFull')}</span>;
+                    } else {
+                      hint = <span style={{ color: '#999' }}>{t('text.trading.stagedTpSumLine', { sum, remain: (100 - sum).toFixed(2) })}</span>;
+                    }
+                  }
+                  return (
+                    <>
+                      <Space size="large" wrap>
+                        <Form.Item
+                          name="takeProfitPct1"
+                          label={`${t('text.trading.stagedTpStage', { n: 1 })} · ${t('text.trading.stagedTpPct')}`}
+                          tooltip={t('text.trading.stagedTpPctTip')}
+                        >
+                          <InputNumber min={0} max={1000} step={0.5} style={{ width: 150 }} addonAfter="%" />
+                        </Form.Item>
+                        <Form.Item
+                          name="takeProfitSize1"
+                          label={`${t('text.trading.stagedTpStage', { n: 1 })} · ${t('text.trading.stagedTpSize')}`}
+                          tooltip={t('text.trading.stagedTpSizeTip')}
+                        >
+                          <InputNumber min={0} max={100} step={5} style={{ width: 150 }} addonAfter="%" />
+                        </Form.Item>
+                        <Form.Item
+                          name="takeProfitPct2"
+                          label={`${t('text.trading.stagedTpStage', { n: 2 })} · ${t('text.trading.stagedTpPct')}`}
+                        >
+                          <InputNumber min={0} max={1000} step={0.5} style={{ width: 150 }} addonAfter="%" />
+                        </Form.Item>
+                        <Form.Item
+                          name="takeProfitSize2"
+                          label={`${t('text.trading.stagedTpStage', { n: 2 })} · ${t('text.trading.stagedTpSize')}`}
+                        >
+                          <InputNumber min={0} max={100} step={5} style={{ width: 150 }} addonAfter="%" />
+                        </Form.Item>
+                        <Form.Item
+                          name="takeProfitPct3"
+                          label={`${t('text.trading.stagedTpStage', { n: 3 })} · ${t('text.trading.stagedTpPct')}`}
+                        >
+                          <InputNumber min={0} max={1000} step={0.5} style={{ width: 150 }} addonAfter="%" />
+                        </Form.Item>
+                        <Form.Item
+                          name="takeProfitSize3"
+                          label={`${t('text.trading.stagedTpStage', { n: 3 })} · ${t('text.trading.stagedTpSize')}`}
+                        >
+                          <InputNumber min={0} max={100} step={5} style={{ width: 150 }} addonAfter="%" />
+                        </Form.Item>
+                        <Form.Item
+                          name="moveStopToBreakevenAfterStage"
+                          label={t('text.trading.moveStopToBreakeven')}
+                          tooltip={t('text.trading.moveStopToBreakevenTip')}
+                          initialValue={0}
+                        >
+                          <Select style={{ width: 180 }}
+                            options={[
+                              { value: 0, label: t('text.trading.moveStopToBreakevenNone') },
+                              ...(maxStage >= 1 ? [{ value: 1, label: t('text.trading.moveStopToBreakevenAfter', { n: 1 }) }] : []),
+                              ...(maxStage >= 2 ? [{ value: 2, label: t('text.trading.moveStopToBreakevenAfter', { n: 2 }) }] : []),
+                              ...(maxStage >= 3 ? [{ value: 3, label: t('text.trading.moveStopToBreakevenAfter', { n: 3 }) }] : []),
+                            ]}
+                          />
+                        </Form.Item>
+                      </Space>
+                      {hint && <div style={{ marginTop: 4, fontSize: 12 }}>{hint}</div>}
+                    </>
+                  );
+                }}
+              </Form.Item>
 
               <Divider titlePlacement="left" style={{ marginTop: 8 }}>{t('text.trading.trailingStopTitle')}</Divider>
               <Space size="large" wrap>
