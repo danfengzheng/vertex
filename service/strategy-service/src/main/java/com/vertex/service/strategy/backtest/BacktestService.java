@@ -1,6 +1,7 @@
 package com.vertex.service.strategy.backtest;
 
 import com.alibaba.fastjson2.JSON;
+import com.vertex.api.usersetting.IUserSettingService;
 import com.vertex.common.core.GlobalError;
 import com.vertex.common.core.exception.BizException;
 import com.vertex.model.dto.strategy.BacktestConfigDTO;
@@ -48,6 +49,13 @@ public class BacktestService {
     private final IndicatorCalculationEngine indicatorEngine;
     private final SignalGenerator signalGenerator;
     private final StrategyProperties properties;
+
+    /**
+     * 用户个人设置（最大使用资金截断），可选注入。
+     * user-service 未启动或在测试环境中未注册时降级为不限制。
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private IUserSettingService userSettingService;
 
     /**
      * 执行策略回测
@@ -234,6 +242,24 @@ public class BacktestService {
         BigDecimal initialPosition = BigDecimal.ZERO; // 持仓建立时的基线数量
         BigDecimal initialMargin   = BigDecimal.ZERO; // 持仓建立时的保证金，用于按比例摊销 marginPaid
         Integer breakevenAfterStage = strategy.getMoveStopToBreakevenAfterStage();
+
+        // ── 个人设置：单笔开仓最大使用资金（U/USDT）截断 ──────────────────────────────
+        // 与实盘 TradeExecutionService.applyUserMaxTradeCapital 行为一致：
+        //   按策略创建者读取一次（回测期间该值不变，循环外缓存避免 N 次 DB 查询）。
+        // null / <= 0 / 服务未注入 → maxTradeCapital 为 null，不截断。
+        BigDecimal maxTradeCapital = null;
+        if (userSettingService != null && strategy.getCreateBy() != null) {
+            try {
+                maxTradeCapital = userSettingService.getMaxTradeCapital(strategy.getCreateBy());
+            } catch (Exception e) {
+                log.warn("[Backtest] Failed to read user maxTradeCapital for userId={}: {}",
+                        strategy.getCreateBy(), e.getMessage());
+            }
+        }
+        if (maxTradeCapital != null) {
+            log.info("[Backtest] User maxTradeCapital cap active: userId={} max={}",
+                    strategy.getCreateBy(), maxTradeCapital);
+        }
 
         // ── 止损熔断 ─────────────────────────────────────────────────────────────────
         // 开关启用时，止损（STOP_LOSS / TRAILING_DROP）触发且实际亏损即暂停开仓 24 小时。
@@ -838,6 +864,14 @@ public class BacktestService {
                         tradeAmount = baseTradeAmount.multiply(BigDecimal.valueOf(coeff))
                                 .setScale(8, RoundingMode.DOWN);
                     }
+                }
+                // 个人设置：tradeAmount 超过用户配置的 maxTradeCapital 时截断
+                // （与实盘 TradeExecutionService.applyUserMaxTradeCapital 行为一致；
+                //  ATR 仓位系数应用之后再截断，确保上限是硬性约束）
+                if (maxTradeCapital != null && tradeAmount.compareTo(maxTradeCapital) > 0) {
+                    log.debug("[Backtest] tradeAmount {} exceeds maxTradeCapital, capped to {}",
+                            tradeAmount, maxTradeCapital);
+                    tradeAmount = maxTradeCapital;
                 }
                 // 手续费按名义价值计算（杠杆×保证金）
                 BigDecimal openFee = tradeAmount.multiply(BigDecimal.valueOf(leverage)).multiply(config.getFeeRate());
