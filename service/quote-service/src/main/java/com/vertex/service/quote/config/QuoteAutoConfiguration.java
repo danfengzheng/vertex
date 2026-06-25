@@ -7,6 +7,7 @@ import com.vertex.service.quote.converter.KLineConverter;
 import com.vertex.service.quote.converter.OkxKLineConverter;
 import com.vertex.service.quote.notify.CompositeNotifier;
 import com.vertex.service.quote.notify.KLineNotifyGate;
+import com.vertex.service.quote.notify.WebSocketAlertNotifier;
 import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.quote.source.rest.BinanceRestClient;
 import com.vertex.service.quote.source.rest.KLineRestClient;
@@ -84,7 +85,8 @@ public class QuoteAutoConfiguration {
                                                KLineFlushOnNextHandler klineFlushOnNextHandler,
                                                Optional<InMemoryKLineAggregator> aggregator,
                                                List<KLineRestClient> restClients,
-                                               KLineNotifyGate klineNotifyGate) {
+                                               KLineNotifyGate klineNotifyGate,
+                                               Optional<WebSocketAlertNotifier> alertNotifier) {
         KLineConverter converter = findConverter(converters, "binance");
         QuoteProperties.Exchange.ExchangeItem binanceConfig = properties.getExchange().getBinance();
 
@@ -98,8 +100,11 @@ public class QuoteAutoConfiguration {
                 .autoReconnect(true)
                 .build();
 
-        return new BinanceWsDataSource(exchangeConfig, converter, klineStore, notifier,
+        BinanceWsDataSource ds = new BinanceWsDataSource(exchangeConfig, converter, klineStore, notifier,
                 klineFlushOnNextHandler, aggregator.orElse(null), restClients, klineNotifyGate);
+        // Telegram 告警（断开 / 恢复）：未启用 vertex.strategy.telegram.enabled 时为空，安全降级
+        alertNotifier.ifPresent(ds::setAlertNotifier);
+        return ds;
     }
 
     @Bean
@@ -120,7 +125,8 @@ public class QuoteAutoConfiguration {
                                            List<KLineConverter> converters,
                                            KLineStore klineStore,
                                            CompositeNotifier notifier,
-                                           KLineFlushOnNextHandler klineFlushOnNextHandler) {
+                                           KLineFlushOnNextHandler klineFlushOnNextHandler,
+                                           Optional<WebSocketAlertNotifier> alertNotifier) {
         KLineConverter converter = findConverter(converters, "okx");
         QuoteProperties.Exchange.ExchangeItem okxConfig = properties.getExchange().getOkx();
 
@@ -135,7 +141,9 @@ public class QuoteAutoConfiguration {
                 .autoReconnect(true)
                 .build();
 
-        return new OkxWsDataSource(exchangeConfig, converter, klineStore, notifier, klineFlushOnNextHandler);
+        OkxWsDataSource ds = new OkxWsDataSource(exchangeConfig, converter, klineStore, notifier, klineFlushOnNextHandler);
+        alertNotifier.ifPresent(ds::setAlertNotifier);
+        return ds;
     }
 
     @Bean

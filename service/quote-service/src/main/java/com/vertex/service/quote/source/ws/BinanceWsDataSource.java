@@ -15,6 +15,7 @@ import com.vertex.service.quote.converter.KLineConverter;
 import com.vertex.service.quote.handler.KLineFlushOnNextHandler;
 import com.vertex.service.quote.notify.CompositeNotifier;
 import com.vertex.service.quote.notify.KLineNotifyGate;
+import com.vertex.service.quote.notify.WebSocketAlertNotifier;
 import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.quote.source.rest.KLineRestClient;
 import com.vertex.service.quote.store.KLineStore;
@@ -66,6 +67,25 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
     private final Map<String, Set<KLineInterval>> tradeSymbolIntervals = new ConcurrentHashMap<>();
 
     private volatile boolean connected = false;
+
+    /**
+     * 是否已经成功连接过一次：用于在 onConnectionReady 中区分「首次连接」与「重连」。
+     * - false：首次连接成功 → 不发恢复告警
+     * - true ：重连成功 → 发送恢复告警
+     */
+    private volatile boolean hasEverConnected = false;
+    /** 最近一次断开的时间戳（System.currentTimeMillis），用于在恢复告警里展示断连时长 */
+    private volatile long lastDisconnectTime = -1L;
+    /** Telegram 告警通知器（可选，未启用 vertex.strategy.telegram.enabled 时为 null） */
+    private volatile WebSocketAlertNotifier alertNotifier;
+
+    /**
+     * 注入 WebSocket 告警通知器（由 QuoteAutoConfiguration 调用）。
+     * 用 setter 注入以保持现有构造函数签名兼容。
+     */
+    public void setAlertNotifier(WebSocketAlertNotifier alertNotifier) {
+        this.alertNotifier = alertNotifier;
+    }
 
     /** 防抖：已连接时多次 subscribe 只发一次批量订阅，避免 5 策略×3 标的 连续发 15 条触发限流 */
     private final ScheduledExecutorService batchSchedule = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -356,6 +376,20 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
         connected = true;
         log.info("[Binance] WebSocket data source connected");
 
+        // 区分「首次连接」与「重连」：仅重连成功时发送恢复告警，首次启动不发
+        boolean isReconnect = hasEverConnected;
+        hasEverConnected = true;
+        if (isReconnect && alertNotifier != null) {
+            long downtimeMs = lastDisconnectTime > 0
+                    ? System.currentTimeMillis() - lastDisconnectTime
+                    : -1L;
+            try {
+                alertNotifier.notifyReconnected(exchangeCode(), getWsUrlSafe(), downtimeMs);
+            } catch (Exception e) {
+                log.warn("[Binance] Failed to send reconnected alert: {}", e.getMessage());
+            }
+        }
+
         // 收集当前已有的订阅列表（初次连接时为空；重连时非空）
         List<SymbolInterval> pairs = getSubscribedPairs();
 
@@ -400,7 +434,27 @@ public class BinanceWsDataSource extends ExchangeWebSocketClient implements Quot
     protected void onConnectionLost() {
         super.onConnectionLost();
         connected = false;
+        lastDisconnectTime = System.currentTimeMillis();
         log.warn("[Binance] WebSocket data source connection lost");
+
+        // 仅在「曾经成功连接过」之后才发断开告警，避免启动期 BootstrapFailure 误报
+        if (hasEverConnected && alertNotifier != null) {
+            try {
+                alertNotifier.notifyDisconnected(exchangeCode(), getWsUrlSafe(),
+                        "WebSocket channel inactive");
+            } catch (Exception e) {
+                log.warn("[Binance] Failed to send disconnected alert: {}", e.getMessage());
+            }
+        }
+    }
+
+    /** 安全获取 WS URL（避免空指针，仅用于告警展示） */
+    private String getWsUrlSafe() {
+        try {
+            return getExchangeConfig() != null ? getExchangeConfig().getWsUrl() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 重连后按当前订阅列表批量发送 SUBSCRIBE（一次请求多个 stream，避免多条消息触发限流断线） */

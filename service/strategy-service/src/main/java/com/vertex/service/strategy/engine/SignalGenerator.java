@@ -102,7 +102,7 @@ public class SignalGenerator {
                     + (fc.getInterval() != null ? "[" + fc.getInterval().getCode() + "]" : "");
 
             if (filterResult == null) {
-                log.info("[HardFilter] vetoed by {}: no data or calculation failed", label);
+                log.debug("[HardFilter] vetoed by {}: no data or calculation failed", label);
                 descBuilder.append(label).append("[FILTER:no_data] ");
                 return buildSignal(strategy, klines, allValues, SignalType.NEUTRAL, 0, descBuilder);
             }
@@ -121,7 +121,7 @@ public class SignalGenerator {
                     Double actual = filterResult.getValues().get(cond.getField());
                     String expr = cond.getField() + opSymbol(cond.getOp()) + cond.getThreshold();
                     if (actual == null || !evalCondition(actual, cond.getOp(), cond.getThreshold())) {
-                        log.info("[HardFilter] vetoed by {}: condition '{}' failed (actual={})", label, expr, actual);
+                        log.debug("[HardFilter] vetoed by {}: condition '{}' failed (actual={})", label, expr, actual);
                         condDesc.append("(FAIL:").append(expr).append(")");
                         allPass = false;
                         break;
@@ -140,7 +140,7 @@ public class SignalGenerator {
                 descBuilder.append(label).append("[FILTER]=")
                         .append(filterResult.getSuggestion()).append(" ");
                 if (filterResult.getSuggestion() == SignalSuggestion.NEUTRAL) {
-                    log.info("[HardFilter] vetoed by {}: NEUTRAL direction", label);
+                    log.debug("[HardFilter] vetoed by {}: NEUTRAL direction", label);
                     descBuilder.append("(VETOED:NEUTRAL) ");
                     return buildSignal(strategy, klines, allValues, SignalType.NEUTRAL, 0, descBuilder);
                 }
@@ -237,7 +237,7 @@ public class SignalGenerator {
                             (signalType == SignalType.BUY  && cached.getSuggestion() == SignalSuggestion.BUY)
                          || (signalType == SignalType.SELL && cached.getSuggestion() == SignalSuggestion.SELL);
                     if (!dirMatch) {
-                        log.info("[HardFilter] {} direction mismatch: filter={} composite={}",
+                        log.debug("[HardFilter] {} direction mismatch: filter={} composite={}",
                                 label, cached.getSuggestion(), signalType);
                         descBuilder.append("| ").append(label)
                                 .append("[DIR-MISMATCH:").append(cached.getSuggestion()).append("→VETOED] ");
@@ -260,7 +260,7 @@ public class SignalGenerator {
                         String expr = cond.getField() + opSymbol(cond.getOp()) + cond.getThreshold()
                                 + "(@" + dirKey + ")";
                         if (actual == null || !evalCondition(actual, cond.getOp(), cond.getThreshold())) {
-                            log.info("[HardFilter] {} vetoed by {}: '{}' failed (actual={})",
+                            log.debug("[HardFilter] {} vetoed by {}: '{}' failed (actual={})",
                                     signalType, label, expr, actual);
                             condDesc.append("(FAIL:").append(expr).append(")");
                             allPass = false;

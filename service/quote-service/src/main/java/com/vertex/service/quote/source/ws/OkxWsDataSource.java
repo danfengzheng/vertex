@@ -12,6 +12,7 @@ import com.vertex.model.entity.quote.KLineInterval;
 import com.vertex.service.quote.converter.KLineConverter;
 import com.vertex.service.quote.handler.KLineFlushOnNextHandler;
 import com.vertex.service.quote.notify.CompositeNotifier;
+import com.vertex.service.quote.notify.WebSocketAlertNotifier;
 import com.vertex.service.quote.source.QuoteDataSource;
 import com.vertex.service.quote.store.KLineStore;
 import io.netty.channel.Channel;
@@ -46,6 +47,15 @@ public class OkxWsDataSource extends ExchangeWebSocketClient implements QuoteDat
     private final Map<String, String> topicSymbolMap = new ConcurrentHashMap<>();
 
     private volatile boolean connected = false;
+
+    /** 重连成功告警相关：与 BinanceWsDataSource 行为一致 */
+    private volatile boolean hasEverConnected = false;
+    private volatile long lastDisconnectTime = -1L;
+    private volatile WebSocketAlertNotifier alertNotifier;
+
+    public void setAlertNotifier(WebSocketAlertNotifier alertNotifier) {
+        this.alertNotifier = alertNotifier;
+    }
 
     public OkxWsDataSource(ExchangeConfig config,
                            KLineConverter klineConverter,
@@ -200,6 +210,20 @@ public class OkxWsDataSource extends ExchangeWebSocketClient implements QuoteDat
         super.onConnectionReady();
         connected = true;
         log.info("[OKX] WebSocket data source connected");
+        // 区分首次连接 vs 重连：仅重连成功时告警
+        boolean isReconnect = hasEverConnected;
+        hasEverConnected = true;
+        if (isReconnect && alertNotifier != null) {
+            long downtimeMs = lastDisconnectTime > 0
+                    ? System.currentTimeMillis() - lastDisconnectTime
+                    : -1L;
+            try {
+                String wsUrl = getExchangeConfig() != null ? getExchangeConfig().getWsUrl() : null;
+                alertNotifier.notifyReconnected(exchangeCode(), wsUrl, downtimeMs);
+            } catch (Exception e) {
+                log.warn("[OKX] Failed to send reconnected alert: {}", e.getMessage());
+            }
+        }
         resubscribeAll();
     }
 
@@ -207,7 +231,16 @@ public class OkxWsDataSource extends ExchangeWebSocketClient implements QuoteDat
     protected void onConnectionLost() {
         super.onConnectionLost();
         connected = false;
+        lastDisconnectTime = System.currentTimeMillis();
         log.warn("[OKX] WebSocket data source connection lost");
+        if (hasEverConnected && alertNotifier != null) {
+            try {
+                String wsUrl = getExchangeConfig() != null ? getExchangeConfig().getWsUrl() : null;
+                alertNotifier.notifyDisconnected(exchangeCode(), wsUrl, "WebSocket channel inactive");
+            } catch (Exception e) {
+                log.warn("[OKX] Failed to send disconnected alert: {}", e.getMessage());
+            }
+        }
     }
 
     /** 重连后重新发送订阅，否则交易所不会推送数据 */
