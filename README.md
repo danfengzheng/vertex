@@ -6,21 +6,27 @@ Vertex 是一个前后端统一管理的微服务项目。
 
 ```
 vertex/
-├── api/                    # API 接口模块
-├── common/                 # 公共模块
-│   ├── common-core/        # 核心工具模块
-│   └── common-web/         # Web 公共模块
-├── model/                  # 数据模型模块
-├── service/                # 服务模块
-│   ├── user-service/       # 用户服务
-│   ├── order-service/      # 订单服务
-│   └── product-service/    # 产品服务
-├── web/                    # Web 模块
-│   └── admin-web/          # 管理后台
-├── vertex-ui/              # 前端项目（React）
-├── sql/                    # 数据库脚本
-├── gradle/                 # Gradle 配置
-└── settings.gradle         # Gradle 设置
+├── api/                              # 跨模块 RPC 接口定义（无业务实现）
+├── common/                           # 公共模块
+│   ├── common-core/                  # 核心工具、基础实体、异常处理
+│   └── common-web/                   # Web 公共组件（统一响应、全局异常）
+├── model/                            # 数据模型（Entity / DTO / VO）
+├── service/                          # 业务服务（被 admin-web 打包为单体）
+│   ├── user-service/                 # 用户 / 角色 / 菜单 / 通知配置 / 个人设置
+│   ├── order-service/                # 交易执行 / 持仓 / 订单 / 止损止盈
+│   ├── product-service/              # 产品服务（预留）
+│   ├── quote-service/                # 行情订阅 / K 线存储 / 重连补全
+│   ├── strategy-service/             # 策略评估 / 信号 / 回测
+│   └── chain-analysis-service/       # 链上代币 / 告警规则
+├── framework/                        # 基础框架
+│   └── socket-framework-starter/     # WebSocket 客户端 + 自动重连
+├── web/                              # Web 应用入口
+│   └── admin-web/                    # 管理后台（唯一可执行 fat jar）
+├── vertex-ui/                        # 前端项目（React 19 + Vite）
+├── sql/                              # 数据库脚本（V1 ~ V18 增量迁移）
+├── gradle/                           # Gradle wrapper + libs.versions.toml
+├── build.gradle / settings.gradle    # 根构建配置
+└── gradlew / gradlew.bat             # Gradle wrapper 启动脚本
 ```
 
 ## 后端项目
@@ -40,14 +46,90 @@ vertex/
 - **service**: 业务服务实现
 - **web**: Web 应用入口
 
-### 运行后端
-```bash
-# 构建项目
-./gradlew build
+### 后端打包
 
-# 运行管理后台
-cd web/admin-web
-./gradlew bootRun
+后端采用 Gradle 多模块**单体部署**架构：所有 service 模块（user-service / order-service / quote-service / strategy-service / chain-analysis-service / product-service）作为依赖被 `web/admin-web` 合并打包成**单一可执行 fat jar**，无需单独部署各微服务。
+
+#### 构建环境要求
+
+- **JDK 21**（项目 `sourceCompatibility = 21`，低版本无法编译）
+- **Gradle Wrapper 自带**：无需本地安装 Gradle，首次构建会自动下载 Gradle 8.5 与依赖到 `~/.gradle/`
+- macOS / Linux 用 `./gradlew`，Windows 用 `gradlew.bat`
+- 阿里云 Maven 镜像已配置（`build.gradle` 中），国内构建无需额外配置
+
+#### 打包命令
+
+```bash
+# 完整构建（含单元测试，首次构建推荐）
+./gradlew clean build
+
+# 仅打包可执行 jar（跳过测试，CI / 生产构建推荐）
+./gradlew clean :web:admin-web:bootJar -x test
+
+# 增量重建（依赖未变动时最快）
+./gradlew :web:admin-web:bootJar
+
+# 仅编译验证不打包（最快，用于本地代码自查）
+./gradlew :web:admin-web:compileJava
+```
+
+#### 产出位置
+
+构建成功后产出位于：
+
+```
+web/admin-web/build/libs/admin-web-1.0.0.jar
+```
+
+- `admin-web-1.0.0.jar` — Spring Boot fat jar，**单一可执行包**，已合并所有 service 模块依赖
+- 子模块（`model` / `common` / `service/*` / `framework/socket-framework-starter`）不会单独产出可执行 jar，仅生成 `*-1.0.0.jar` library 包供 admin-web 引用
+- `admin-web/build.gradle` 中 `jar { enabled = false }` 已禁用 plain jar，避免产出无用的几百字节空包
+
+### 后端运行
+
+#### 本地开发运行
+
+```bash
+# 直接以 Gradle 任务运行（适合调试，热重启需配合 IDE）
+./gradlew :web:admin-web:bootRun
+
+# 指定 profile
+./gradlew :web:admin-web:bootRun --args='--spring.profiles.active=dev'
+```
+
+默认使用 `web/admin-web/src/main/resources/application.yaml` 配置。
+
+#### 生产环境运行
+
+```bash
+# 直接运行 fat jar
+java -jar web/admin-web/build/libs/admin-web-1.0.0.jar
+
+# 指定 profile（推荐：用 application-prod.yaml 覆盖默认配置）
+java -jar web/admin-web/build/libs/admin-web-1.0.0.jar --spring.profiles.active=prod
+
+# 自定义 JVM 内存
+java -Xms512m -Xmx2g -jar web/admin-web/build/libs/admin-web-1.0.0.jar
+
+# Linux 后台启动 + 日志重定向
+mkdir -p logs
+nohup java -Xms512m -Xmx2g \
+    -jar web/admin-web/build/libs/admin-web-1.0.0.jar \
+    --spring.profiles.active=prod \
+    > logs/admin-web.log 2>&1 &
+echo $! > logs/admin-web.pid
+
+# 停止
+kill $(cat logs/admin-web.pid)
+```
+
+#### 数据库迁移
+
+升级版本时按 `sql/` 目录下 `V<N>_*.sql` 文件**升序执行**未应用过的迁移脚本（项目暂未集成 Flyway / Liquibase，需手工或自建脚本执行）：
+
+```bash
+# 示例：执行最新增量迁移
+mysql -u<user> -p<password> <database> < sql/V18_user_setting.sql
 ```
 
 ## 前端项目 (vertex-ui)
