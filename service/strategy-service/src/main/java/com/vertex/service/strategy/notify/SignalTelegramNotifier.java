@@ -112,6 +112,21 @@ public class SignalTelegramNotifier implements SignalNotifier {
         return properties.getTelegram().getChatId();
     }
 
+    /**
+     * 公开发送 HTML 文本到指定用户的 Telegram。
+     * <p>
+     * AI 分析等模块在主信号已通知之后，可以追加发送 AI 摘要——complementary，
+     * 不影响 SignalNotifier 接口的契约。
+     * </p>
+     *
+     * @param createBy 信号归属用户 ID（可空，空时使用全局 chatId）
+     * @param htmlText 已转义的 HTML 文本（调用方负责 escapeHtml）
+     */
+    public void sendCustomMessage(Long createBy, String htmlText) {
+        String chatId = resolveUserChatId(createBy);
+        sendMessage(htmlText, chatId);
+    }
+
     private void sendMessage(String text, String chatId) {
         StrategyProperties.Telegram config = properties.getTelegram();
         if (!StringUtils.hasText(config.getBotToken()) || !StringUtils.hasText(chatId)) {

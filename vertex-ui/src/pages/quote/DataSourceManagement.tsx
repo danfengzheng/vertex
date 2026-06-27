@@ -302,8 +302,8 @@ export const DataSourceManagement = () => {
   ];
 
   const handleTimePreset = (days: number) => {
-    const end = dayjs();
-    const start = end.subtract(days, 'day');
+    const end = dayjs().endOf('day');
+    const start = dayjs().subtract(days, 'day').startOf('day');
     backfillForm.setFieldsValue({
       timeRange: [start, end],
     });
@@ -644,7 +644,12 @@ export const DataSourceManagement = () => {
             </Space>
             <Form.Item name="timeRange" noStyle>
               <DatePicker.RangePicker
-                showTime
+                showTime={{
+                  defaultValue: [
+                    dayjs('00:00:00', 'HH:mm:ss'),
+                    dayjs('23:59:59', 'HH:mm:ss'),
+                  ],
+                }}
                 style={{ width: '100%' }}
                 placeholder={[t('placeholder.quote.startTime'), t('placeholder.quote.endTime')]}
               />

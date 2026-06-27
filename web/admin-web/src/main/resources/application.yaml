@@ -77,6 +77,47 @@ vertex:
       bot-token: 8568350639:AAFb2uRyP705t29P53pfGnpspCxNxKagSx0
       chat-id: -1003829666749
       api-url: https://api.telegram.org
+  ai:
+    # ===== AI 分析配置（多 Provider 切换）=====
+    # 第一阶段：仅做 AI 分析，不参与决策；异步执行，失败不影响交易主流程。
+    #
+    # 切换 provider：
+    #   provider=gemini   → 用 Google Gemini（默认）
+    #   provider=deepseek → 用 DeepSeek（OpenAI 兼容协议，国内可直连）
+    # 改 provider 或 model 后必须**重启服务**才生效（Spring 配置绑定是启动期）。
+    # 重启后看日志 "[AiAnalysisService] activated: provider=X, model=Y" 验证生效。
+    provider: ${VERTEX_AI_PROVIDER:gemini}
+    # 通用参数（所有 provider 共享）
+    worker-threads: 2
+    queue-capacity: 2000
+    # AI 自由文本输出语言（zh-CN / en / ja / ko ...）。
+    # 仅影响 summary / keyFactors / risks / entryFactors / exitFactors / improvements
+    # 这些自由文本字段；verdict / alignment 等枚举值始终是英文 key（前端 i18n 翻译）。
+    language: ${VERTEX_AI_LANGUAGE:zh-CN}
+
+    # ----- Google Gemini -----
+    # 欧洲部署可直连；中国大陆部署建议 base-url 配 Cloudflare Worker 反代。
+    gemini:
+      enabled: ${VERTEX_AI_GEMINI_ENABLED:false}
+      # 在 https://aistudio.google.com/app/apikey 申请，免费层 1500 次/天
+      api-key: ${VERTEX_AI_GEMINI_API_KEY:}
+      # gemini-2.0-flash（便宜快，免费层够用） / gemini-2.5-pro（高质量但慢）
+      model: ${VERTEX_AI_GEMINI_MODEL:gemini-2.0-flash}
+      # 默认官方 endpoint；如需反代改为 https://your-cf-worker.example.com
+      base-url: ${VERTEX_AI_GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+      timeout-seconds: 30
+      max-retry: 2
+
+    # ----- DeepSeek（OpenAI 兼容协议）-----
+    # 国内可直连 api.deepseek.com，无需反代。在 platform.deepseek.com 申请 API Key。
+    deepseek:
+      enabled: ${VERTEX_AI_DEEPSEEK_ENABLED:false}
+      api-key: ${VERTEX_AI_DEEPSEEK_API_KEY:}
+      # deepseek-chat（V3 通用，快） / deepseek-reasoner（R1 推理，强但慢、贵）
+      model: ${VERTEX_AI_DEEPSEEK_MODEL:deepseek-chat}
+      base-url: ${VERTEX_AI_DEEPSEEK_BASE_URL:https://api.deepseek.com}
+      timeout-seconds: 60
+      max-retry: 2
   trading:
     enabled: true
     default-execution-mode: PAPER

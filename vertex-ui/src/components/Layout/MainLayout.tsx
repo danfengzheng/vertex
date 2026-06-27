@@ -27,6 +27,8 @@ import {
   NodeExpandOutlined,
   BellOutlined,
   DatabaseOutlined,
+  RobotOutlined,
+  MonitorOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -62,6 +64,9 @@ export const MainLayout = () => {
     }
     if (location.pathname.startsWith('/chain')) {
       return ['chain'];
+    }
+    if (location.pathname.startsWith('/ai')) {
+      return ['ai'];
     }
     return [];
   };
@@ -245,6 +250,23 @@ export const MainLayout = () => {
           key: '/trading/symbols',
           icon: <DatabaseOutlined />,
           label: t('text.trading.symbolTitle'),
+        },
+      ],
+    },
+    {
+      key: 'ai',
+      icon: <RobotOutlined />,
+      label: t('text.ai.title'),
+      children: [
+        {
+          key: '/ai/dashboard',
+          icon: <RobotOutlined />,
+          label: t('text.ai.dashboardTitle'),
+        },
+        {
+          key: '/ai/status',
+          icon: <MonitorOutlined />,
+          label: t('text.ai.statusTitle'),
         },
       ],
     },

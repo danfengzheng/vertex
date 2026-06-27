@@ -316,6 +316,10 @@ export interface BacktestConfigDTO {
   initialCapital?: number;
   positionRatio?: number;
   feeRate?: number;
+  /** 启用 AI 批量分析（异步执行） */
+  enableAiAnalysis?: boolean;
+  /** 强制重跑，忽略 RocksDB 缓存 */
+  forceRefresh?: boolean;
 }
 
 /** 交易记录 */
@@ -358,6 +362,14 @@ export interface BacktestResultVO {
   sharpeRatio: string;
   trades: TradeRecord[];
   equityCurve: EquityPoint[];
+  /** 回测缓存 key（SHA256 hex），用于查询 AI 分析与进度 */
+  cacheKey?: string | null;
+  /** 是否命中缓存 */
+  cached?: boolean | null;
+  /** 缓存创建时间戳（ms, UTC） */
+  cachedAt?: number | null;
+  /** AI 分析状态 */
+  aiAnalysisStatus?: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | null;
 }
 
 /** 策略管理 API */

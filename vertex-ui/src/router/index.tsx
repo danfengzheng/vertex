@@ -19,6 +19,8 @@ import { SymbolManagement } from '../pages/trading/SymbolManagement';
 import { TokenList } from '../pages/chain/TokenList';
 import { AlertConfig } from '../pages/chain/AlertConfig';
 import { SourceConfig } from '../pages/chain/SourceConfig';
+import { AiDashboard } from '../pages/ai/AiDashboard';
+import { AiStatusPage } from '../pages/ai/AiStatus';
 
 export const AppRouter = () => {
   return (
@@ -87,6 +89,14 @@ export const AppRouter = () => {
         } />
         <Route path="chain/source-config" element={
           <PermissionGuard path="/chain/source-config"><SourceConfig /></PermissionGuard>
+        } />
+
+        {/* AI 分析（权限码 ai:dashboard / ai:status，由 sys_menu V19 迁移建立） */}
+        <Route path="ai/dashboard" element={
+          <PermissionGuard path="/ai/dashboard"><AiDashboard /></PermissionGuard>
+        } />
+        <Route path="ai/status" element={
+          <PermissionGuard path="/ai/status"><AiStatusPage /></PermissionGuard>
         } />
 
         {/* 使用指南（无权限码，所有已登录用户可访问） */}

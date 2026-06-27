@@ -2,9 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Table, Button, Space, message, Tag, Select, DatePicker, Modal, Descriptions,
   Progress, Badge, Tooltip, Dropdown, Card, Row, Col, Statistic, Empty,
+  Spin, Alert, Popover,
 } from 'antd';
-import type { Dayjs } from 'dayjs';
+import dayjs, { type Dayjs } from 'dayjs';
 import { formatTimestamp } from '../../utils/date';
+import { aiApi } from '../../api/ai';
 import {
   ReloadOutlined,
   ThunderboltOutlined,
@@ -17,6 +19,7 @@ import {
   ArrowUpOutlined,
   ArrowDownOutlined,
   CloseOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import {
@@ -477,6 +480,14 @@ export const SignalMonitor = () => {
       key: 'price',
     },
     {
+      title: <><RobotOutlined /> {t('text.strategy.aiSummary')}</>,
+      key: 'ai',
+      width: 110,
+      render: (_: unknown, record: SignalVO) => (
+        <SignalAiInlineTrigger signalId={record.id} />
+      ),
+    },
+    {
       title: t('common.operation'),
       key: 'action',
       width: 80,
@@ -576,7 +587,12 @@ export const SignalMonitor = () => {
         </Select>
 
         <DatePicker.RangePicker
-          showTime
+          showTime={{
+            defaultValue: [
+              dayjs('00:00:00', 'HH:mm:ss'),
+              dayjs('23:59:59', 'HH:mm:ss'),
+            ],
+          }}
           value={timeRange}
           onChange={(vals) => setTimeRange(vals as [Dayjs, Dayjs] | null)}
         />
@@ -689,7 +705,312 @@ export const SignalMonitor = () => {
             </Descriptions.Item>
           </Descriptions>
         )}
+        {detailSignal && <SignalAiCard signalId={detailSignal.id} />}
       </Modal>
     </div>
+  );
+};
+
+/**
+ * 信号 AI 分析卡片：从 RocksDB 拉 AiSignalAnalysis 渲染。
+ * AI 异步执行；如未完成则提示「AI 分析中…」并轮询 3 次。
+ */
+const SignalAiCard = ({ signalId }: { signalId: string | number }) => {
+  const { t } = useTranslation();
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<import('../../api/ai').AiSignalAnalysis | null>(null);
+  const [tried, setTried] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const fetchOnce = async (attempt: number) => {
+      setLoading(true);
+      try {
+        const res = await aiApi.getSignalAnalysis(signalId);
+        if (cancelled) return;
+        setData(res.data || null);
+        setTried(attempt);
+        // 未找到 → 最多重试 2 次（每次 4s，给后端异步分析时间）
+        if (!res.data && attempt < 2) {
+          timer = setTimeout(() => fetchOnce(attempt + 1), 4000);
+        }
+      } catch {
+        // 静默
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchOnce(0);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [signalId]);
+
+  const cardTitle = <><RobotOutlined /> {t('text.strategy.aiSummary')}</>;
+  if (loading && !data) {
+    return (
+      <Card size="small" style={{ marginTop: 12 }} title={cardTitle}>
+        <Spin /> {t('text.strategy.aiLoading')}
+      </Card>
+    );
+  }
+  if (!data && tried >= 2) {
+    return (
+      <Card size="small" style={{ marginTop: 12 }} title={cardTitle}>
+        <span style={{ color: '#999' }}>{t('text.strategy.aiNotAvailable')}</span>
+      </Card>
+    );
+  }
+  if (!data) return null;
+
+  if (data.errorMessage) {
+    return (
+      <Card size="small" style={{ marginTop: 12 }} title={cardTitle}>
+        <Alert type="error" message={t('text.strategy.aiFailed')} description={data.errorMessage} />
+      </Card>
+    );
+  }
+
+  const confidencePct = data.confidence != null ? Math.round(data.confidence * 100) : 0;
+  const alignmentColor =
+    data.alignment === 'ALIGNED' ? 'green' : data.alignment === 'DIVERGED' ? 'red' : 'default';
+
+  return (
+    <Card
+      size="small"
+      style={{ marginTop: 12 }}
+      title={
+        <Space>
+          <RobotOutlined />
+          <span>{t('text.strategy.aiSummary')}</span>
+          {data.model && <Tag>{data.model}</Tag>}
+        </Space>
+      }
+    >
+      <Space direction="vertical" size="small" style={{ width: '100%' }}>
+        <Space>
+          <span>{t('text.strategy.aiConfidence')}:</span>
+          <Progress percent={confidencePct} size="small" style={{ width: 120 }} />
+          <Tag color={alignmentColor}>
+            {data.alignment
+              ? t(`text.strategy.aiAlignment.${data.alignment}`, { defaultValue: data.alignment })
+              : '-'}
+          </Tag>
+          {data.marketRegime && (
+            <Tag color="blue">
+              {t(`text.strategy.aiMarketRegime.${data.marketRegime}`, { defaultValue: data.marketRegime })}
+            </Tag>
+          )}
+          {data.suggestedAction && (
+            <Tag color="purple">
+              {t(`text.strategy.aiSuggestedAction.${data.suggestedAction}`, { defaultValue: data.suggestedAction })}
+            </Tag>
+          )}
+        </Space>
+        {data.summary && (
+          <div style={{ padding: '6px 8px', background: '#fafafa', borderRadius: 4 }}>
+            {data.summary}
+          </div>
+        )}
+        {data.keyFactors && data.keyFactors.length > 0 && (
+          <div>
+            <strong>{t('text.strategy.aiKeyFactors')}:</strong>
+            <ul style={{ margin: '4px 0 0 20px', paddingLeft: 0 }}>
+              {data.keyFactors.map((f, i) => (<li key={i}>{f}</li>))}
+            </ul>
+          </div>
+        )}
+        {data.risks && data.risks.length > 0 && (
+          <div>
+            <strong style={{ color: '#fa8c16' }}>{t('text.strategy.aiRisks')}:</strong>
+            <ul style={{ margin: '4px 0 0 20px', paddingLeft: 0, color: '#fa8c16' }}>
+              {data.risks.map((r, i) => (<li key={i}>{r}</li>))}
+            </ul>
+          </div>
+        )}
+      </Space>
+    </Card>
+  );
+};
+
+/**
+ * 信号列表行内的 AI 触发器：
+ *  - 已有分析：直接展示一个彩色 verdict tag，hover 后 Popover 显示完整分析
+ *  - 无分析：显示「AI 分析」按钮；点击后 POST 触发，4 秒后自动 GET 一次
+ *  - 失败时：显示红色 tag + 提示 + 重试按钮
+ */
+const SignalAiInlineTrigger = ({ signalId }: { signalId: string | number }) => {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<import('../../api/ai').AiSignalAnalysis | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  const fetchOnce = async () => {
+    setLoading(true);
+    try {
+      const res = await aiApi.getSignalAnalysis(signalId);
+      setData(res.data || null);
+    } catch {
+      // 静默
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 首次挂载 GET 一次，让"已分析"的信号立刻能看到 tag；后续 polling 由触发按钮控制
+  useEffect(() => {
+    fetchOnce();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signalId]);
+
+  const handleAnalyze = async () => {
+    setAnalyzing(true);
+    try {
+      await aiApi.analyzeSignal(signalId);
+      setData(null);
+      message.success(t('text.strategy.aiTriggered'));
+      // 后端异步分析；4s + 8s 两次轮询，覆盖大多数 LLM 响应时长
+      setTimeout(() => fetchOnce(), 4000);
+      setTimeout(() => fetchOnce(), 12000);
+    } catch {
+      message.error(t('text.strategy.aiTriggerFailed'));
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // 渲染 Popover 内容（详情）
+  const popoverContent = (() => {
+    if (loading && !data) return <Spin size="small" />;
+    if (!data) {
+      return (
+        <div style={{ maxWidth: 280 }}>
+          <div style={{ color: '#999', marginBottom: 8 }}>{t('text.strategy.aiNotAvailable')}</div>
+          <Button size="small" type="primary" icon={<RobotOutlined />} loading={analyzing} onClick={handleAnalyze}>
+            {t('text.strategy.aiAnalyzeNow')}
+          </Button>
+        </div>
+      );
+    }
+    if (data.errorMessage) {
+      return (
+        <div style={{ maxWidth: 320 }}>
+          <Alert type="error" message={t('text.strategy.aiFailed')} description={data.errorMessage} />
+          <div style={{ marginTop: 8 }}>
+            <Button size="small" icon={<ReloadOutlined />} loading={analyzing} onClick={handleAnalyze}>
+              {t('text.strategy.aiReAnalyzeNow')}
+            </Button>
+          </div>
+        </div>
+      );
+    }
+    const confidencePct = data.confidence != null ? Math.round(data.confidence * 100) : 0;
+    const alignmentColor =
+      data.alignment === 'ALIGNED' ? 'green' : data.alignment === 'DIVERGED' ? 'red' : 'default';
+    return (
+      <div style={{ maxWidth: 360 }}>
+        <Space size={6} style={{ marginBottom: 6 }} wrap>
+          <Tag color={alignmentColor}>
+            {data.alignment
+              ? t(`text.strategy.aiAlignment.${data.alignment}`, { defaultValue: data.alignment })
+              : '-'}
+          </Tag>
+          {data.marketRegime && (
+            <Tag color="blue">
+              {t(`text.strategy.aiMarketRegime.${data.marketRegime}`, { defaultValue: data.marketRegime })}
+            </Tag>
+          )}
+          {data.suggestedAction && (
+            <Tag color="purple">
+              {t(`text.strategy.aiSuggestedAction.${data.suggestedAction}`, { defaultValue: data.suggestedAction })}
+            </Tag>
+          )}
+          <span>{t('text.strategy.aiConfidence')}:</span>
+          <Progress percent={confidencePct} size="small" style={{ width: 80 }} />
+        </Space>
+        {data.summary && (
+          <div style={{ marginBottom: 6, padding: '4px 8px', background: '#fafafa', borderRadius: 4 }}>
+            {data.summary}
+          </div>
+        )}
+        {data.keyFactors && data.keyFactors.length > 0 && (
+          <div style={{ marginBottom: 4 }}>
+            <strong>{t('text.strategy.aiKeyFactors')}:</strong>
+            <ul style={{ margin: '2px 0 0 18px', paddingLeft: 0 }}>
+              {data.keyFactors.map((f, i) => <li key={i}>{f}</li>)}
+            </ul>
+          </div>
+        )}
+        {data.risks && data.risks.length > 0 && (
+          <div style={{ marginBottom: 4 }}>
+            <strong style={{ color: '#fa8c16' }}>{t('text.strategy.aiRisks')}:</strong>
+            <ul style={{ margin: '2px 0 0 18px', paddingLeft: 0, color: '#fa8c16' }}>
+              {data.risks.map((r, i) => <li key={i}>{r}</li>)}
+            </ul>
+          </div>
+        )}
+        <div style={{ marginTop: 8, textAlign: 'right' }}>
+          <Button size="small" icon={<ReloadOutlined />} loading={analyzing} onClick={handleAnalyze}>
+            {t('text.strategy.aiReAnalyzeNow')}
+          </Button>
+        </div>
+      </div>
+    );
+  })();
+
+  // 触发器（行内的紧凑展示）
+  const triggerNode = (() => {
+    if (loading && !data) {
+      return <Spin size="small" />;
+    }
+    if (!data) {
+      return (
+        <Button
+          size="small"
+          type="primary"
+          ghost
+          icon={<RobotOutlined />}
+          loading={analyzing}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleAnalyze();
+          }}
+        >
+          {t('text.strategy.aiAnalyzeNow')}
+        </Button>
+      );
+    }
+    if (data.errorMessage) {
+      return <Tag color="red">{t('text.strategy.aiFailed')}</Tag>;
+    }
+    const suggestedColor = data.suggestedAction === 'SKIP' || data.suggestedAction === 'OBSERVE'
+      ? 'default' : 'purple';
+    return (
+      <Space size={4}>
+        <RobotOutlined style={{ color: '#1677ff' }} />
+        {data.suggestedAction
+          ? <Tag color={suggestedColor}>
+              {t(`text.strategy.aiSuggestedAction.${data.suggestedAction}`, { defaultValue: data.suggestedAction })}
+            </Tag>
+          : <Tag>OK</Tag>}
+      </Space>
+    );
+  })();
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      placement="leftTop"
+      trigger={['hover', 'click']}
+      content={popoverContent}
+      title={<><RobotOutlined /> {t('text.strategy.aiSummary')}</>}
+    >
+      <span style={{ cursor: 'pointer' }}>{triggerNode}</span>
+    </Popover>
   );
 };

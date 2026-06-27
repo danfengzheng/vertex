@@ -233,7 +233,12 @@ export const PnlAnalysis = () => {
             onChange={(e) => setQuery((q) => ({ ...q, symbol: e.target.value || undefined }))}
           />
           <DatePicker.RangePicker
-            showTime
+            showTime={{
+              defaultValue: [
+                dayjs('00:00:00', 'HH:mm:ss'),
+                dayjs('23:59:59', 'HH:mm:ss'),
+              ],
+            }}
             value={dateRange}
             onChange={(dates) => setDateRange(dates as [dayjs.Dayjs | null, dayjs.Dayjs | null])}
           />

@@ -18,6 +18,7 @@ import com.vertex.service.strategy.mapper.SignalMapper;
 import com.vertex.service.strategy.mapper.StrategyMapper;
 import com.vertex.service.strategy.store.SignalStore;
 import com.vertex.api.trading.ITradeExecutionListener;
+import com.vertex.service.strategy.ai.AiAnalysisService;
 import com.vertex.service.strategy.notify.CompositeSignalNotifier;
 import com.vertex.service.strategy.websocket.SignalPushService;
 import lombok.RequiredArgsConstructor;
@@ -59,6 +60,10 @@ public class StrategyEngineService {
 
     /** 信号通知器聚合（自动注入所有 SignalNotifier 实现，无实现时为空列表） */
     private final CompositeSignalNotifier compositeSignalNotifier;
+
+    /** AI 分析服务（软依赖，vertex.ai.gemini.enabled=false 时降级 no-op） */
+    @Autowired(required = false)
+    private AiAnalysisService aiAnalysisService;
 
     /** 节流：记录每个策略的上次执行时间戳（毫秒） */
     private final ConcurrentHashMap<Long, Long> lastEvalTimeMap = new ConcurrentHashMap<>();
@@ -342,6 +347,18 @@ public class StrategyEngineService {
         log.info("Strategy [{}] generated signal: {} (strength: {}) for {} {}",
                 strategy.getName(), signal.getSignalType(), signal.getSignalStrength(),
                 strategy.getExchange(), strategy.getSymbol());
+
+        // 异步 AI 分析（仅方向性信号）：完全脱离主交易路径，
+        // 失败/慢/未启用 都不影响信号入库与推送（aiAnalysisService 软依赖）。
+        if (aiAnalysisService != null && aiAnalysisService.isEnabled()
+                && signal.getSignalType() != SignalType.NEUTRAL) {
+            try {
+                aiAnalysisService.analyzeSignalAsync(strategy, signal);
+            } catch (Exception e) {
+                log.warn("[AI] submit signal analysis failed for strategy [{}]: {}",
+                        strategy.getName(), e.getMessage());
+            }
+        }
 
         // 交易执行钩子（可选）
         if (tradeExecutionListener != null && strategy.getAutoTrade() != null

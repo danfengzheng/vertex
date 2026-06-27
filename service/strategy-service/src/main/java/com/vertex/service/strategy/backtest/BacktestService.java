@@ -4,6 +4,10 @@ import com.alibaba.fastjson2.JSON;
 import com.vertex.api.usersetting.IUserSettingService;
 import com.vertex.common.core.GlobalError;
 import com.vertex.common.core.exception.BizException;
+import com.vertex.model.vo.ai.AiBacktestAnalysisProgress;
+import com.vertex.service.strategy.ai.AiAnalysisService;
+import com.vertex.service.strategy.ai.AiAnalysisStore;
+import com.vertex.service.strategy.ai.BacktestCacheKey;
 import com.vertex.model.dto.strategy.BacktestConfigDTO;
 import com.vertex.model.dto.strategy.StrategyIndicatorConfig;
 import com.vertex.model.entity.quote.KLine;
@@ -58,13 +62,96 @@ public class BacktestService {
     private IUserSettingService userSettingService;
 
     /**
-     * 执行策略回测
+     * AI 分析存储（必装，用于回测结果缓存与 AI 分析持久化）。
+     * 不依赖 GeminiClient——即使 AI 未启用，缓存能力仍然工作。
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AiAnalysisStore aiAnalysisStore;
+
+    /**
+     * AI 分析服务（vertex.ai.gemini.enabled=true 时才注册）。
+     * null 时不影响缓存命中，只是不会触发批量 AI 分析。
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private AiAnalysisService aiAnalysisService;
+
+    /**
+     * 执行策略回测。
+     * <p>
+     * <b>缓存语义</b>：以「策略白名单字段 + 回测配置」的内容哈希作为 cacheKey。
+     * 同样配置 → 同样 cacheKey → 命中 RocksDB 中已有结果时直接返回（毫秒级），
+     * 除非 {@code config.forceRefresh=true}。详见 {@link BacktestCacheKey}。
+     * </p>
      */
     public BacktestResultVO runBacktest(BacktestConfigDTO config) {
         // 1. 加载策略
         Strategy strategy = strategyMapper.selectById(config.getStrategyId());
         if (strategy == null) {
             throw new BizException(GlobalError.STRATEGY_NOT_FOUND);
+        }
+
+        // ── 缓存命中检查 ────────────────────────────────────────────
+        // 只要 aiAnalysisStore 注册了就启用缓存（不依赖 AI 服务）。
+        String cacheKey = null;
+        boolean forceRefresh = Boolean.TRUE.equals(config.getForceRefresh());
+        if (aiAnalysisStore != null) {
+            cacheKey = BacktestCacheKey.compute(strategy, config);
+            if (!forceRefresh) {
+                BacktestResultVO cached = aiAnalysisStore.getBacktestResult(cacheKey);
+                if (cached != null) {
+                    cached.setCached(Boolean.TRUE);
+                    cached.setCacheKey(cacheKey);
+                    if (cached.getCachedAt() == null) cached.setCachedAt(System.currentTimeMillis());
+                    // 附带当前 AI 分析进度（如有）
+                    AiBacktestAnalysisProgress prog = null;
+                    if (aiAnalysisService != null) {
+                        prog = aiAnalysisService.getProgress(cacheKey);
+                        if (prog != null && prog.getStatus() != null) {
+                            cached.setAiAnalysisStatus(prog.getStatus().name());
+                        }
+                    }
+
+                    // 用户勾了 enableAiAnalysis，但旧缓存还没分析过（或之前失败）→
+                    // 在「不重跑回测」的前提下，自动启动 AI 批量分析。
+                    // 已 RUNNING/PENDING 时不重复触发（避免重复占线程池）。
+                    boolean wantAi = Boolean.TRUE.equals(config.getEnableAiAnalysis())
+                            && aiAnalysisService != null && aiAnalysisService.isEnabled();
+                    boolean alreadyAnalyzing = prog != null && (
+                            prog.getStatus() == AiBacktestAnalysisProgress.Status.RUNNING
+                            || prog.getStatus() == AiBacktestAnalysisProgress.Status.PENDING);
+                    if (wantAi && !alreadyAnalyzing
+                            && cached.getTrades() != null && !cached.getTrades().isEmpty()) {
+                        log.info("[Backtest cache HIT + AI trigger] cacheKey={} starting AI batch", cacheKey);
+                        // 初始化进度为 PENDING，前端立刻能看到状态
+                        AiBacktestAnalysisProgress initial = AiBacktestAnalysisProgress.builder()
+                                .cacheKey(cacheKey)
+                                .strategyId(strategy.getId())
+                                .strategyName(strategy.getName())
+                                .total(cached.getTrades().size())
+                                .completed(0)
+                                .failed(0)
+                                .status(AiBacktestAnalysisProgress.Status.PENDING)
+                                .startedAt(System.currentTimeMillis())
+                                .updatedAt(System.currentTimeMillis())
+                                .build();
+                        aiAnalysisStore.saveProgress(initial);
+                        cached.setAiAnalysisStatus(AiBacktestAnalysisProgress.Status.PENDING.name());
+                        try {
+                            aiAnalysisService.analyzeBacktestBatchAsync(cacheKey, strategy, cached);
+                        } catch (Exception e) {
+                            log.warn("[AI] submit batch on cache-hit failed: cacheKey={}, err={}",
+                                    cacheKey, e.getMessage());
+                        }
+                    }
+
+                    log.info("[Backtest cache HIT] strategy={} cacheKey={} trades={}",
+                            strategy.getName(), cacheKey, cached.getTrades() == null ? 0 : cached.getTrades().size());
+                    return cached;
+                }
+            } else {
+                log.info("[Backtest cache] forceRefresh=true, recomputing strategy={} cacheKey={}",
+                        strategy.getName(), cacheKey);
+            }
         }
 
         List<StrategyIndicatorConfig> indicatorConfigs = JSON.parseArray(
@@ -143,8 +230,49 @@ public class BacktestService {
         }
 
         // 3. 执行模拟交易
-        return simulateTrades(strategy, indicatorConfigs, exitConfigs, mainKlines, allKlinesByInterval, config,
-                mainRequired);
+        BacktestResultVO result = simulateTrades(strategy, indicatorConfigs, exitConfigs,
+                mainKlines, allKlinesByInterval, config, mainRequired);
+
+        // ── 缓存写入 + 异步 AI 批量分析 ───────────────────────────────
+        if (aiAnalysisStore != null && cacheKey != null) {
+            result.setCacheKey(cacheKey);
+            result.setCached(Boolean.FALSE);
+            result.setCachedAt(System.currentTimeMillis());
+
+            // 异步：勾选了 enableAiAnalysis 且 AI 服务可用时，提交批量任务
+            boolean wantAi = Boolean.TRUE.equals(config.getEnableAiAnalysis())
+                    && aiAnalysisService != null && aiAnalysisService.isEnabled();
+            if (wantAi) {
+                // 标记初始进度为 PENDING，方便前端立即看到「分析中」状态
+                AiBacktestAnalysisProgress initial = AiBacktestAnalysisProgress.builder()
+                        .cacheKey(cacheKey)
+                        .strategyId(strategy.getId())
+                        .strategyName(strategy.getName())
+                        .total(result.getTrades() == null ? 0 : result.getTrades().size())
+                        .completed(0)
+                        .failed(0)
+                        .status(AiBacktestAnalysisProgress.Status.PENDING)
+                        .startedAt(System.currentTimeMillis())
+                        .updatedAt(System.currentTimeMillis())
+                        .build();
+                aiAnalysisStore.saveProgress(initial);
+                result.setAiAnalysisStatus(AiBacktestAnalysisProgress.Status.PENDING.name());
+
+                try {
+                    aiAnalysisService.analyzeBacktestBatchAsync(cacheKey, strategy, result);
+                } catch (Exception e) {
+                    log.warn("[AI] submit backtest batch failed: cacheKey={}, err={}",
+                            cacheKey, e.getMessage());
+                }
+            }
+
+            // 写入缓存：结果体本身不含 trades 顺序之外的随机性，可放心缓存
+            aiAnalysisStore.saveBacktestResult(cacheKey, result);
+            log.info("[Backtest cache MISS] strategy={} cacheKey={} trades={} stored",
+                    strategy.getName(), cacheKey,
+                    result.getTrades() == null ? 0 : result.getTrades().size());
+        }
+        return result;
     }
 
     /**
