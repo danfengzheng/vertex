@@ -30,6 +30,24 @@ public final class AiPromptBuilder {
     private AiPromptBuilder() {}
 
     /**
+     * 双 prompt 输出（system + user），供 provider 走原生 system message 通道。
+     * 老调用方仍可用 {@code buildSignalPrompt(...)} / {@code buildTradePrompt(...)}
+     * 拿到拼接后的单 prompt 字符串。
+     */
+    public static final class PromptParts {
+        public final String systemPrompt;
+        public final String userPrompt;
+        public PromptParts(String systemPrompt, String userPrompt) {
+            this.systemPrompt = systemPrompt;
+            this.userPrompt = userPrompt;
+        }
+        /** 单 prompt 兼容形式：system + \n\n + user */
+        public String combined() {
+            return systemPrompt + "\n\n" + userPrompt;
+        }
+    }
+
+    /**
      * 把 BCP-47 风格的 language 标签转成喂给模型的人类可读语言名。
      * 模型对「Chinese (Simplified)」/「English」之类字面识别效果好得多。
      */
@@ -45,16 +63,58 @@ public final class AiPromptBuilder {
     }
 
     /**
-     * 统一的「自由文本用什么语言、枚举字段保持英文」指令片段。
+     * 构造 system prompt：语言硬约束 + 角色声明。这段作为高优先级指令，
+     * 通过 provider 的 system message 通道下发（DeepSeek 用 role:system，
+     * Gemini 用 systemInstruction）—— 权重比 user 内容高很多，避免被
+     * 后面的英文业务上下文带偏语言。
+     * <p>
+     * 用「CRITICAL / MUST / FORBIDDEN + 正反例」的组合，实测能显著抬高
+     * LLM（特别是 deepseek-chat）对语言指令的遵从率。
+     * </p>
      */
-    private static void appendLanguageDirective(StringBuilder sb, String language) {
+    private static String buildSystemPrompt(String language, boolean isTradeAnalysis) {
         String lang = languageDisplay(language);
-        sb.append("\n=== Output language ===\n")
-          .append("Respond in ").append(lang).append(" for ALL free-text fields ")
-          .append("(summary, keyFactors, risks, entryFactors, exitFactors, improvements). ")
-          .append("Keep enum values (verdict, alignment, marketRegime, suggestedAction) ")
-          .append("as their original English keys exactly as defined in the schema. ")
-          .append("Do NOT translate enum keys.\n");
+        boolean isZh = lang.startsWith("Chinese");
+        StringBuilder sb = new StringBuilder(1024);
+
+        // ── 语言硬约束（最重要，放最前面）────────────────────────
+        sb.append("CRITICAL LANGUAGE RULE (must follow, non-negotiable):\n")
+          .append("All free-text fields (summary, keyFactors, risks, entryFactors, exitFactors, improvements)\n")
+          .append("MUST be written in ").append(lang).append(". English or mixed-language is FORBIDDEN\n")
+          .append("in these fields even if surrounding context is in English.\n")
+          .append("Enum fields (verdict, alignment, marketRegime, suggestedAction) MUST keep their ORIGINAL\n")
+          .append("English keys exactly as defined in the schema — do NOT translate enum keys.\n\n");
+
+        // ── 正反例（对中文尤其有效）───────────────────────────
+        if (isZh) {
+            sb.append("CORRECT format example:\n")
+              .append("  summary: \"强势上升趋势中 ADX 和 DI 对齐，但成交量下降建议观望。\"\n")
+              .append("  keyFactors: [\"ADX 48.84 显示强趋势\", \"PlusDI 29.87 > MinusDI 12.26 支持看涨\"]\n")
+              .append("  risks: [\"成交量比 0.82 走弱，趋势可能失续\"]\n")
+              .append("  alignment: \"ALIGNED\"          ← 保持英文枚举\n")
+              .append("  suggestedAction: \"OBSERVE\"    ← 保持英文枚举\n\n")
+              .append("WRONG (do NOT do this):\n")
+              .append("  summary: \"Strong uptrend with ADX and DI alignment...\"  ← 全英文，违规\n")
+              .append("  keyFactors: [\"ADX at 48.84 indicates strong trend\"]     ← 全英文，违规\n")
+              .append("  alignment: \"一致\"                                        ← 枚举被翻译，违规\n\n");
+        } else {
+            sb.append("CORRECT format example:\n")
+              .append("  summary: \"Strong uptrend with ADX/DI alignment; declining volume suggests caution.\"\n")
+              .append("  keyFactors: [\"ADX 48.84 shows strong trend\", \"PlusDI > MinusDI supports bullish bias\"]\n")
+              .append("  alignment: \"ALIGNED\"          ← keep enum keys unchanged\n\n");
+        }
+
+        // ── 角色（原来在 user prompt 里的 system role 现在提上来）─
+        if (isTradeAnalysis) {
+            sb.append("You are a quantitative backtest analyst. Review a single trade from a strategy ")
+              .append("backtest and explain its outcome strictly from the data provided. ")
+              .append("Do not use external market knowledge.\n");
+        } else {
+            sb.append("You are a professional quantitative trading analyst. Analyze the trading signal ")
+              .append("STRICTLY based on the provided data. Do not use external knowledge beyond what is given. ")
+              .append("Your output is for reference only and will NOT automatically execute trades.\n");
+        }
+        return sb.toString();
     }
 
     // ─── Signal 分析 ──────────────────────────────────────────────
@@ -63,7 +123,7 @@ public final class AiPromptBuilder {
      * 构造单条信号分析的 prompt（默认中文输出，保留旧调用方兼容）。
      */
     public static String buildSignalPrompt(Strategy strategy, Signal signal, List<KLine> recentKlines) {
-        return buildSignalPrompt(strategy, signal, recentKlines, "zh-CN");
+        return buildSignalPromptParts(strategy, signal, recentKlines, "zh-CN").combined();
     }
 
     /**
@@ -71,12 +131,17 @@ public final class AiPromptBuilder {
      */
     public static String buildSignalPrompt(Strategy strategy, Signal signal, List<KLine> recentKlines,
                                            String language) {
-        StringBuilder sb = new StringBuilder(2048);
-        sb.append("You are a professional quantitative trading analyst. ")
-          .append("Analyze the following trading signal STRICTLY based on the provided data. ")
-          .append("Do not use any external knowledge about the market beyond what is given. ")
-          .append("Your output is for reference only and will NOT automatically execute trades.\n\n");
+        return buildSignalPromptParts(strategy, signal, recentKlines, language).combined();
+    }
 
+    /**
+     * 构造 signal 分析的双 prompt（system + user）。
+     * 语言约束和角色声明放到 systemPrompt，业务上下文放到 userPrompt。
+     */
+    public static PromptParts buildSignalPromptParts(Strategy strategy, Signal signal,
+                                                     List<KLine> recentKlines, String language) {
+        String systemPrompt = buildSystemPrompt(language, false);
+        StringBuilder sb = new StringBuilder(2048);
         sb.append("=== Strategy ===\n");
         sb.append("Exchange: ").append(strategy.getExchange()).append('\n');
         sb.append("Symbol: ").append(strategy.getSymbol()).append('\n');
@@ -120,9 +185,9 @@ public final class AiPromptBuilder {
         sb.append("\n=== Task ===\n");
         sb.append("Return a JSON conforming exactly to the response schema. ")
           .append("Be specific about which indicator value drives your judgment. ")
-          .append("Keep keyFactors/risks to 2-4 items each, summary in one sentence.\n");
-        appendLanguageDirective(sb, language);
-        return sb.toString();
+          .append("Keep keyFactors/risks to 2-4 items each, summary in one sentence.\n")
+          .append("REMINDER: free-text fields MUST use the language set in the system message; enum keys stay English.\n");
+        return new PromptParts(systemPrompt, sb.toString());
     }
 
     /**
@@ -149,7 +214,7 @@ public final class AiPromptBuilder {
                                           int tradeIndex,
                                           int totalTrades,
                                           List<KLine> contextKlines) {
-        return buildTradePrompt(strategy, trade, tradeIndex, totalTrades, contextKlines, "zh-CN");
+        return buildTradePromptParts(strategy, trade, tradeIndex, totalTrades, contextKlines, "zh-CN").combined();
     }
 
     public static String buildTradePrompt(Strategy strategy,
@@ -158,11 +223,18 @@ public final class AiPromptBuilder {
                                           int totalTrades,
                                           List<KLine> contextKlines,
                                           String language) {
-        StringBuilder sb = new StringBuilder(2048);
-        sb.append("You are a quantitative backtest analyst. ")
-          .append("Review this single trade from a strategy backtest and explain its outcome. ")
-          .append("Do not use external market knowledge beyond the data provided.\n\n");
+        return buildTradePromptParts(strategy, trade, tradeIndex, totalTrades, contextKlines, language).combined();
+    }
 
+    /** 构造 trade 分析的双 prompt（system + user）。*/
+    public static PromptParts buildTradePromptParts(Strategy strategy,
+                                                    BacktestResultVO.TradeRecord trade,
+                                                    int tradeIndex,
+                                                    int totalTrades,
+                                                    List<KLine> contextKlines,
+                                                    String language) {
+        String systemPrompt = buildSystemPrompt(language, true);
+        StringBuilder sb = new StringBuilder(2048);
         sb.append("=== Strategy ===\n");
         sb.append("Symbol: ").append(strategy.getExchange()).append(' ').append(strategy.getSymbol()).append('\n');
         sb.append("Interval: ").append(strategy.getInterval()).append('\n');
@@ -185,9 +257,9 @@ public final class AiPromptBuilder {
         sb.append("\n=== Task ===\n");
         sb.append("Score this trade quality 0-1, classify the verdict, ")
           .append("list 2-3 entry factors and 1-3 exit factors, ")
-          .append("optionally 1-2 improvement suggestions. Output JSON per schema.\n");
-        appendLanguageDirective(sb, language);
-        return sb.toString();
+          .append("optionally 1-2 improvement suggestions. Output JSON per schema.\n")
+          .append("REMINDER: free-text fields MUST use the language set in the system message; enum keys stay English.\n");
+        return new PromptParts(systemPrompt, sb.toString());
     }
 
     public static JSONObject buildTradeSchema() {

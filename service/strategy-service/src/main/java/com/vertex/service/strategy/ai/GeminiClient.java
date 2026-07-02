@@ -71,10 +71,20 @@ public class GeminiClient implements AiClient {
     @Override public String currentModel() { return aiProperties.getGemini().getModel(); }
 
     /**
-     * 调 Gemini 生成结构化 JSON。
+     * 调 Gemini 生成结构化 JSON（老单 prompt 入口，无 system message）。
      */
     @Override
     public JSONObject generateJson(String prompt, JSONObject responseSchema) throws AiException {
+        return generateJson(null, prompt, responseSchema);
+    }
+
+    /**
+     * 双 prompt 入口：systemPrompt 走 Gemini 的 {@code systemInstruction} 顶级字段，
+     * 权重高于 contents 里的 user parts；userPrompt 放 contents 数组第一个。
+     */
+    @Override
+    public JSONObject generateJson(String systemPrompt, String userPrompt, JSONObject responseSchema)
+            throws AiException {
         AiProperties.Gemini cfg = aiProperties.getGemini();
         if (!StringUtils.hasText(cfg.getApiKey())) {
             throw new AiException("Gemini api-key is not configured (vertex.ai.gemini.api-key)",
@@ -85,7 +95,7 @@ public class GeminiClient implements AiClient {
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                return doGenerate(cfg, prompt, responseSchema);
+                return doGenerate(cfg, systemPrompt, userPrompt, responseSchema);
             } catch (AiException e) {
                 lastError = e;
                 if (!e.isRetryable() || attempt == maxAttempts) {
@@ -105,18 +115,31 @@ public class GeminiClient implements AiClient {
         throw lastError != null ? lastError : new AiException("Unknown failure", null, false);
     }
 
-    private JSONObject doGenerate(AiProperties.Gemini cfg, String prompt, JSONObject responseSchema)
-            throws AiException {
+    private JSONObject doGenerate(AiProperties.Gemini cfg, String systemPrompt, String userPrompt,
+                                  JSONObject responseSchema) throws AiException {
         String url = String.format("%s/v1beta/models/%s:generateContent?key=%s",
                 cfg.getBaseUrl(), cfg.getModel(), cfg.getApiKey());
 
         // 构造请求体
         JSONObject body = new JSONObject();
+
+        // ── systemInstruction（若有）：语言硬约束 + 角色，Gemini 会显著提高其权重 ─
+        if (StringUtils.hasText(systemPrompt)) {
+            JSONObject sysInstruction = new JSONObject();
+            JSONArray sysParts = new JSONArray();
+            JSONObject sysText = new JSONObject();
+            sysText.put("text", systemPrompt);
+            sysParts.add(sysText);
+            sysInstruction.put("parts", sysParts);
+            body.put("systemInstruction", sysInstruction);
+        }
+
+        // ── contents：业务 user prompt ────────────────────────────────
         JSONArray contents = new JSONArray();
         JSONObject content = new JSONObject();
         JSONArray parts = new JSONArray();
         JSONObject textPart = new JSONObject();
-        textPart.put("text", prompt);
+        textPart.put("text", userPrompt);
         parts.add(textPart);
         content.put("parts", parts);
         contents.add(content);

@@ -84,6 +84,13 @@ public class DeepSeekClient implements AiClient {
 
     @Override
     public JSONObject generateJson(String prompt, JSONObject responseSchema) throws AiException {
+        // 老单 prompt 入口：无 system message，全部塞进 user role
+        return generateJson(null, prompt, responseSchema);
+    }
+
+    @Override
+    public JSONObject generateJson(String systemPrompt, String userPrompt, JSONObject responseSchema)
+            throws AiException {
         AiProperties.DeepSeek cfg = aiProperties.getDeepseek();
         if (!StringUtils.hasText(cfg.getApiKey())) {
             throw new AiException("DeepSeek api-key is not configured (vertex.ai.deepseek.api-key)",
@@ -94,7 +101,7 @@ public class DeepSeekClient implements AiClient {
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                return doGenerate(cfg, prompt, responseSchema);
+                return doGenerate(cfg, systemPrompt, userPrompt, responseSchema);
             } catch (AiException e) {
                 lastError = e;
                 if (!e.isRetryable() || attempt == maxAttempts) {
@@ -114,20 +121,28 @@ public class DeepSeekClient implements AiClient {
         throw lastError != null ? lastError : new AiException("Unknown failure", null, false);
     }
 
-    private JSONObject doGenerate(AiProperties.DeepSeek cfg, String prompt, JSONObject responseSchema)
-            throws AiException {
+    private JSONObject doGenerate(AiProperties.DeepSeek cfg, String systemPrompt, String userPrompt,
+                                  JSONObject responseSchema) throws AiException {
         String url = cfg.getBaseUrl().replaceAll("/+$", "") + "/v1/chat/completions";
 
-        // 构造 prompt：把 schema 转为自然语言要求（DeepSeek 不支持原生 responseSchema）
-        String fullPrompt = appendSchemaToPrompt(prompt, responseSchema);
+        // schema 只拼在 user 里（system 已经明确了输出格式规则，避免重复干扰权重）
+        String userWithSchema = appendSchemaToPrompt(userPrompt, responseSchema);
 
         // 构造 OpenAI 兼容请求体
         JSONObject body = new JSONObject();
         body.put("model", cfg.getModel());
         JSONArray messages = new JSONArray();
+        // ── system 消息（若有）：语言硬约束 + 角色 —— OpenAI 协议下权重最高 ─
+        if (StringUtils.hasText(systemPrompt)) {
+            JSONObject sysMsg = new JSONObject();
+            sysMsg.put("role", "system");
+            sysMsg.put("content", systemPrompt);
+            messages.add(sysMsg);
+        }
+        // ── user 消息：业务上下文 + schema ────────────────────────────
         JSONObject userMsg = new JSONObject();
         userMsg.put("role", "user");
-        userMsg.put("content", fullPrompt);
+        userMsg.put("content", userWithSchema);
         messages.add(userMsg);
         body.put("messages", messages);
         body.put("temperature", 0.2);

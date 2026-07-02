@@ -298,11 +298,11 @@ public class AiAnalysisService {
             List<KLine> klines = klineStore.query(strategy.getExchange(), strategy.getSymbol(),
                     strategy.getInterval(), startTime, endTime, barCount, true);
 
-            String prompt = AiPromptBuilder.buildSignalPrompt(strategy, signal, klines,
-                    aiProperties.getLanguage());
+            AiPromptBuilder.PromptParts prompt = AiPromptBuilder.buildSignalPromptParts(
+                    strategy, signal, klines, aiProperties.getLanguage());
             JSONObject schema = AiPromptBuilder.buildSignalSchema();
 
-            JSONObject json = aiClient.generateJson(prompt, schema);
+            JSONObject json = aiClient.generateJson(prompt.systemPrompt, prompt.userPrompt, schema);
             // fastjson2: 用 toJSONString 中转，兼容性最稳（避免依赖 JSON.to(Class, Object) 这种较新 API）
             AiSignalAnalysis analysis = JSON.parseObject(json.toJSONString(), AiSignalAnalysis.class);
             if (analysis == null) {
@@ -413,11 +413,11 @@ public class AiAnalysisService {
             List<KLine> klines = klineStore.query(strategy.getExchange(), strategy.getSymbol(),
                     iv, startTime, endTime, barCount, true);
 
-            String prompt = AiPromptBuilder.buildTradePrompt(strategy, trade, idx, total, klines,
-                    aiProperties.getLanguage());
+            AiPromptBuilder.PromptParts prompt = AiPromptBuilder.buildTradePromptParts(
+                    strategy, trade, idx, total, klines, aiProperties.getLanguage());
             JSONObject schema = AiPromptBuilder.buildTradeSchema();
 
-            JSONObject json = aiClient.generateJson(prompt, schema);
+            JSONObject json = aiClient.generateJson(prompt.systemPrompt, prompt.userPrompt, schema);
             AiTradeAnalysis analysis = JSON.parseObject(json.toJSONString(), AiTradeAnalysis.class);
             if (analysis == null) analysis = AiTradeAnalysis.builder().build();
             analysis.setModel(aiClient.currentModel());

@@ -17,7 +17,7 @@ import com.alibaba.fastjson2.JSONObject;
 public interface AiClient {
 
     /**
-     * 调用 LLM 生成符合 schema 的结构化 JSON。
+     * 调用 LLM 生成符合 schema 的结构化 JSON（单 prompt 版本，兼容老调用）。
      *
      * @param prompt         完整 prompt 文本
      * @param responseSchema 期望的输出 JSON Schema（Gemini-style OBJECT/STRING/...）；
@@ -27,6 +27,29 @@ public interface AiClient {
      * @throws AiException 任何失败
      */
     JSONObject generateJson(String prompt, JSONObject responseSchema) throws AiException;
+
+    /**
+     * 双 prompt 版本：将 systemPrompt 与 userPrompt 分开传递，供 provider 走
+     * 原生的 system message 通道（DeepSeek/OpenAI 用 role=system；Gemini 用 systemInstruction），
+     * 让语言 / 角色指令的权重高于业务上下文，避免锚定英文。
+     * <p>
+     * 默认实现是简单拼接后走单 prompt 版本，对不支持 system message 的自定义 provider 仍能工作。
+     * DeepSeekClient / GeminiClient 会各自 override。
+     * </p>
+     */
+    default JSONObject generateJson(String systemPrompt, String userPrompt, JSONObject responseSchema)
+            throws AiException {
+        StringBuilder sb = new StringBuilder(
+                (systemPrompt == null ? 0 : systemPrompt.length())
+                        + (userPrompt == null ? 0 : userPrompt.length()) + 8);
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            sb.append(systemPrompt).append("\n\n");
+        }
+        if (userPrompt != null) {
+            sb.append(userPrompt);
+        }
+        return generateJson(sb.toString(), responseSchema);
+    }
 
     /** 当前 provider 的标识，如 "gemini" / "deepseek" */
     String providerName();
