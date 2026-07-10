@@ -129,3 +129,50 @@ export const klineApi = {
     return request.get('/quote/kline/latest', { params: { symbol, exchange, interval } });
   },
 };
+
+// ─── 成交量暴增扫描器 ─────────────────────────────────────────
+
+/** 币安现货成交量暴增扫描器动态配置 */
+export interface VolumeSurgeConfig {
+  id?: number;
+  enabled: 0 | 1;
+  scanIntervalMinutes: number;
+  quoteCurrency: string;
+  surgeRatioThreshold: number | string;
+  minPriceChange1hPct: number | string;
+  baselineHours: number;
+  minBaselineMedianUsdt: number | string;
+  min24hQuoteVolumeUsdt: number | string;
+  max24hQuoteVolumeUsdt: number | string;
+  prefilterMinAbs24hPriceChangePct: number | string;
+  excludeDaysSinceListing: number;
+  cooldownHours: number;
+  alertDirections: 'UP' | 'DOWN' | 'BOTH';
+  /** 1=用未收盘 1H bar 判定（实时），0=只判已收盘 bar（事后 30-60min 确认） */
+  includeUnclosedBar: 0 | 1;
+  symbolBlacklist?: string | null;
+  symbolWhitelist?: string | null;
+  telegramEnabled: 0 | 1;
+  telegramBotToken?: string | null;
+  telegramChatId?: string | null;
+  createTime?: string;
+  updateTime?: string;
+  updateBy?: number | null;
+}
+
+/** 扫描器运行时状态 */
+export interface VolumeSurgeStatus {
+  installed: boolean;
+  lastScanAt: number;
+  lastAlertCount: number;
+}
+
+/** 成交量暴增扫描器 API */
+export const volumeSurgeApi = {
+  getConfig: (): Promise<ApiResponse<VolumeSurgeConfig>> =>
+    request.get('/quote/volume-surge/config'),
+  updateConfig: (cfg: VolumeSurgeConfig): Promise<ApiResponse<VolumeSurgeConfig>> =>
+    request.put('/quote/volume-surge/config', cfg),
+  status: (): Promise<ApiResponse<VolumeSurgeStatus>> =>
+    request.get('/quote/volume-surge/status'),
+};

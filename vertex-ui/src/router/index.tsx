@@ -8,6 +8,7 @@ import { MenuManagement } from '../pages/menu/MenuManagement';
 import { RoleManagement } from '../pages/role/RoleManagement';
 import { DataSourceManagement } from '../pages/quote/DataSourceManagement';
 import { KLineQuery } from '../pages/quote/KLineQuery';
+import { VolumeSurgeConfigPage } from '../pages/quote/VolumeSurgeConfig';
 import { StrategyConfig } from '../pages/strategy/StrategyConfig';
 import { SignalMonitor } from '../pages/strategy/SignalMonitor';
 import { StrategyGuide } from '../pages/guide/StrategyGuide';
@@ -53,6 +54,9 @@ export const AppRouter = () => {
         } />
         <Route path="quote/kline" element={
           <PermissionGuard path="/quote/kline"><KLineQuery /></PermissionGuard>
+        } />
+        <Route path="quote/volume-surge" element={
+          <PermissionGuard path="/quote/volume-surge"><VolumeSurgeConfigPage /></PermissionGuard>
         } />
 
         {/* 策略 */}

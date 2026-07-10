@@ -11,6 +11,9 @@ dependencies {
     // Spring Boot
     implementation libs.spring.boot.starter
 
+    // MyBatis Plus（成交量暴增扫描器动态配置：volume_surge_config 表持久化）
+    implementation libs.mybatis.plus.boot.starter
+
     // RocksDB
     implementation libs.rocksdb
 

@@ -63,6 +63,25 @@ vertex:
     subscription:
       # kline=仅订阅K线流（与回测/信号一致）  trade=日K以下trade流+内存聚合（默认）
       mode: ${VERTEX_QUOTE_SUBSCRIPTION_MODE:kline}
+    # ===== 成交量暴增扫描器 - 基础设施配置（重启生效）=====
+    # 业务参数（开关、阈值、扫描间隔、Telegram 凭据等）在数据库 volume_surge_config 单行表中，
+    # 可以在 UI「行情管理 → 成交量暴增」页面热切换，不需要重启。
+    # 本 yaml 段只放不可热改的基础设施参数。
+    volume-surge:
+      # bean 级安装开关：true 后 scanner 相关 bean 注册；false 则彻底禁用（UI 也无法打开）。
+      # 生产建议设 true，实际开/关走 DB。
+      enabled: ${VERTEX_VOLUME_SURGE_ENABLED:true}
+      api-url: ${VERTEX_VOLUME_SURGE_API_URL:https://api.binance.com}
+      # 扫描器心跳周期（秒）；每次心跳查一次 DB 配置，到期后触发一次真正扫描。
+      # DB 配置改动后最多等 tick-interval-seconds 秒生效。
+      tick-interval-seconds: 60
+      # 启动后首次心跳延迟（秒），让主服务预热完再扫。
+      initial-delay-seconds: 60
+      # 单次扫描并发 REST 上限。
+      max-concurrent-requests: 8
+      # X-MBX-USED-WEIGHT-1M 达到即主动 sleep（保护限流）。
+      weight-soft-limit: 4000
+      soft-limit-pause-seconds: 15
   strategy:
     enabled: true
     rocksdb:

@@ -202,6 +202,11 @@ export const MainLayout = () => {
           icon: <LineChartOutlined />,
           label: t('text.quote.klineTitle'),
         },
+        {
+          key: '/quote/volume-surge',
+          icon: <ThunderboltOutlined />,
+          label: t('text.quote.volumeSurgeTitle'),
+        },
       ],
     },
     {
