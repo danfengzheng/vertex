@@ -585,15 +585,26 @@ export const BacktestPanel = ({ strategyId, strategyName, visible, onClose }: Ba
         <Form.Item name="feeRate" label={t('text.strategy.feeRate')} initialValue={0.001}>
           <InputNumber min={0} max={0.01} step={0.0001} style={{ width: 90 }} />
         </Form.Item>
+        {/*
+         * 注意：Antd Form.Item 会给「直接子节点」注入 checked/onChange。
+         * 之前 Tooltip 作为直接子节点吞掉了这两个 prop → Checkbox 是 uncontrolled，
+         * 用户勾选后 form 拿到的一直是 initialValue=false，导致 forceRefresh /
+         * enableAiAnalysis 提交上去永远是 false。
+         * 修法：Tooltip 移到 Checkbox 的 children 里，Form.Item 直接绑到 Checkbox。
+         */}
         <Form.Item name="enableAiAnalysis" valuePropName="checked" initialValue={false}>
-          <Tooltip title={t('text.strategy.enableAiAnalysisTip')}>
-            <Checkbox>{t('text.strategy.enableAiAnalysis')}</Checkbox>
-          </Tooltip>
+          <Checkbox>
+            <Tooltip title={t('text.strategy.enableAiAnalysisTip')}>
+              {t('text.strategy.enableAiAnalysis')}
+            </Tooltip>
+          </Checkbox>
         </Form.Item>
         <Form.Item name="forceRefresh" valuePropName="checked" initialValue={false}>
-          <Tooltip title={t('text.strategy.forceRefreshTip')}>
-            <Checkbox>{t('text.strategy.forceRefresh')}</Checkbox>
-          </Tooltip>
+          <Checkbox>
+            <Tooltip title={t('text.strategy.forceRefreshTip')}>
+              {t('text.strategy.forceRefresh')}
+            </Tooltip>
+          </Checkbox>
         </Form.Item>
         <Form.Item>
           <Button type="primary" onClick={handleRun} loading={loading} icon={<ExperimentOutlined />}>
