@@ -116,9 +116,40 @@ export interface AiTradeAnalysisRow {
   analysis: AiTradeAnalysis;
 }
 
+/**
+ * AI 动态配置（对应 DB 单行表 ai_config，UI 可编辑，5s 生效）。
+ * yaml 里只有 bean 级 enabled + 线程池尺寸，剩下全在这里。
+ */
+export interface AiConfigVO {
+  id?: number;
+  enabled: 0 | 1;
+  provider: 'gemini' | 'deepseek';
+  language: string;
+  geminiApiKey?: string | null;
+  geminiModel: string;
+  geminiBaseUrl: string;
+  geminiTimeoutSeconds: number;
+  geminiMaxRetry: number;
+  deepseekApiKey?: string | null;
+  deepseekModel: string;
+  deepseekBaseUrl: string;
+  deepseekTimeoutSeconds: number;
+  deepseekMaxRetry: number;
+  createTime?: string;
+  updateTime?: string;
+  updateBy?: number | null;
+}
+
 export const aiApi = {
   /** AI 模块状态 */
   status: (): Promise<ApiResponse<AiStatus>> => request.get('/ai/status'),
+
+  /** 读取 AI 动态配置 */
+  getConfig: (): Promise<ApiResponse<AiConfigVO>> => request.get('/ai/config'),
+
+  /** 保存 AI 动态配置（5s 内生效，无需重启） */
+  updateConfig: (cfg: AiConfigVO): Promise<ApiResponse<AiConfigVO>> =>
+    request.put('/ai/config', cfg),
 
   /** 实时信号 AI 分析 */
   getSignalAnalysis: (signalId: string | number): Promise<ApiResponse<AiSignalAnalysis | null>> =>

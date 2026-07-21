@@ -3,7 +3,7 @@ package com.vertex.service.strategy.ai;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import jakarta.annotation.PostConstruct;
+import com.vertex.model.entity.ai.AiConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
@@ -11,7 +11,7 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -20,83 +20,43 @@ import java.util.concurrent.TimeUnit;
 /**
  * DeepSeek API 客户端（OpenAI 兼容协议）。
  * <p>
- * 仅在 {@code vertex.ai.deepseek.enabled=true} 且
- * {@code vertex.ai.provider=deepseek} 时注册。
+ * 只要 {@code vertex.ai.enabled=true}（yaml 安装开关）就会被注册；具体是否被使用
+ * 由 {@link AiClientRouter} 根据 DB 里的 provider 字段决定。
  * </p>
  * <p>
- * <b>协议差异</b>：DeepSeek 完全兼容 OpenAI Chat Completions：
- * <pre>
- * POST /v1/chat/completions
- * Authorization: Bearer &lt;api-key&gt;
- * {
- *   "model": "deepseek-chat",
- *   "messages": [{ "role": "user", "content": "..." }],
- *   "response_format": { "type": "json_object" },
- *   "temperature": 0.2,
- *   "max_tokens": 1200
- * }
- *
- * → { "choices": [ { "message": { "content": "&lt;json string&gt;" } } ] }
- * </pre>
+ * 所有业务参数（api-key / model / base-url / timeout / max-retry）从
+ * {@link AiConfigService#get()} 读，UI 上改配置 5s 内生效，无需重启。
  * </p>
- * <p>
- * <b>schema 适配</b>：DeepSeek/OpenAI 没有 Gemini 风格的 responseSchema，
- * 只支持 {@code response_format: { type: "json_object" }}。本实现把传入的 schema
- * 转成自然语言要求拼到 prompt 末尾，让模型按结构输出。
- * </p>
- */
-/*
- * 激活条件：vertex.ai.deepseek.enabled=true 且 vertex.ai.provider=deepseek。
- * 同一类上不能重复 @ConditionalOnProperty（无 @Repeatable），统一改为单个 SpEL。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnExpression(
-        "${vertex.ai.deepseek.enabled:false} and '${vertex.ai.provider:gemini}'.equals('deepseek')")
+@ConditionalOnProperty(prefix = "vertex.ai", name = "enabled", havingValue = "true")
 public class DeepSeekClient implements AiClient {
 
     private static final MediaType JSON_MEDIA = MediaType.parse("application/json; charset=utf-8");
 
-    private final AiProperties aiProperties;
+    private final AiConfigService configService;
     private final OkHttpClient quoteOkHttpClient;
 
-    private OkHttpClient httpClient;
-
-    @PostConstruct
-    public void init() {
-        AiProperties.DeepSeek cfg = aiProperties.getDeepseek();
-        int timeout = Math.max(5, cfg.getTimeoutSeconds());
-        this.httpClient = quoteOkHttpClient.newBuilder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(timeout, TimeUnit.SECONDS)
-                .writeTimeout(15, TimeUnit.SECONDS)
-                .build();
-        log.info("[DeepSeekClient] activated: model={}, baseUrl={}, timeoutSec={}",
-                cfg.getModel(), cfg.getBaseUrl(), timeout);
-        if (!StringUtils.hasText(cfg.getApiKey())) {
-            log.warn("[DeepSeekClient] api-key is blank, all calls will fail");
-        }
-    }
-
     @Override public String providerName() { return "deepseek"; }
-    @Override public String currentModel() { return aiProperties.getDeepseek().getModel(); }
+    @Override public String currentModel() { return configService.get().getDeepseekModel(); }
 
     @Override
     public JSONObject generateJson(String prompt, JSONObject responseSchema) throws AiException {
-        // 老单 prompt 入口：无 system message，全部塞进 user role
         return generateJson(null, prompt, responseSchema);
     }
 
     @Override
     public JSONObject generateJson(String systemPrompt, String userPrompt, JSONObject responseSchema)
             throws AiException {
-        AiProperties.DeepSeek cfg = aiProperties.getDeepseek();
-        if (!StringUtils.hasText(cfg.getApiKey())) {
-            throw new AiException("DeepSeek api-key is not configured (vertex.ai.deepseek.api-key)",
+        AiConfig cfg = configService.get();
+        if (!StringUtils.hasText(cfg.getDeepseekApiKey())) {
+            throw new AiException("DeepSeek api-key is not configured (ai_config.deepseek_api_key)",
                     null, false);
         }
-        int maxAttempts = Math.max(1, cfg.getMaxRetry() + 1);
+        int maxRetry = cfg.getDeepseekMaxRetry() == null ? 2 : cfg.getDeepseekMaxRetry();
+        int maxAttempts = Math.max(1, maxRetry + 1);
         AiException lastError = null;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -121,25 +81,33 @@ public class DeepSeekClient implements AiClient {
         throw lastError != null ? lastError : new AiException("Unknown failure", null, false);
     }
 
-    private JSONObject doGenerate(AiProperties.DeepSeek cfg, String systemPrompt, String userPrompt,
+    private JSONObject doGenerate(AiConfig cfg, String systemPrompt, String userPrompt,
                                   JSONObject responseSchema) throws AiException {
-        String url = cfg.getBaseUrl().replaceAll("/+$", "") + "/v1/chat/completions";
+        String baseUrl = safe(cfg.getDeepseekBaseUrl(), "https://api.deepseek.com");
+        String model = safe(cfg.getDeepseekModel(), "deepseek-chat");
+        String url = baseUrl.replaceAll("/+$", "") + "/v1/chat/completions";
 
-        // schema 只拼在 user 里（system 已经明确了输出格式规则，避免重复干扰权重）
+        int timeout = cfg.getDeepseekTimeoutSeconds() == null
+                ? 60 : Math.max(5, cfg.getDeepseekTimeoutSeconds());
+        OkHttpClient httpClient = quoteOkHttpClient.newBuilder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(timeout, TimeUnit.SECONDS)
+                .writeTimeout(15, TimeUnit.SECONDS)
+                .build();
+
+        // schema 拼进 user prompt（DeepSeek/OpenAI 不支持原生 responseSchema）
         String userWithSchema = appendSchemaToPrompt(userPrompt, responseSchema);
 
-        // 构造 OpenAI 兼容请求体
         JSONObject body = new JSONObject();
-        body.put("model", cfg.getModel());
+        body.put("model", model);
         JSONArray messages = new JSONArray();
-        // ── system 消息（若有）：语言硬约束 + 角色 —— OpenAI 协议下权重最高 ─
+        // system message（若有）：语言硬约束 + 角色，OpenAI 协议下权重最高
         if (StringUtils.hasText(systemPrompt)) {
             JSONObject sysMsg = new JSONObject();
             sysMsg.put("role", "system");
             sysMsg.put("content", systemPrompt);
             messages.add(sysMsg);
         }
-        // ── user 消息：业务上下文 + schema ────────────────────────────
         JSONObject userMsg = new JSONObject();
         userMsg.put("role", "user");
         userMsg.put("content", userWithSchema);
@@ -147,7 +115,7 @@ public class DeepSeekClient implements AiClient {
         body.put("messages", messages);
         body.put("temperature", 0.2);
         body.put("max_tokens", 1200);
-        // OpenAI 兼容的强制 JSON 输出（DeepSeek 支持）
+        // OpenAI 兼容的强制 JSON 输出
         JSONObject respFmt = new JSONObject();
         respFmt.put("type", "json_object");
         body.put("response_format", respFmt);
@@ -156,7 +124,7 @@ public class DeepSeekClient implements AiClient {
         Request req = new Request.Builder()
                 .url(url)
                 .post(RequestBody.create(body.toJSONString(), JSON_MEDIA))
-                .addHeader("Authorization", "Bearer " + cfg.getApiKey())
+                .addHeader("Authorization", "Bearer " + cfg.getDeepseekApiKey())
                 .build();
 
         try (Response resp = httpClient.newCall(req).execute()) {
@@ -176,9 +144,6 @@ public class DeepSeekClient implements AiClient {
         }
     }
 
-    /**
-     * 从 DeepSeek 响应中提取 choices[0].message.content，并把它解析为 JSONObject。
-     */
     private JSONObject parseResponse(String body) throws AiException {
         try {
             JSONObject root = JSON.parseObject(body);
@@ -195,7 +160,6 @@ public class DeepSeekClient implements AiClient {
             if (!StringUtils.hasText(content)) {
                 throw new AiException("DeepSeek returned empty content", null, false);
             }
-            // response_format=json_object 时 content 是合法 JSON 字符串
             return JSON.parseObject(content.trim());
         } catch (AiException e) {
             throw e;
@@ -204,11 +168,6 @@ public class DeepSeekClient implements AiClient {
         }
     }
 
-    /**
-     * DeepSeek / OpenAI 不支持 Gemini 风格 responseSchema，但支持
-     * response_format=json_object。这里把 schema 转成自然语言指令拼到 prompt 末尾，
-     * 让模型主动按指定 key + 枚举值产出 JSON。
-     */
     private String appendSchemaToPrompt(String prompt, JSONObject responseSchema) {
         if (responseSchema == null) return prompt;
         StringBuilder sb = new StringBuilder(prompt);
@@ -217,6 +176,10 @@ public class DeepSeekClient implements AiClient {
         sb.append("Respond with ONLY a single JSON object matching the schema above. ")
           .append("No markdown fences, no commentary outside the JSON.\n");
         return sb.toString();
+    }
+
+    private static String safe(String s, String fallback) {
+        return (s == null || s.isBlank()) ? fallback : s;
     }
 
     private static String truncate(String s, int max) {

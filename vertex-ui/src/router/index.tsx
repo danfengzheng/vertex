@@ -22,6 +22,7 @@ import { AlertConfig } from '../pages/chain/AlertConfig';
 import { SourceConfig } from '../pages/chain/SourceConfig';
 import { AiDashboard } from '../pages/ai/AiDashboard';
 import { AiStatusPage } from '../pages/ai/AiStatus';
+import { AiConfig } from '../pages/ai/AiConfig';
 
 export const AppRouter = () => {
   return (
@@ -101,6 +102,9 @@ export const AppRouter = () => {
         } />
         <Route path="ai/status" element={
           <PermissionGuard path="/ai/status"><AiStatusPage /></PermissionGuard>
+        } />
+        <Route path="ai/config" element={
+          <PermissionGuard path="/ai/config"><AiConfig /></PermissionGuard>
         } />
 
         {/* 使用指南（无权限码，所有已登录用户可访问） */}

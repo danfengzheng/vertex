@@ -46,6 +46,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class AiAnalysisService {
 
     private final AiProperties aiProperties;
+    private final AiConfigService configService;
     private final AiAnalysisStore store;
     private final KLineStore klineStore;
     /**
@@ -114,8 +115,22 @@ public class AiAnalysisService {
         }
     }
 
+    /**
+     * AI 服务是否可用。
+     * <p>
+     * 双开关：yaml bean 级 {@code vertex.ai.enabled=true}（决定 aiClient bean 是否注入）
+     * + DB 里的 {@code ai_config.enabled=1}（业务运行开关，UI 可热切换）。
+     * </p>
+     */
     public boolean isEnabled() {
-        return aiClient != null;
+        if (aiClient == null) return false;
+        try {
+            Integer dbEnabled = configService.get().getEnabled();
+            return dbEnabled != null && dbEnabled == 1;
+        } catch (Exception e) {
+            // DB 读失败视为不可用，避免死等
+            return false;
+        }
     }
 
     /** 当前实际使用的 provider 名（gemini / deepseek）；未启用时返回 null */
@@ -168,6 +183,8 @@ public class AiAnalysisService {
      */
     public void analyzeSignalAsync(Strategy strategy, Signal signal) {
         if (executor == null) return;
+        // DB 里的业务开关 —— 关掉则跳过，不占用线程/API 调用
+        if (!isEnabled()) return;
         try {
             executor.submit(() -> {
                 try {
@@ -299,7 +316,7 @@ public class AiAnalysisService {
                     strategy.getInterval(), startTime, endTime, barCount, true);
 
             AiPromptBuilder.PromptParts prompt = AiPromptBuilder.buildSignalPromptParts(
-                    strategy, signal, klines, aiProperties.getLanguage());
+                    strategy, signal, klines, configService.get().getLanguage());
             JSONObject schema = AiPromptBuilder.buildSignalSchema();
 
             JSONObject json = aiClient.generateJson(prompt.systemPrompt, prompt.userPrompt, schema);
@@ -332,6 +349,7 @@ public class AiAnalysisService {
         if (executor == null || result == null || result.getTrades() == null || result.getTrades().isEmpty()) {
             return;
         }
+        if (!isEnabled()) return;   // DB 业务开关
         try {
             executor.submit(() -> runBatchAnalysis(cacheKey, strategy, result));
         } catch (Exception e) {
@@ -414,7 +432,7 @@ public class AiAnalysisService {
                     iv, startTime, endTime, barCount, true);
 
             AiPromptBuilder.PromptParts prompt = AiPromptBuilder.buildTradePromptParts(
-                    strategy, trade, idx, total, klines, aiProperties.getLanguage());
+                    strategy, trade, idx, total, klines, configService.get().getLanguage());
             JSONObject schema = AiPromptBuilder.buildTradeSchema();
 
             JSONObject json = aiClient.generateJson(prompt.systemPrompt, prompt.userPrompt, schema);

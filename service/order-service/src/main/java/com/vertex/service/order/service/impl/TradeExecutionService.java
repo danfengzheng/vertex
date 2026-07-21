@@ -666,7 +666,12 @@ public class TradeExecutionService {
     }
 
     /**
-     * 实盘执行（根据 marketType 路由到现货或合约）
+     * 实盘执行（根据 marketType 路由到现货或合约）。
+     * <p>
+     * 合约 reduceOnly 平仓单走 {@link #executeLiveFuturesClose}：具备"先异步告警 →
+     * 查询 Binance 实际仓位 → 按剩余量重试" 的能力，避免网络抖动 / 部分成交 / 静默失败
+     * 导致仓位没关掉而没人知道。
+     * </p>
      */
     private void executeLive(Order order) {
         String[] credentials = accountService.getDecryptedCredentials(order.getAccountId());
@@ -675,10 +680,176 @@ public class TradeExecutionService {
 
         MarketType marketType = order.getMarketType();
         if (marketType != null && marketType.isFutures()) {
-            executeLiveFutures(order, apiKey, apiSecret, marketType);
+            if (order.isReduceOnly()) {
+                executeLiveFuturesClose(order, apiKey, apiSecret, marketType);
+            } else {
+                executeLiveFutures(order, apiKey, apiSecret, marketType);
+            }
         } else {
             executeLiveSpot(order, apiKey, apiSecret);
         }
+    }
+
+    /** 平仓失败时的最大重试次数（含首次），默认 3 次 */
+    private static final int CLOSE_MAX_ATTEMPTS = 3;
+
+    /**
+     * 合约实盘平仓（reduceOnly=true）—— 带"先告警、后对账重试"的抗抖动包装。
+     * <p>
+     * 触发场景：`executeLiveFutures` 抛异常（超时/网络） 或返回 REJECTED 状态。
+     * 应对流程：
+     * <ol>
+     *   <li>第 1 次失败 → 立即通过 {@link CompositeTradeNotifier#notifyCloseFailureAsync}
+     *       异步推 Telegram，让用户马上收到警报，可以在自动重试的同时手动介入</li>
+     *   <li>sleep 1.5-2.5s（给 Binance 处理时间）→ 查 {@code /fapi/v2/positionRisk}</li>
+     *   <li>positionAmt == 0：单实际成交了（响应回不来）→ 标 FILLED、告警"对账已确认" → 结束</li>
+     *   <li>positionAmt &lt; 原qty：部分成交 → 更新 order.quantity = 剩余量，继续重试</li>
+     *   <li>positionAmt == 原qty：单没进去 → 完全重试</li>
+     *   <li>最多 {@link #CLOSE_MAX_ATTEMPTS} 次都失败 → FINAL_GIVEUP 告警要求人工介入</li>
+     * </ol>
+     * </p>
+     */
+    private void executeLiveFuturesClose(Order order, String apiKey, String apiSecret,
+                                          MarketType marketType) {
+        Exception firstError = null;
+        String firstErrMsg = null;
+
+        for (int attempt = 1; attempt <= CLOSE_MAX_ATTEMPTS; attempt++) {
+            // ── 1. 尝试下单 ───────────────────────────────
+            Exception thisAttemptError = null;
+            try {
+                executeLiveFutures(order, apiKey, apiSecret, marketType);
+            } catch (Exception e) {
+                thisAttemptError = e;
+                order.setStatus(OrderStatus.REJECTED);
+                order.setErrorMsg(e.getMessage());
+                log.warn("[Close] futures close attempt {}/{} threw: {}",
+                        attempt, CLOSE_MAX_ATTEMPTS, e.getMessage());
+            }
+
+            // 成功即返回，让上层 doExecute 走后续 fill 处理
+            if (order.getStatus() == OrderStatus.FILLED
+                    || order.getStatus() == OrderStatus.PARTIALLY_FILLED) {
+                if (attempt > 1) {
+                    compositeTradeNotifier.notifyCloseFailureAsync(order, "RECONCILED",
+                            "第 " + attempt + " 次尝试成交，仓位已关闭");
+                }
+                return;
+            }
+
+            // ── 2. 第 1 次失败 → 立即异步告警（fire-and-forget，不阻塞重试） ──
+            if (attempt == 1) {
+                firstError = thisAttemptError;
+                firstErrMsg = thisAttemptError != null ? thisAttemptError.getMessage() : order.getErrorMsg();
+                compositeTradeNotifier.notifyCloseFailureAsync(order, "ATTEMPT_FAILED",
+                        "第 1 次平仓失败，开始自动对账重试。首次错误: "
+                                + (firstErrMsg == null ? "unknown" : firstErrMsg));
+            }
+
+            // ── 3. 对账：查 Binance 实际仓位 ───────────────
+            BigDecimal remoteQty;
+            try {
+                Thread.sleep(1500L + attempt * 500L);
+                remoteQty = queryRemotePositionQty(apiKey, apiSecret, order.getSymbol(), marketType);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                compositeTradeNotifier.notifyCloseFailureAsync(order, "FINAL_GIVEUP",
+                        "重试被中断，需人工确认仓位: " + order.getSymbol());
+                return;
+            } catch (Exception queryEx) {
+                log.error("[Close] positionRisk query failed (attempt {}): {}",
+                        attempt, queryEx.getMessage());
+                if (attempt == CLOSE_MAX_ATTEMPTS) {
+                    compositeTradeNotifier.notifyCloseFailureAsync(order, "FINAL_GIVEUP",
+                            "重试 " + CLOSE_MAX_ATTEMPTS + " 次全部失败，且对账查询也失败（"
+                                    + queryEx.getMessage() + "）。请立即在币安手动检查 "
+                                    + order.getSymbol() + " 仓位并平仓。首次错误: " + firstErrMsg);
+                    return;
+                }
+                continue;
+            }
+
+            // ── 4. 根据实际仓位决定下一步 ──────────────────
+            if (remoteQty == null || remoteQty.compareTo(BigDecimal.ZERO) == 0) {
+                // 实际已关：单其实成交了，只是响应回不来
+                order.setStatus(OrderStatus.FILLED);
+                if (order.getFilledQuantity() == null
+                        || order.getFilledQuantity().compareTo(BigDecimal.ZERO) == 0) {
+                    order.setFilledQuantity(order.getQuantity());
+                }
+                // filledPrice 兜底：用 markPrice 作为估算，避免下游 PnL 计算 NPE。
+                // 精度上有几 bp 偏差，但仓位状态正确闭合是首要目标；实际盈亏可事后从
+                // Binance 交易历史手动核对。
+                if (order.getFilledPrice() == null
+                        || order.getFilledPrice().compareTo(BigDecimal.ZERO) == 0) {
+                    order.setFilledPrice(fetchMarkPriceQuiet(order.getSymbol(), marketType));
+                }
+                order.setErrorMsg(null);
+                log.info("[Close] Reconciled as CLOSED after {} attempt(s): symbol={} markPrice={}",
+                        attempt, order.getSymbol(), order.getFilledPrice());
+                compositeTradeNotifier.notifyCloseFailureAsync(order, "RECONCILED",
+                        "对账发现仓位已关闭（首次调用其实成交了，只是响应超时）。"
+                                + "PnL 用 markPrice 估算，如需精确可从 Binance 交易记录核对。首次错误: "
+                                + firstErrMsg);
+                return;
+            }
+
+            // 仓位仍未平：部分成交 → 只补剩余；完全未成交 → 用原 qty
+            if (remoteQty.compareTo(order.getQuantity()) < 0) {
+                log.info("[Close] Partial fill detected: local={}, remaining={}",
+                        order.getQuantity(), remoteQty);
+                order.setQuantity(remoteQty);
+            }
+
+            if (attempt == CLOSE_MAX_ATTEMPTS) {
+                compositeTradeNotifier.notifyCloseFailureAsync(order, "FINAL_GIVEUP",
+                        "重试 " + CLOSE_MAX_ATTEMPTS + " 次后仓位仍有 " + remoteQty
+                                + "，请立即在币安手动平仓 " + order.getSymbol()
+                                + "。首次错误: " + firstErrMsg);
+                return;
+            }
+            // else 继续 for 循环下一轮重试
+        }
+        // 兜底（正常应该在循环内 return）
+        if (firstError != null) {
+            log.error("[Close] futures close exhausted retries", firstError);
+        }
+    }
+
+    /** 静默拉一次 markPrice；失败返回 null（由调用方兜底） */
+    private BigDecimal fetchMarkPriceQuiet(String symbol, MarketType marketType) {
+        try {
+            var mark = binanceFuturesClient.getMarkPrice(symbol, marketType);
+            if (mark != null) {
+                BigDecimal p = mark.getBigDecimal("markPrice");
+                if (p != null && p.compareTo(BigDecimal.ZERO) > 0) return p;
+            }
+        } catch (Exception e) {
+            log.warn("[Close] fetchMarkPrice for {} failed: {}", symbol, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * 查币安 USDM/COINM 实际持仓量（正数=多仓、负数=空仓、0=无仓）。
+     * 返回 abs 值；null 表示查询无结果。
+     */
+    private BigDecimal queryRemotePositionQty(String apiKey, String apiSecret,
+                                              String symbol, MarketType marketType) {
+        JSONArray positions = binanceFuturesClient.getPositionRisk(apiKey, apiSecret, symbol, marketType);
+        if (positions == null || positions.isEmpty()) return BigDecimal.ZERO;
+        String binanceSymbol = symbol.replace("-", "").toUpperCase();
+        for (int i = 0; i < positions.size(); i++) {
+            var p = positions.getJSONObject(i);
+            if (p == null) continue;
+            String s = p.getString("symbol");
+            if (s == null) continue;
+            if (!binanceSymbol.equalsIgnoreCase(s)) continue;
+            BigDecimal amt = p.getBigDecimal("positionAmt");
+            if (amt == null) continue;
+            return amt.abs();
+        }
+        return BigDecimal.ZERO;
     }
 
     /**

@@ -3,7 +3,7 @@ package com.vertex.service.strategy.ai;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
-import jakarta.annotation.PostConstruct;
+import com.vertex.model.entity.ai.AiConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
@@ -20,77 +20,46 @@ import java.util.concurrent.TimeUnit;
 /**
  * Google Gemini API 客户端（同步调用）。
  * <p>
- * 仅在 {@code vertex.ai.gemini.enabled=true} 且
- * {@code vertex.ai.provider=gemini}（默认）时注册。
+ * 只要 {@code vertex.ai.enabled=true}（yaml 安装开关）就会被注册；
+ * 具体是否真的走 Gemini 由 {@link AiClientRouter} 根据 DB 里的 provider 字段决定。
  * </p>
  * <p>
- * 用 OkHttp 直接打 HTTP，避免引入 Google SDK 依赖；使用 Gemini 原生
- * {@code generationConfig.responseSchema} 强制结构化 JSON 输出。
+ * 所有业务参数（api-key / model / base-url / timeout / max-retry）**运行时从
+ * {@link AiConfigService#get()} 读**，UI 上改配置 5s 内生效，无需重启。
  * </p>
- */
-/*
- * 激活条件：vertex.ai.gemini.enabled=true 且 vertex.ai.provider 为 gemini
- * （未配置 provider 时默认按 gemini 处理）。
- * 同一类不能重复 @ConditionalOnProperty，所以用单个 SpEL 表达式合并条件。
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression(
-        "${vertex.ai.gemini.enabled:false} and '${vertex.ai.provider:gemini}'.equals('gemini')")
+@ConditionalOnProperty(prefix = "vertex.ai", name = "enabled", havingValue = "true")
 public class GeminiClient implements AiClient {
 
     private static final MediaType JSON_MEDIA = MediaType.parse("application/json; charset=utf-8");
 
-    private final AiProperties aiProperties;
-    /**
-     * 复用 quote-service 的 OkHttpClient bean；strategy-service 同一容器内可见。
-     * 这里基于配置的 timeout 再 newBuilder，避免硬改全局 client。
-     */
+    private final AiConfigService configService;
+    /** 复用 quote-service 的 OkHttpClient bean */
     private final OkHttpClient quoteOkHttpClient;
 
-    private OkHttpClient httpClient;
-
-    @PostConstruct
-    public void init() {
-        AiProperties.Gemini cfg = aiProperties.getGemini();
-        int timeout = Math.max(5, cfg.getTimeoutSeconds());
-        this.httpClient = quoteOkHttpClient.newBuilder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(timeout, TimeUnit.SECONDS)
-                .writeTimeout(15, TimeUnit.SECONDS)
-                .build();
-        log.info("[GeminiClient] activated: model={}, baseUrl={}, timeoutSec={}",
-                cfg.getModel(), cfg.getBaseUrl(), timeout);
-        if (!StringUtils.hasText(cfg.getApiKey())) {
-            log.warn("[GeminiClient] api-key is blank, all calls will fail");
-        }
-    }
-
     @Override public String providerName() { return "gemini"; }
-    @Override public String currentModel() { return aiProperties.getGemini().getModel(); }
+    @Override public String currentModel() { return configService.get().getGeminiModel(); }
 
-    /**
-     * 调 Gemini 生成结构化 JSON（老单 prompt 入口，无 system message）。
-     */
+    /** 老单 prompt 入口，无 system message */
     @Override
     public JSONObject generateJson(String prompt, JSONObject responseSchema) throws AiException {
         return generateJson(null, prompt, responseSchema);
     }
 
-    /**
-     * 双 prompt 入口：systemPrompt 走 Gemini 的 {@code systemInstruction} 顶级字段，
-     * 权重高于 contents 里的 user parts；userPrompt 放 contents 数组第一个。
-     */
+    /** 双 prompt：systemPrompt 走 Gemini 的 systemInstruction 顶级字段 */
     @Override
     public JSONObject generateJson(String systemPrompt, String userPrompt, JSONObject responseSchema)
             throws AiException {
-        AiProperties.Gemini cfg = aiProperties.getGemini();
-        if (!StringUtils.hasText(cfg.getApiKey())) {
-            throw new AiException("Gemini api-key is not configured (vertex.ai.gemini.api-key)",
+        AiConfig cfg = configService.get();
+        if (!StringUtils.hasText(cfg.getGeminiApiKey())) {
+            throw new AiException("Gemini api-key is not configured (ai_config.gemini_api_key)",
                     null, false);
         }
-        int maxAttempts = Math.max(1, cfg.getMaxRetry() + 1);
+        int maxRetry = cfg.getGeminiMaxRetry() == null ? 2 : cfg.getGeminiMaxRetry();
+        int maxAttempts = Math.max(1, maxRetry + 1);
         AiException lastError = null;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -115,15 +84,25 @@ public class GeminiClient implements AiClient {
         throw lastError != null ? lastError : new AiException("Unknown failure", null, false);
     }
 
-    private JSONObject doGenerate(AiProperties.Gemini cfg, String systemPrompt, String userPrompt,
+    private JSONObject doGenerate(AiConfig cfg, String systemPrompt, String userPrompt,
                                   JSONObject responseSchema) throws AiException {
+        String baseUrl = safe(cfg.getGeminiBaseUrl(), "https://generativelanguage.googleapis.com");
+        String model = safe(cfg.getGeminiModel(), "gemini-2.0-flash");
         String url = String.format("%s/v1beta/models/%s:generateContent?key=%s",
-                cfg.getBaseUrl(), cfg.getModel(), cfg.getApiKey());
+                baseUrl, model, cfg.getGeminiApiKey());
+
+        // 用当前配置的 timeout 单独建一个短命 client（不改全局）
+        int timeout = cfg.getGeminiTimeoutSeconds() == null ? 30 : Math.max(5, cfg.getGeminiTimeoutSeconds());
+        OkHttpClient httpClient = quoteOkHttpClient.newBuilder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(timeout, TimeUnit.SECONDS)
+                .writeTimeout(15, TimeUnit.SECONDS)
+                .build();
 
         // 构造请求体
         JSONObject body = new JSONObject();
 
-        // ── systemInstruction（若有）：语言硬约束 + 角色，Gemini 会显著提高其权重 ─
+        // systemInstruction（若有）
         if (StringUtils.hasText(systemPrompt)) {
             JSONObject sysInstruction = new JSONObject();
             JSONArray sysParts = new JSONArray();
@@ -134,7 +113,7 @@ public class GeminiClient implements AiClient {
             body.put("systemInstruction", sysInstruction);
         }
 
-        // ── contents：业务 user prompt ────────────────────────────────
+        // contents：业务 user prompt
         JSONArray contents = new JSONArray();
         JSONObject content = new JSONObject();
         JSONArray parts = new JSONArray();
@@ -209,6 +188,10 @@ public class GeminiClient implements AiClient {
         } catch (Exception e) {
             throw new AiException("Parse Gemini response failed: " + e.getMessage(), e, false);
         }
+    }
+
+    private static String safe(String s, String fallback) {
+        return (s == null || s.isBlank()) ? fallback : s;
     }
 
     private static String truncate(String s, int max) {

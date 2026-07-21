@@ -107,6 +107,45 @@ public class TelegramTradeNotifier implements TradeNotifier {
         sendMessage(sb.toString(), order.getCreateBy());
     }
 
+    @Override
+    public void notifyCloseFailure(Order order, String stage, String message) {
+        String emoji = stageEmoji(stage);
+        String title = stageTitle(stage);
+        StringBuilder sb = new StringBuilder(256);
+        sb.append(emoji).append(" <b>").append(title).append("</b>\n");
+        sb.append("交易对: <code>").append(escapeHtml(order.getSymbol())).append("</code>\n");
+        sb.append("交易所: <code>").append(escapeHtml(order.getExchange())).append("</code>\n");
+        sb.append("方向: <code>").append(order.getSide()).append("</code>\n");
+        if (order.getQuantity() != null) {
+            sb.append("数量: <code>").append(formatQuantity(order.getQuantity())).append("</code>\n");
+        }
+        if (order.getId() != null) {
+            sb.append("订单ID: <code>").append(order.getId()).append("</code>\n");
+        }
+        sb.append("说明: ").append(escapeHtml(message));
+        sendMessage(sb.toString(), order.getCreateBy());
+    }
+
+    private static String stageEmoji(String stage) {
+        if (stage == null) return "⚠️";
+        return switch (stage) {
+            case "ATTEMPT_FAILED" -> "⚠️";
+            case "RECONCILED" -> "✅";
+            case "FINAL_GIVEUP" -> "🚨";
+            default -> "⚠️";
+        };
+    }
+
+    private static String stageTitle(String stage) {
+        if (stage == null) return "平仓告警";
+        return switch (stage) {
+            case "ATTEMPT_FAILED" -> "平仓失败（正在自动重试）";
+            case "RECONCILED" -> "平仓已完成（对账确认）";
+            case "FINAL_GIVEUP" -> "平仓最终失败 - 需人工介入";
+            default -> "平仓告警";
+        };
+    }
+
     // ─── 内部方法 ───────────────────────────────────
 
     /**

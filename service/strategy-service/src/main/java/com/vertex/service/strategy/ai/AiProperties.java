@@ -5,31 +5,25 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * AI 分析配置（支持多 provider：Gemini / DeepSeek）。
+ * AI 模块的**基础设施配置**（yaml，重启期读的）。
+ * <p>
+ * 与 {@link com.vertex.model.entity.ai.AiConfig}（DB 单行表）分工：
+ * <ul>
+ *   <li>本类：{@code enabled} bean 级安装开关 + {@code workerThreads} / {@code queueCapacity}
+ *       线程池尺寸 —— 都是 bean 初始化时读的，改后必须重启</li>
+ *   <li>AiConfig：provider / language / api-key / model / base-url / timeout / max-retry
+ *       —— 可在 UI「AI 分析 → AI 配置」页热切换，5s 内所有 AI 调用生效</li>
+ * </ul>
+ * yaml 里的 {@code enabled=true} 之后，两个 AiClient（GeminiClient / DeepSeekClient）
+ * 都会被注册；实际调用时由 {@link AiClientRouter} 根据 DB 里的 {@code provider} 决定
+ * 用哪个。想彻底禁用 AI 也可以在 UI 上把 DB 的 {@code enabled} 关掉，无需重启。
+ * </p>
  * <pre>
  * vertex:
  *   ai:
- *     # 顶层 provider 选择（默认 gemini；改为 deepseek 切换）
- *     provider: gemini
- *     # 通用配置（所有 provider 共享）
+ *     enabled: true          # bean 级安装开关，重启生效
  *     worker-threads: 2
  *     queue-capacity: 2000
- *     # Gemini 配置（provider=gemini 时生效）
- *     gemini:
- *       enabled: true
- *       api-key: ${GEMINI_API_KEY}
- *       model: gemini-2.0-flash
- *       base-url: https://generativelanguage.googleapis.com
- *       timeout-seconds: 30
- *       max-retry: 2
- *     # DeepSeek 配置（provider=deepseek 时生效）
- *     deepseek:
- *       enabled: true
- *       api-key: ${DEEPSEEK_API_KEY}
- *       model: deepseek-chat
- *       base-url: https://api.deepseek.com
- *       timeout-seconds: 60
- *       max-retry: 2
  * </pre>
  */
 @Data
@@ -38,67 +32,14 @@ import org.springframework.stereotype.Component;
 public class AiProperties {
 
     /**
-     * Provider 选择：gemini / deepseek。
-     * 默认 gemini。改后必须重启服务才能生效（Spring 配置绑定是启动期）。
+     * bean 级安装开关。true 才会注册 AiClient 相关 bean。
+     * 关掉 = 彻底禁用（UI 也无法打开）。生产建议永久 true，实际开关走 DB。
      */
-    private String provider = "gemini";
+    private boolean enabled = false;
 
-    /** 异步 worker 线程数；单策略 1 线程足够，多策略推荐 2–3 */
+    /** 异步 worker 线程数；单策略 1 线程足够，多策略推荐 2-3 */
     private int workerThreads = 2;
 
     /** 异步任务队列容量；超出后新任务被拒绝（不阻塞主流程）*/
     private int queueCapacity = 2000;
-
-    /**
-     * AI 输出语言。
-     * <p>
-     * 影响 AI 在 prompt 中被要求用什么语言生成自由文本字段
-     * （summary / keyFactors / risks / entryFactors / exitFactors / improvements）。
-     * 枚举值（verdict / alignment / marketRegime / suggestedAction）始终保持英文原始 key，
-     * 由前端 i18n 翻译显示。
-     * </p>
-     * <ul>
-     *   <li>zh-CN / zh → 中文（简体）</li>
-     *   <li>en / en-US → English</li>
-     *   <li>其他 BCP-47 标签透传给模型（例如 ja、ko）</li>
-     * </ul>
-     */
-    private String language = "zh-CN";
-
-    private Gemini gemini = new Gemini();
-    private DeepSeek deepseek = new DeepSeek();
-
-    @Data
-    public static class Gemini {
-        /** 是否启用 Gemini */
-        private boolean enabled = false;
-        /** API Key（Google AI Studio 申请） */
-        private String apiKey;
-        /** 模型名 */
-        private String model = "gemini-2.0-flash";
-        /** API base URL；中国大陆可改为 Cloudflare Worker 反代 */
-        private String baseUrl = "https://generativelanguage.googleapis.com";
-        private int timeoutSeconds = 30;
-        private int maxRetry = 2;
-    }
-
-    @Data
-    public static class DeepSeek {
-        /** 是否启用 DeepSeek */
-        private boolean enabled = false;
-        /** API Key（platform.deepseek.com 申请） */
-        private String apiKey;
-        /**
-         * 模型名：
-         * <ul>
-         *   <li>deepseek-chat（V3 通用对话）</li>
-         *   <li>deepseek-reasoner（R1 推理模型，强但慢）</li>
-         * </ul>
-         */
-        private String model = "deepseek-chat";
-        /** API base URL（OpenAI 兼容协议） */
-        private String baseUrl = "https://api.deepseek.com";
-        private int timeoutSeconds = 60;
-        private int maxRetry = 2;
-    }
 }

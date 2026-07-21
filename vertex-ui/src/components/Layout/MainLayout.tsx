@@ -273,6 +273,11 @@ export const MainLayout = () => {
           icon: <MonitorOutlined />,
           label: t('text.ai.statusTitle'),
         },
+        {
+          key: '/ai/config',
+          icon: <SettingOutlined />,
+          label: t('text.ai.configTitle'),
+        },
       ],
     },
     {
