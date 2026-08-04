@@ -115,6 +115,9 @@ public class StrategyCreateDTO {
     /** SuperTrend 动态止损偏移百分比（如 1.0 = 1%），null/<=0=不启用 */
     private BigDecimal superTrendSlOffsetPct;
 
+    /** NEUTRAL 信号时反向指标占比 ≥ 该值即平仓（0-1；null=不启用；不算权重、不算 FILTER） */
+    private BigDecimal exitOnOppositeVoteRatio;
+
     /** 止损熔断开关（true=启用），止损触发且亏损时暂停开仓 24 小时 */
     private Boolean pauseOnStopLoss;
 }

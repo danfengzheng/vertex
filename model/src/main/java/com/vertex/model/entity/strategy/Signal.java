@@ -55,4 +55,19 @@ public class Signal extends BaseEntity {
 
     /** 信号描述 */
     private String description;
+
+    /**
+     * 投票统计（transient / 不落库）：只在同一次 evaluate → 消费的进程内传递，
+     * 供 StrategyEngineService 在 signal 为 NEUTRAL 时判断"反向投票占比"决定是否平仓。
+     * 通过 @TableField(exist=false) 告诉 MyBatis Plus 不映射到 DB 列。
+     */
+    @TableField(exist = false)
+    private transient VoteBreakdown voteBreakdown;
+
+    /**
+     * 单根 K 线的投票分布 —— 只算投票指标（不含 FILTER），只计数（不算权重）。
+     */
+    public record VoteBreakdown(int buyCount, int sellCount, int neutralCount) {
+        public int total() { return buyCount + sellCount + neutralCount; }
+    }
 }

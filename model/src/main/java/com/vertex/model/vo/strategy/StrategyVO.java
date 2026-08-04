@@ -88,6 +88,9 @@ public class StrategyVO implements Serializable {
     /** SuperTrend 动态止损偏移百分比（如 1.0 = 1%），需同时配置 SUPERTREND 指标，null/<=0=不启用 */
     private BigDecimal superTrendSlOffsetPct;
 
+    /** NEUTRAL 信号时反向指标占比 ≥ 该值即平仓（0-1；null=不启用；不算权重、不算 FILTER） */
+    private BigDecimal exitOnOppositeVoteRatio;
+
     /** 止损熔断开关（1=启用，0/null=关闭） */
     private Integer pauseOnStopLoss;
 

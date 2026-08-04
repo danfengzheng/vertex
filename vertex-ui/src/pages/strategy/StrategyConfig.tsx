@@ -674,6 +674,7 @@ export const StrategyConfig = () => {
         atrInterval: record.atrInterval ?? undefined,
         trailingDropPct: record.trailingDropPct,
         superTrendSlOffsetPct: record.superTrendSlOffsetPct,
+        exitOnOppositeVoteRatio: record.exitOnOppositeVoteRatio,
         pauseOnStopLoss: record.pauseOnStopLoss === 1,
         // 分阶段止盈
         takeProfitPct1: record.takeProfitPct1,
@@ -744,6 +745,7 @@ export const StrategyConfig = () => {
           'initialStopMultiplier', 'breakevenActivationMultiplier',
           'trailingActivationMultiplier', 'trailingDistanceMultiplier',
           'atrInterval', 'maxHoldingBars', 'trailingDropPct', 'superTrendSlOffsetPct',
+          'exitOnOppositeVoteRatio',
           'takeProfitPct1', 'takeProfitSize1',
           'takeProfitPct2', 'takeProfitSize2',
           'takeProfitPct3', 'takeProfitSize3',
@@ -1638,6 +1640,14 @@ export const StrategyConfig = () => {
                   tooltip={t('text.trading.superTrendSlOffsetPctTip')}
                 >
                   <InputNumber min={0} max={20} step={0.1} style={{ width: 140 }} addonAfter="%" placeholder="1.0" />
+                </Form.Item>
+
+                <Form.Item
+                  name="exitOnOppositeVoteRatio"
+                  label={t('text.trading.exitOnOppositeVoteRatio')}
+                  tooltip={t('text.trading.exitOnOppositeVoteRatioTip')}
+                >
+                  <InputNumber min={0.05} max={1} step={0.05} style={{ width: 140 }} placeholder={t('text.trading.disabled')} />
                 </Form.Item>
 
                 <Form.Item

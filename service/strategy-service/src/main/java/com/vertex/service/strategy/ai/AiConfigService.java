@@ -108,6 +108,8 @@ public class AiConfigService {
                 .deepseekBaseUrl("https://api.deepseek.com")
                 .deepseekTimeoutSeconds(60)
                 .deepseekMaxRetry(2)
+                .deepseekThinkingEnabled(0)       // 默认关思考，快
+                .deepseekReasoningEffort(null)
                 .build();
     }
 

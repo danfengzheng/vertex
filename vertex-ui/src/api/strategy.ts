@@ -142,6 +142,12 @@ export interface StrategyVO {
   trailingDropPct?: number;
   /** SuperTrend 动态止损偏移百分比（如 1.0 = 1%）。需同时配置 SUPERTREND 指标才生效 */
   superTrendSlOffsetPct?: number;
+  /**
+   * NEUTRAL 信号时的反向指标占比出场判据（0-1；null=不启用）。
+   * 分母 = 总投票指标数（含 NEUTRAL），不算权重、不算 FILTER。
+   * 例：4 个投票指标，配 0.25 → 出现 1 个反向就平；配 0.5 → 出现 2 个反向才平。
+   */
+  exitOnOppositeVoteRatio?: number | null;
   /** 止损熔断开关（1=启用），止损触发且亏损时暂停开仓 24 小时 */
   pauseOnStopLoss?: number;
   /** 交易暂停截止时间（UTC ISO字符串），非 null 表示当前处于止损熔断期 */
@@ -219,6 +225,11 @@ export interface StrategyCreateDTO {
   trailingDropPct?: number;
   /** SuperTrend 动态止损偏移百分比（如 1.0 = 1%） */
   superTrendSlOffsetPct?: number;
+  /**
+   * NEUTRAL 信号时的反向指标占比出场判据（0-1；null=不启用）。
+   * 分母 = 总投票指标数（含 NEUTRAL），不算权重、不算 FILTER。
+   */
+  exitOnOppositeVoteRatio?: number | null;
   /** 止损熔断开关（true=启用），止损触发且亏损时暂停开仓 24 小时 */
   pauseOnStopLoss?: boolean;
   /** 分阶段止盈第1档 */
@@ -273,6 +284,11 @@ export interface StrategyUpdateDTO {
   trailingDropPct?: number;
   /** SuperTrend 动态止损偏移百分比（如 1.0 = 1%） */
   superTrendSlOffsetPct?: number;
+  /**
+   * NEUTRAL 信号时的反向指标占比出场判据（0-1；null=不启用）。
+   * 分母 = 总投票指标数（含 NEUTRAL），不算权重、不算 FILTER。
+   */
+  exitOnOppositeVoteRatio?: number | null;
   /** 止损熔断开关（true=启用，false=关闭） */
   pauseOnStopLoss?: boolean;
   minSignalStrength?: number;

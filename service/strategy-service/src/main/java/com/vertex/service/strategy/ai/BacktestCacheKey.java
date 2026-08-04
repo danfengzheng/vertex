@@ -80,6 +80,7 @@ public final class BacktestCacheKey {
         snapshot.put("trailingDistanceMultiplier", normBd(strategy.getTrailingDistanceMultiplier()));
         snapshot.put("trailingDropPct", normBd(strategy.getTrailingDropPct()));
         snapshot.put("superTrendSlOffsetPct", normBd(strategy.getSuperTrendSlOffsetPct()));
+        snapshot.put("exitOnOppositeVoteRatio", normBd(strategy.getExitOnOppositeVoteRatio()));
         snapshot.put("pauseOnStopLoss", strategy.getPauseOnStopLoss());
 
         // 止盈（单级 + 分阶段）

@@ -285,6 +285,25 @@ public class StrategyEngineService {
             }
         }
 
+        // ── NEUTRAL 信号时的补充平仓判据：入场指标反向占比 ≥ 阈值即平仓 ──────────
+        // 仅在 signal 为 NEUTRAL、策略配了 exitOnOppositeVoteRatio、且投票统计非空时触发。
+        // 反向自动关仓（signal 为 SELL/BUY 时）已有独立路径，这里补的是"立场悄悄崩坏
+        // 但没到反向"的盲区（例如 2 BUY + 1 SELL + 1 NEUTRAL，signal 是 NEUTRAL）。
+        if (tradeExecutionListener != null
+                && signal.getSignalType() == SignalType.NEUTRAL
+                && strategy.getExitOnOppositeVoteRatio() != null
+                && signal.getVoteBreakdown() != null
+                && signal.getVoteBreakdown().total() > 0) {
+            try {
+                Signal.VoteBreakdown vb = signal.getVoteBreakdown();
+                tradeExecutionListener.onNeutralVoteExitCheck(strategy,
+                        vb.buyCount(), vb.sellCount(), vb.neutralCount());
+            } catch (Exception e) {
+                log.error("Neutral-vote exit check failed for strategy [{}]: {}",
+                        strategy.getName(), e.getMessage(), e);
+            }
+        }
+
         // 跳过 NEUTRAL 信号，不写库不推送
 //        if (signal.getSignalType() == SignalType.NEUTRAL) {
 //            return;

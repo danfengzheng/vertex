@@ -121,6 +121,23 @@ public class DeepSeekClient implements AiClient {
         body.put("response_format", respFmt);
         body.put("stream", false);
 
+        // ── DeepSeek V4+ 思考模式控制（可选字段） ──────────────────
+        // thinking={"type":"disabled"} 显式关闭思考 → 响应快 5-30 倍
+        // thinking={"type":"enabled"}  显式开启思考 → 深度推理但慢
+        // null 时不发这个字段，走模型默认
+        Integer thinking = cfg.getDeepseekThinkingEnabled();
+        if (thinking != null) {
+            JSONObject thinkingCfg = new JSONObject();
+            thinkingCfg.put("type", thinking == 1 ? "enabled" : "disabled");
+            body.put("thinking", thinkingCfg);
+        }
+        // reasoning_effort: low / medium / high；仅 thinking=enabled 有意义
+        String effort = cfg.getDeepseekReasoningEffort();
+        if (effort != null && !effort.isBlank()
+                && thinking != null && thinking == 1) {
+            body.put("reasoning_effort", effort.toLowerCase());
+        }
+
         Request req = new Request.Builder()
                 .url(url)
                 .post(RequestBody.create(body.toJSONString(), JSON_MEDIA))

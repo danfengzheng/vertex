@@ -135,6 +135,10 @@ export interface AiConfigVO {
   deepseekBaseUrl: string;
   deepseekTimeoutSeconds: number;
   deepseekMaxRetry: number;
+  /** null=模型默认 / 0=显式关思考（快）/ 1=显式开思考（慢） */
+  deepseekThinkingEnabled?: 0 | 1 | null;
+  /** low / medium / high；仅 thinking=enabled 生效 */
+  deepseekReasoningEffort?: 'low' | 'medium' | 'high' | null;
   createTime?: string;
   updateTime?: string;
   updateBy?: number | null;

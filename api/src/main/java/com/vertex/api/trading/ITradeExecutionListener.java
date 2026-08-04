@@ -72,4 +72,22 @@ public interface ITradeExecutionListener {
     default void onExitConditionCheck(Strategy strategy, SignalType exitSignalType, int signalStrength) {
         // 默认空实现：未启用交易时无需处理
     }
+
+    /**
+     * NEUTRAL 信号时的补充平仓判据：根据入场指标投票分布（纯计数、不算权重）
+     * 判断反向占比是否触及阈值 {@code strategy.exitOnOppositeVoteRatio}。
+     * <p>
+     * 由 {@code StrategyEngineService} 在生成的入场 signal 为 NEUTRAL 且策略配置了阈值时调用；
+     * 实现方负责查该策略的 OPEN 持仓，按 side 计算反向指标个数，达阈值即 executeClose。
+     * </p>
+     *
+     * @param strategy    策略（含 exitOnOppositeVoteRatio 阈值）
+     * @param buyCount    入场信号投票分布：BUY 指标个数
+     * @param sellCount   入场信号投票分布：SELL 指标个数
+     * @param neutralCount 入场信号投票分布：NEUTRAL 指标个数（含 no_data 时的降级为 NEUTRAL）
+     */
+    default void onNeutralVoteExitCheck(Strategy strategy,
+                                        int buyCount, int sellCount, int neutralCount) {
+        // 默认空实现：未启用交易时无需处理
+    }
 }

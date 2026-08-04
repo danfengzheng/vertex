@@ -66,4 +66,15 @@ public class TradeExecutionListenerImpl implements ITradeExecutionListener {
             log.error("SuperTrend stop update failed for strategy [{}]: {}", strategy.getName(), e.getMessage(), e);
         }
     }
+
+    @Override
+    public void onNeutralVoteExitCheck(Strategy strategy,
+                                       int buyCount, int sellCount, int neutralCount) {
+        try {
+            tradeExecutionService.processNeutralVoteExit(strategy, buyCount, sellCount, neutralCount);
+        } catch (Exception e) {
+            log.error("Neutral-vote exit check failed for strategy [{}]: {}",
+                    strategy.getName(), e.getMessage(), e);
+        }
+    }
 }

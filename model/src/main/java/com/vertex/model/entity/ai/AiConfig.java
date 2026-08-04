@@ -53,6 +53,20 @@ public class AiConfig implements Serializable {
     private Integer deepseekTimeoutSeconds;
     private Integer deepseekMaxRetry;
 
+    /**
+     * 是否启用思考模式：
+     *   null = 让模型自己决定（不发 thinking 字段）
+     *   0    = 显式关闭，body 加 {"thinking":{"type":"disabled"}} —— 快 5-30 倍
+     *   1    = 显式开启，body 加 {"thinking":{"type":"enabled"}}
+     */
+    private Integer deepseekThinkingEnabled;
+
+    /**
+     * 推理强度：low / medium / high；仅 thinking=enabled 时对 DeepSeek 生效；
+     * null 或空则不发 reasoning_effort 字段。
+     */
+    private String deepseekReasoningEffort;
+
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
     private Long updateBy;

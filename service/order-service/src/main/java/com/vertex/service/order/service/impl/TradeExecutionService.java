@@ -1542,6 +1542,51 @@ public class TradeExecutionService {
         }
     }
 
+    /**
+     * NEUTRAL 信号时的补充平仓判据：入场指标反向占比 ≥ 阈值即平仓。
+     * <p>
+     * 触发方（{@link com.vertex.service.order.service.TradeExecutionListenerImpl#onNeutralVoteExitCheck}）
+     * 已经保证只在 signal 为 NEUTRAL 且策略配了 {@code exitOnOppositeVoteRatio} 时才调用。
+     * 这里只关心"对每个 OPEN 持仓算方向匹配的 close ratio 是否达标"。
+     * </p>
+     * <p>
+     * closeRatio 语义（纯计数、不算权重、不算 FILTER）：
+     * <pre>
+     *   LONG 持仓：closeRatio = sellCount / (buyCount + sellCount + neutralCount)
+     *   SHORT 持仓：closeRatio = buyCount / (buyCount + sellCount + neutralCount)
+     *   closeRatio ≥ strategy.exitOnOppositeVoteRatio → 触发 executeClose
+     * </pre>
+     * </p>
+     */
+    public void processNeutralVoteExit(Strategy strategy,
+                                       int buyCount, int sellCount, int neutralCount) {
+        BigDecimal threshold = strategy.getExitOnOppositeVoteRatio();
+        if (threshold == null || threshold.compareTo(BigDecimal.ZERO) <= 0) return;
+        int total = buyCount + sellCount + neutralCount;
+        if (total == 0) return;
+
+        List<Position> openPositions =
+                positionManagementService.findOpenPositionsByStrategy(strategy.getId());
+        if (openPositions.isEmpty()) return;
+
+        double thr = threshold.doubleValue();
+        for (Position pos : openPositions) {
+            try {
+                int oppositeCount = (pos.getSide() == PositionSide.LONG) ? sellCount : buyCount;
+                double closeRatio = (double) oppositeCount / total;
+                if (closeRatio >= thr) {
+                    log.info("[出场-反向占比] positionId={} side={} closeRatio={}/{}={} threshold={}",
+                            pos.getId(), pos.getSide(), oppositeCount, total,
+                            String.format("%.3f", closeRatio), threshold);
+                    executeClose(pos);
+                }
+            } catch (Exception e) {
+                log.error("[Exit-NeutralVote] Error processing position {}: {}",
+                        pos.getId(), e.getMessage(), e);
+            }
+        }
+    }
+
     /** INITIAL → BREAKEVEN：价格突破 entry + breakevenActivationMultiplier × ATR */
     private void evaluateBreakeven(Position position, Strategy strategy,
                                    BigDecimal currentPrice, BigDecimal atrValue, boolean isShort) {

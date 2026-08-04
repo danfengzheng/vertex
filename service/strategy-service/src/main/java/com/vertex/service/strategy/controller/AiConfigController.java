@@ -67,6 +67,22 @@ public class AiConfigController {
         cfg.setGeminiMaxRetry(clampInt(cfg.getGeminiMaxRetry(), 0, 10, 2));
         cfg.setDeepseekTimeoutSeconds(clampInt(cfg.getDeepseekTimeoutSeconds(), 5, 300, 60));
         cfg.setDeepseekMaxRetry(clampInt(cfg.getDeepseekMaxRetry(), 0, 10, 2));
+        // reasoning_effort 只允许 low/medium/high；其他值置 null
+        if (cfg.getDeepseekReasoningEffort() != null) {
+            String e = cfg.getDeepseekReasoningEffort().trim().toLowerCase();
+            if (e.isEmpty()) {
+                cfg.setDeepseekReasoningEffort(null);
+            } else if (!e.equals("low") && !e.equals("medium") && !e.equals("high")) {
+                cfg.setDeepseekReasoningEffort(null);
+            } else {
+                cfg.setDeepseekReasoningEffort(e);
+            }
+        }
+        // thinking_enabled 只允许 0/1/null
+        Integer te = cfg.getDeepseekThinkingEnabled();
+        if (te != null && te != 0 && te != 1) {
+            cfg.setDeepseekThinkingEnabled(0);
+        }
     }
 
     private static Integer clampInt(Integer v, int min, int max, int fallback) {

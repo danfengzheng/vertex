@@ -155,6 +155,8 @@ public class SignalGenerator {
         // 阶段二：投票指标三桶加权评分
         // ════════════════════════════════════════════════════════════════════════
         int buyWeight = 0, sellWeight = 0, neutralWeight = 0;
+        // 纯计数（不含权重、不含 FILTER）—— 供 signal 为 NEUTRAL 时的"反向占比出场"判据用
+        int buyCount = 0, sellCount = 0, neutralCount = 0;
 
         for (int idx : votingIdxList) {
             StrategyIndicatorConfig config = configs.get(idx);
@@ -164,6 +166,7 @@ public class SignalGenerator {
 
             if (result == null) {
                 neutralWeight += weight;
+                neutralCount++;
                 descBuilder.append(config.getIndicatorType().getCode())
                         .append("=NEUTRAL(no_data,w:").append(weight).append(") ");
                 continue;
@@ -176,13 +179,16 @@ public class SignalGenerator {
                 case BUY -> {
                     buyWeight  += weight;
                     sellWeight  = Math.max(0, sellWeight - penalty);
+                    buyCount++;
                 }
                 case SELL -> {
                     sellWeight += weight;
                     buyWeight   = Math.max(0, buyWeight - penalty);
+                    sellCount++;
                 }
                 case NEUTRAL -> {
                     neutralWeight += weight;
+                    neutralCount++;
                     // NEUTRAL 时 penaltyWeight 压制当前主导方向
                     if (buyWeight > sellWeight) {
                         buyWeight = Math.max(0, buyWeight - penalty);
@@ -281,7 +287,11 @@ public class SignalGenerator {
             }
         }
 
-        return buildSignal(strategy, klines, allValues, signalType, strength, descBuilder);
+        Signal built = buildSignal(strategy, klines, allValues, signalType, strength, descBuilder);
+        // 附加纯计数投票分布（transient；供 StrategyEngineService 判断"反向占比出场"）。
+        // 只在真正走过投票阶段时才有意义；前置 FILTER 失败早退不会到这里。
+        built.setVoteBreakdown(new Signal.VoteBreakdown(buyCount, sellCount, neutralCount));
+        return built;
     }
 
     // ── 私有工具方法 ──────────────────────────────────────────────────────────

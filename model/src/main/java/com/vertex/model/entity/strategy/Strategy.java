@@ -213,6 +213,23 @@ public class Strategy extends BaseEntity {
     private BigDecimal superTrendSlOffsetPct;
 
     /**
+     * NEUTRAL 信号时的补充平仓判据：反向指标占比 ≥ 该值即平仓。
+     * <p>
+     * 分母 = 投票指标总数（含 NEUTRAL），不算权重，不算 FILTER。
+     * 仅在 signalGenerator 输出 NEUTRAL 且策略有开仓时生效。
+     * NULL 或 &le; 0 = 不启用（保持现状：只靠反向信号 auto-close）。
+     * </p>
+     * <p>
+     * 示例：4 个投票指标（2 BUY + 1 SELL + 1 NEUTRAL）→ 对 LONG 持仓
+     *   closeRatio = sellCount / total = 1/4 = 0.25
+     *   若配 0.25 → 触发平仓
+     *   若配 0.5  → 不触发
+     * </p>
+     */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal exitOnOppositeVoteRatio;
+
+    /**
      * 止损熔断开关（1=启用，0/null=关闭）。
      * 启用后，任意一笔止损触发且实际亏损时，暂停该策略开仓 24 小时。
      */

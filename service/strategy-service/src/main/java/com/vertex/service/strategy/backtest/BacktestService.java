@@ -847,6 +847,62 @@ public class BacktestService {
                         }
                     }
                 }
+
+                // ── NEUTRAL 信号 + 反向指标占比出场（与实盘 StrategyEngineService 对齐）─
+                // 只有：当前持仓 + signal=NEUTRAL + 策略配了阈值 + 有投票分布 + 总数>0 才判定
+                if (inPosition
+                        && signal.getSignalType() == SignalType.NEUTRAL
+                        && strategy.getExitOnOppositeVoteRatio() != null
+                        && signal.getVoteBreakdown() != null
+                        && signal.getVoteBreakdown().total() > 0) {
+                    Signal.VoteBreakdown vb = signal.getVoteBreakdown();
+                    int oppositeCount = (positionSide == PositionSide.LONG)
+                            ? vb.sellCount() : vb.buyCount();
+                    double closeRatio = (double) oppositeCount / vb.total();
+                    double thr = strategy.getExitOnOppositeVoteRatio().doubleValue();
+                    if (thr > 0 && closeRatio >= thr) {
+                        boolean isShortExitVote = positionSide == PositionSide.SHORT;
+                        BigDecimal exitValueVote = position.multiply(currentPrice);
+                        BigDecimal feeVote = exitValueVote.multiply(config.getFeeRate());
+                        BigDecimal pnlVote = isShortExitVote
+                                ? position.multiply(entryPrice.subtract(currentPrice))
+                                : position.multiply(currentPrice.subtract(entryPrice));
+                        BigDecimal profitVote = pnlVote.subtract(feeVote);
+                        BigDecimal profitPctVote = marginPaid.compareTo(BigDecimal.ZERO) > 0
+                                ? profitVote.divide(marginPaid, 6, RoundingMode.HALF_UP)
+                                        .multiply(new BigDecimal("100"))
+                                : BigDecimal.ZERO;
+
+                        trades.add(TradeRecord.builder()
+                                .entryTime(entryTime)
+                                .exitTime(currentKline.getOpenTime())
+                                .type(isShortExitVote ? "SHORT" : "LONG")
+                                .entryPrice(entryPrice.setScale(8, RoundingMode.HALF_UP))
+                                .exitPrice(currentPrice.setScale(8, RoundingMode.HALF_UP))
+                                .quantity(position.setScale(8, RoundingMode.HALF_UP))
+                                .profit(profitVote.setScale(2, RoundingMode.HALF_UP))
+                                .profitPercent(profitPctVote.setScale(2, RoundingMode.HALF_UP))
+                                .exitReason("NEUTRAL_VOTE_EXIT")
+                                .build());
+
+                        capital         = capital.add(marginPaid).add(profitVote);
+                        marginPaid      = BigDecimal.ZERO;
+                        position        = BigDecimal.ZERO;
+                        inPosition      = false;
+                        positionSide    = null;
+                        stopLossPrice   = null;
+                        takeProfitPrice = null;
+                        stopLossStage   = null;
+                        highestPrice    = null;
+                        peakPrice       = null;
+                        openBarCount    = 0;
+                        superTrendStopLossPrice = null;
+                        initialPosition = BigDecimal.ZERO;
+                        initialMargin   = BigDecimal.ZERO;
+                        takeProfitStage = 0;
+                        closedByStopOrTp = true;
+                    }
+                }
             }
 
             // 当前权益（止损/止盈出场后 inPosition=false，capital 已更新）

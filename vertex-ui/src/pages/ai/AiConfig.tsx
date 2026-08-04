@@ -103,6 +103,8 @@ export const AiConfig = () => {
               deepseekBaseUrl: 'https://api.deepseek.com',
               deepseekTimeoutSeconds: 60,
               deepseekMaxRetry: 2,
+              deepseekThinkingEnabled: 0,
+              deepseekReasoningEffort: null,
             }}
           >
             <Divider titlePlacement="start">{t('text.ai.sectionMain')}</Divider>
@@ -201,6 +203,35 @@ export const AiConfig = () => {
               <Col xs={24} sm={12} md={6}>
                 <Form.Item name="deepseekMaxRetry" label={t('text.ai.maxRetry')}>
                   <InputNumber min={0} max={10} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12} md={6}>
+                <Form.Item
+                  name="deepseekThinkingEnabled"
+                  label={t('text.ai.dsThinking')}
+                  tooltip={t('text.ai.dsThinkingTip')}
+                  valuePropName="checked"
+                  getValueFromEvent={(checked) => (checked ? 1 : 0)}
+                  getValueProps={(v) => ({ checked: v === 1 })}
+                >
+                  <Switch />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12} md={6}>
+                <Form.Item
+                  name="deepseekReasoningEffort"
+                  label={t('text.ai.dsReasoningEffort')}
+                  tooltip={t('text.ai.dsReasoningEffortTip')}
+                >
+                  <Select
+                    allowClear
+                    placeholder={t('text.ai.dsReasoningEffortDefault')}
+                    options={[
+                      { value: 'low',    label: 'low' },
+                      { value: 'medium', label: 'medium' },
+                      { value: 'high',   label: 'high' },
+                    ]}
+                  />
                 </Form.Item>
               </Col>
             </Row>

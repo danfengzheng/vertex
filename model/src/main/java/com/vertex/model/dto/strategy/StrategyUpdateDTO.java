@@ -98,6 +98,9 @@ public class StrategyUpdateDTO {
     /** SuperTrend 动态止损偏移百分比（如 1.0 = 1%），null=清除/禁用 */
     private BigDecimal superTrendSlOffsetPct;
 
+    /** NEUTRAL 信号时反向指标占比 ≥ 该值即平仓（0-1；null=清除/禁用；不算权重、不算 FILTER） */
+    private BigDecimal exitOnOppositeVoteRatio;
+
     /** 止损熔断开关（true=启用，null/false=关闭） */
     private Boolean pauseOnStopLoss;
 }
