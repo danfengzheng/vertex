@@ -569,7 +569,7 @@ export const StrategyConfig = () => {
       const response = await strategyApi.page({ pageNum, pageSize });
       if (response.code === 200) {
         setStrategies(response.data.records);
-        setTotal(response.data.total);
+        setTotal(response.data.total ?? 0);
       }
     } catch {
       message.error(t('message.strategy.loadFailed'));

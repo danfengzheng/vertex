@@ -36,7 +36,7 @@ export const UserManagement = () => {
       const response: ApiResponse<PageResult<UserVO>> = await userApi.page(query);
       if (response.code === 200) {
         setUsers(response.data.records);
-        setTotal(response.data.total);
+        setTotal(response.data.total ?? 0);
       }
     } catch (error) {
       message.error(t('message.user.loadFailed'));

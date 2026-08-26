@@ -238,10 +238,12 @@ const QuickBacktestResult = ({
 export const SignalMonitor = () => {
   const { t } = useTranslation();
   const [signals, setSignals] = useState<SignalVO[]>([]);
-  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [pageNum, setPageNum] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageSize, setPageSize] = useState(20);
+  // 游标分页：nextCursor = null 表示已到底部；每次首次查询时置空重启
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasNext, setHasNext] = useState(false);
 
   // 筛选
   const [exchange, setExchange] = useState<string | undefined>();
@@ -277,16 +279,11 @@ export const SignalMonitor = () => {
       const latest = globalNotifications[0];
       if (latest.id !== lastNotificationIdRef.current) {
         lastNotificationIdRef.current = latest.id;
-        if (pageNum === 1) {
-          setSignals((prev) => {
-            const newList = [latest.signal, ...prev];
-            return newList.slice(0, pageSize);
-          });
-          setTotal((prev) => prev + 1);
-        }
+        // 游标模式：新推送的信号直接插到当前列表头部（避免用户手动刷新）
+        setSignals((prev) => [latest.signal, ...prev]);
       }
     }
-  }, [globalNotifications, pageNum, pageSize]);
+  }, [globalNotifications]);
 
   const loadStrategies = async () => {
     try {
@@ -318,12 +315,32 @@ export const SignalMonitor = () => {
     }
   };
 
-  const loadData = async () => {
-    setLoading(true);
+  /**
+   * 游标分页数据加载。
+   * @param append true=加载更多（append 到列表尾），false=首次/筛选后（重置列表）
+   */
+  const loadData = async (append: boolean) => {
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     try {
-      const response = await signalApi.page({
-        pageNum,
+      // 首次加载 / 筛选变化 → cursor 参数不传（拉最新）
+      // 加载更多 → 用当前 nextCursor 解析成 cursorTime + cursorId
+      let cursorTime: number | null = null;
+      let cursorId: string | null = null;
+      if (append && nextCursor) {
+        const parts = nextCursor.split('_');
+        if (parts.length === 2) {
+          cursorTime = Number(parts[0]) || null;
+          cursorId = parts[1] || null;
+        }
+      }
+      const response = await signalApi.cursor({
         pageSize,
+        cursorTime: cursorTime ?? undefined,
+        cursorId: cursorId ?? undefined,
         exchange,
         symbol,
         interval,
@@ -332,14 +349,17 @@ export const SignalMonitor = () => {
         startTime: timeRange?.[0]?.valueOf(),
         endTime: timeRange?.[1]?.valueOf(),
       });
-      if (response.code === 200) {
-        setSignals(response.data.records);
-        setTotal(response.data.total);
+      if (response.code === 200 && response.data) {
+        const fetched = response.data.records ?? [];
+        setSignals((prev) => (append ? [...prev, ...fetched] : fetched));
+        setNextCursor(response.data.nextCursor ?? null);
+        setHasNext(!!response.data.hasNext);
       }
     } catch {
       message.error(t('message.strategy.loadFailed'));
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -347,13 +367,17 @@ export const SignalMonitor = () => {
     loadStrategies();
   }, []);
 
+  // pageSize 变化只在下次筛选/加载时生效；这里初次进入自动加载一次
   useEffect(() => {
-    loadData();
-  }, [pageNum, pageSize]);
+    loadData(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSearch = () => {
-    setPageNum(1);
-    loadData();
+    // 筛选变化 → cursor 从头开始
+    setNextCursor(null);
+    setHasNext(false);
+    loadData(false);
   };
 
   /** 单次分析（原逻辑） */
@@ -519,7 +543,7 @@ export const SignalMonitor = () => {
             />
           </Tooltip>
         </Space>
-        <Button icon={<ReloadOutlined />} onClick={loadData}>
+        <Button icon={<ReloadOutlined />} onClick={() => { setNextCursor(null); setHasNext(false); loadData(false); }}>
           {t('text.quote.refresh')}
         </Button>
       </div>
@@ -640,14 +664,37 @@ export const SignalMonitor = () => {
         dataSource={signals}
         loading={loading}
         rowKey="id"
-        pagination={{
-          current: pageNum,
-          pageSize,
-          total,
-          showTotal: (t) => `共 ${t} 条`,
-          onChange: (p, s) => { setPageNum(p); setPageSize(s); },
-        }}
+        pagination={false}
       />
+
+      {/* 游标分页：下一页按钮（append）+ 每页尺寸切换 */}
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 16 }}>
+        <span style={{ color: '#999', fontSize: 12 }}>
+          {t('text.strategy.signalLoadedCount', { defaultValue: '已加载' })} {signals.length}
+        </span>
+        <Select
+          size="small"
+          style={{ width: 100 }}
+          value={pageSize}
+          onChange={(v) => { setPageSize(v); }}
+          options={[
+            { value: 10, label: '10 / 页' },
+            { value: 20, label: '20 / 页' },
+            { value: 50, label: '50 / 页' },
+            { value: 100, label: '100 / 页' },
+          ]}
+        />
+        <Button
+          type="primary"
+          disabled={!hasNext || loading}
+          loading={loadingMore}
+          onClick={() => loadData(true)}
+        >
+          {hasNext
+            ? t('text.strategy.signalLoadMore', { defaultValue: '加载更多' })
+            : t('text.strategy.signalNoMore', { defaultValue: '已到底部' })}
+        </Button>
+      </div>
 
       {/* 信号详情弹窗 */}
       <Modal

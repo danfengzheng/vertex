@@ -10,9 +10,14 @@ export interface ApiResponse<T = any> {
 
 /**
  * 分页响应
+ * <p>
+ * 高频表（如 stg_signal）后端跳过 COUNT(*)，此时 total 为 null，
+ * 前端应改用 hasNext 判定"是否有下一页"。传统小表仍返回 total。
+ * </p>
  */
 export interface PageResult<T> {
-  total: number;
+  total: number | null;
+  hasNext?: boolean | null;
   records: T[];
 }
 

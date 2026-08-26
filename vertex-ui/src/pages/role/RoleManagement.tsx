@@ -90,7 +90,7 @@ export const RoleManagement = () => {
       const res: ApiResponse<PageResult<RoleVO>> = await roleApi.page(query);
       if (res.code === 200) {
         setRoles(res.data.records);
-        setTotal(res.data.total);
+        setTotal(res.data.total ?? 0);
       }
     } catch {
       message.error('加载角色失败');

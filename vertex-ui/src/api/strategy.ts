@@ -415,10 +415,38 @@ export const strategyApi = {
     request.post(`/strategy/${id}/copy`),
 };
 
+/** 信号游标分页参数 */
+export interface SignalCursorDTO {
+  pageSize?: number;
+  /** 上一页最后一条 signalTime；null / 不传 = 首次请求 */
+  cursorTime?: number | null;
+  /** 上一页最后一条 id；null / 不传 = 首次请求 */
+  cursorId?: string | null;
+  strategyId?: string;
+  exchange?: string;
+  symbol?: string;
+  interval?: KLineInterval;
+  signalType?: SignalType;
+  startTime?: number;
+  endTime?: number;
+}
+
+/** 信号游标分页返回 */
+export interface SignalCursorResult<T> {
+  records: T[];
+  /** 下一页游标（"time_id" 编码）；null 表示已到最后 */
+  nextCursor?: string | null;
+  hasNext: boolean;
+}
+
 /** 信号管理 API */
 export const signalApi = {
   page: (params: SignalQueryDTO): Promise<ApiResponse<PageResult<SignalVO>>> =>
     request.get('/signal/page', { params }),
+
+  /** 游标分页：性能恒定，推荐用于"加载更多" UI；nextCursor 解析成 cursorTime/cursorId 传下次 */
+  cursor: (params: SignalCursorDTO): Promise<ApiResponse<SignalCursorResult<SignalVO>>> =>
+    request.get('/signal/cursor', { params }),
 
   getById: (id: string): Promise<ApiResponse<SignalVO>> =>
     request.get(`/signal/${id}`),
