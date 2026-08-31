@@ -29,6 +29,7 @@ import {
   DatabaseOutlined,
   RobotOutlined,
   MonitorOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -223,6 +224,11 @@ export const MainLayout = () => {
           key: '/strategy/signals',
           icon: <ThunderboltOutlined />,
           label: t('text.strategy.signalTitle'),
+        },
+        {
+          key: '/strategy/cleanup',
+          icon: <DeleteOutlined />,
+          label: t('text.strategy.cleanupTitle'),
         },
       ],
     },

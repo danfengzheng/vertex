@@ -11,6 +11,7 @@ import { KLineQuery } from '../pages/quote/KLineQuery';
 import { VolumeSurgeConfigPage } from '../pages/quote/VolumeSurgeConfig';
 import { StrategyConfig } from '../pages/strategy/StrategyConfig';
 import { SignalMonitor } from '../pages/strategy/SignalMonitor';
+import { SignalCleanup } from '../pages/signal/SignalCleanup';
 import { StrategyGuide } from '../pages/guide/StrategyGuide';
 import { ExchangeAccountManagement } from '../pages/trading/ExchangeAccountManagement';
 import { OrderHistory } from '../pages/trading/OrderHistory';
@@ -66,6 +67,9 @@ export const AppRouter = () => {
         } />
         <Route path="strategy/signals" element={
           <PermissionGuard path="/strategy/signals"><SignalMonitor /></PermissionGuard>
+        } />
+        <Route path="strategy/cleanup" element={
+          <PermissionGuard path="/strategy/cleanup"><SignalCleanup /></PermissionGuard>
         } />
 
         {/* 交易 */}
