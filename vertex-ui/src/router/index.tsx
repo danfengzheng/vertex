@@ -12,6 +12,9 @@ import { VolumeSurgeConfigPage } from '../pages/quote/VolumeSurgeConfig';
 import { StrategyConfig } from '../pages/strategy/StrategyConfig';
 import { SignalMonitor } from '../pages/strategy/SignalMonitor';
 import { SignalCleanup } from '../pages/signal/SignalCleanup';
+import { StrategyTemplateList } from '../pages/template/StrategyTemplateList';
+import { CreateFromTemplate } from '../pages/template/CreateFromTemplate';
+import { TemplateAbCompare } from '../pages/template/TemplateAbCompare';
 import { StrategyGuide } from '../pages/guide/StrategyGuide';
 import { ExchangeAccountManagement } from '../pages/trading/ExchangeAccountManagement';
 import { OrderHistory } from '../pages/trading/OrderHistory';
@@ -70,6 +73,15 @@ export const AppRouter = () => {
         } />
         <Route path="strategy/cleanup" element={
           <PermissionGuard path="/strategy/cleanup"><SignalCleanup /></PermissionGuard>
+        } />
+        <Route path="strategy/template" element={
+          <PermissionGuard path="/strategy/template"><StrategyTemplateList /></PermissionGuard>
+        } />
+        <Route path="strategy/template/ab" element={
+          <PermissionGuard path="/strategy/template"><TemplateAbCompare /></PermissionGuard>
+        } />
+        <Route path="strategy/template/:id/create" element={
+          <PermissionGuard path="/strategy/template"><CreateFromTemplate /></PermissionGuard>
         } />
 
         {/* 交易 */}

@@ -238,10 +238,24 @@ public class Strategy extends BaseEntity {
 
     /**
      * 交易暂停截止时间（UTC）。
-     * 由日亏损熔断自动写入，重启后仍有效。
+     * 由日亏损熔断自动写入,重启后仍有效。
      * 在此时间之前 executeSignal 不允许开新仓。
      * null = 未暂停。
      */
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private java.time.LocalDateTime tradingPausedUntil;
+
+    // ─── Provenance：从模板创建时记录 ───────────────
+
+    /** 源模板 id（null=手动创建；非 null=从模板生成） */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Long sourceTemplateId;
+
+    /** 源模板版本（配合 sourceTemplateId 定位到具体历史快照） */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Integer sourceTemplateVersion;
+
+    /** 创建时用户填的暴露参数值 JSON（用于"升级到新版模板"重新生成） */
+    @TableField(value = "template_user_params_json", updateStrategy = FieldStrategy.ALWAYS)
+    private String templateUserParamsJson;
 }

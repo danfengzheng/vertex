@@ -30,6 +30,7 @@ import {
   RobotOutlined,
   MonitorOutlined,
   DeleteOutlined,
+  AppstoreAddOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -229,6 +230,11 @@ export const MainLayout = () => {
           key: '/strategy/cleanup',
           icon: <DeleteOutlined />,
           label: t('text.strategy.cleanupTitle'),
+        },
+        {
+          key: '/strategy/template',
+          icon: <AppstoreAddOutlined />,
+          label: t('text.strategy.templateTitle'),
         },
       ],
     },

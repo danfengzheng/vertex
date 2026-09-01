@@ -6,8 +6,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -45,5 +47,12 @@ public class IndicatorRegistry {
      */
     public boolean supports(IndicatorType type) {
         return indicatorMap.containsKey(type);
+    }
+
+    /**
+     * 所有已注册的指标类型 —— 模板 Parser/Validator 校验 template_json 引用完整性用。
+     */
+    public Set<IndicatorType> supportedTypes() {
+        return indicatorMap == null ? Collections.emptySet() : indicatorMap.keySet();
     }
 }
