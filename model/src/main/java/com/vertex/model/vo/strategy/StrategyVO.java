@@ -97,6 +97,16 @@ public class StrategyVO implements Serializable {
     /** 交易暂停截止时间（UTC），用于前端展示"暂停中"状态，null=未暂停 */
     private LocalDateTime tradingPausedUntil;
 
+    // ─── EMA_TRAIL 动态止损 ─────────────────────────
+    /** EMA 周期，默认 21；null=不启用 */
+    private Integer emaTrailPeriod;
+    /** 取最近 N 根 EMA 极值，默认 20 */
+    private Integer emaTrailLookback;
+    /** buffer 百分比 */
+    private BigDecimal emaTrailBufferPct;
+    /** 1=只朝有利方向移动；0=每根 K 线重算允许倒退 */
+    private Integer emaTrailingEnabled;
+
     private LocalDateTime createTime;
     private LocalDateTime updateTime;
 }

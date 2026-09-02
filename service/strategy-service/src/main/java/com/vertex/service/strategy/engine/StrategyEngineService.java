@@ -230,6 +230,39 @@ public class StrategyEngineService {
             }
         }
 
+        // ── EMA_TRAIL 动态止损更新（每根 K 线收盘后触发，与信号方向无关）──────────
+        // 触发条件：strategy 配了 emaTrailPeriod + emaTrailBufferPct（其他字段有默认兜底）。
+        // 使用主周期 K 线计算 EMA 序列，取最近 lookback 根的 min/max 传给 listener。
+        if (tradeExecutionListener != null
+                && strategy.getEmaTrailPeriod() != null && strategy.getEmaTrailPeriod() > 0
+                && strategy.getEmaTrailBufferPct() != null
+                && strategy.getEmaTrailBufferPct().compareTo(BigDecimal.ZERO) > 0) {
+            try {
+                int fastPeriod = strategy.getEmaTrailPeriod();
+                int lookback   = strategy.getEmaTrailLookback() != null && strategy.getEmaTrailLookback() > 0
+                        ? strategy.getEmaTrailLookback() : 20;
+                // 需要至少 fastPeriod * 3 根做 seed + lookback 根出 EMA
+                int need = Math.max(fastPeriod * 3, fastPeriod + lookback + 5);
+                List<KLine> emaKlines = barProvider.getBars(strategy.getInterval(), need);
+                if (emaKlines != null && emaKlines.size() >= fastPeriod + lookback) {
+                    double[] emaSeries = computeEmaSeries(emaKlines, fastPeriod);
+                    // 取最后 lookback 根
+                    int from = Math.max(fastPeriod, emaSeries.length - lookback);
+                    double minEma = Double.MAX_VALUE, maxEma = -Double.MAX_VALUE;
+                    for (int i = from; i < emaSeries.length; i++) {
+                        if (emaSeries[i] < minEma) minEma = emaSeries[i];
+                        if (emaSeries[i] > maxEma) maxEma = emaSeries[i];
+                    }
+                    if (minEma < Double.MAX_VALUE) {
+                        tradeExecutionListener.onEmaTrailStopUpdate(strategy,
+                                BigDecimal.valueOf(minEma), BigDecimal.valueOf(maxEma));
+                    }
+                }
+            } catch (Exception e) {
+                log.error("[EMA_TRAIL] Update failed for strategy [{}]: {}", strategy.getName(), e.getMessage(), e);
+            }
+        }
+
         // ── SuperTrend 动态止损更新（每根K线收盘后触发，与信号方向无关）──────────
         // 仅当策略配置了 superTrendSlOffsetPct 且指标结果中包含 SUPERTREND 数据时执行。
         // 趋势与持仓方向一致时更新 position.superTrendStopLoss；反转时冻结，不更新。
@@ -461,6 +494,28 @@ public class StrategyEngineService {
      * @param period ATR 周期（通常为 14）
      * @return ATR 绝对值，数据不足时返回 null
      */
+    /**
+     * 计算完整的 EMA 序列 —— 前 period 根用 SMA 做 seed，从第 period+1 根开始迭代。
+     * 索引 [0, period-1] 位置返回 seed（相同），[period, size-1] 是真实 EMA。
+     */
+    private static double[] computeEmaSeries(List<KLine> klines, int period) {
+        int n = klines.size();
+        double[] out = new double[n];
+        if (n < period) return out;
+        double multiplier = 2.0 / (period + 1);
+        double seed = 0;
+        for (int i = 0; i < period; i++) seed += klines.get(i).getClose().doubleValue();
+        seed /= period;
+        for (int i = 0; i < period; i++) out[i] = seed;
+        double ema = seed;
+        for (int i = period; i < n; i++) {
+            double close = klines.get(i).getClose().doubleValue();
+            ema = close * multiplier + ema * (1 - multiplier);
+            out[i] = ema;
+        }
+        return out;
+    }
+
     private BigDecimal computeAtrFromKlines(List<KLine> klines, int period) {
         if (klines == null || klines.size() < 2) return null;
         double[] trueRanges = new double[klines.size() - 1];

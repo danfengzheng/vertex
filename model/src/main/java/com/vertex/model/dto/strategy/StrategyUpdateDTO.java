@@ -103,4 +103,10 @@ public class StrategyUpdateDTO {
 
     /** 止损熔断开关（true=启用，null/false=关闭） */
     private Boolean pauseOnStopLoss;
+
+    // ─── EMA_TRAIL 动态止损 4 参数（任一 null=不改，如需清除请求空指令另行支持）─────
+    private Integer emaTrailPeriod;
+    private Integer emaTrailLookback;
+    private BigDecimal emaTrailBufferPct;
+    private Integer emaTrailingEnabled;
 }

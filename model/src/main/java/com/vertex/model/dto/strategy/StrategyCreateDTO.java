@@ -120,4 +120,14 @@ public class StrategyCreateDTO {
 
     /** 止损熔断开关（true=启用），止损触发且亏损时暂停开仓 24 小时 */
     private Boolean pauseOnStopLoss;
+
+    // ─── EMA_TRAIL 动态止损（4 参数，任一非空即启用）─────────
+    /** EMA 周期，默认 21 */
+    private Integer emaTrailPeriod;
+    /** 取最近 N 根 EMA 极值 */
+    private Integer emaTrailLookback;
+    /** buffer 百分比 */
+    private BigDecimal emaTrailBufferPct;
+    /** trailing 是否只朝有利方向 */
+    private Integer emaTrailingEnabled;
 }

@@ -90,4 +90,22 @@ public interface ITradeExecutionListener {
                                         int buyCount, int sellCount, int neutralCount) {
         // 默认空实现：未启用交易时无需处理
     }
+
+    /**
+     * K 线收盘后 EMA_TRAIL 动态止损更新。
+     * <p>
+     * StrategyEngineService 计算最近 lookback 根的 EMA 系列后取 min/max，
+     * 传给 listener。实现方按持仓方向应用：
+     *   LONG  : newSL = minEma × (1 - buffer%)
+     *   SHORT : newSL = maxEma × (1 + buffer%)
+     * 若 strategy.emaTrailingEnabled=1（默认），newSL 只朝有利方向移动。
+     * </p>
+     *
+     * @param strategy 策略（含 EMA_TRAIL 4 字段）
+     * @param minEma   最近 N 根 EMA 的最小值
+     * @param maxEma   最近 N 根 EMA 的最大值
+     */
+    default void onEmaTrailStopUpdate(Strategy strategy, java.math.BigDecimal minEma, java.math.BigDecimal maxEma) {
+        // 默认空实现：未启用交易时无需处理
+    }
 }

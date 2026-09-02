@@ -77,4 +77,13 @@ public class TradeExecutionListenerImpl implements ITradeExecutionListener {
                     strategy.getName(), e.getMessage(), e);
         }
     }
+
+    @Override
+    public void onEmaTrailStopUpdate(Strategy strategy, java.math.BigDecimal minEma, java.math.BigDecimal maxEma) {
+        try {
+            tradeExecutionService.updateEmaTrailStopLoss(strategy, minEma, maxEma);
+        } catch (Exception e) {
+            log.error("EMA_TRAIL stop update failed for strategy [{}]: {}", strategy.getName(), e.getMessage(), e);
+        }
+    }
 }

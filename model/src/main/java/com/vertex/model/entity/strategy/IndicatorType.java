@@ -25,7 +25,8 @@ public enum IndicatorType {
     SUPERTREND("SUPERTREND", "超级趋势指标"),
     VOL_CONFIRM("VOL_CONFIRM", "成交量确认"),
     OBV("OBV", "能量潮指标"),
-    DIVERGENCE("DIVERGENCE", "背离指标");
+    DIVERGENCE("DIVERGENCE", "背离指标"),
+    DUAL_EMA_TREND("DUAL_EMA_TREND", "双 EMA 趋势判定");
 
     private final String code;
     private final String description;

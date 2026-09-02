@@ -1431,6 +1431,64 @@ public class TradeExecutionService {
      * @param superTrendValue SuperTrend 当前值（上升=lowerBand；下降=upperBand）
      * @param trendUp         true=上升趋势，false=下降趋势
      */
+    /**
+     * EMA_TRAIL 动态止损更新（每根 K 线收盘后由 StrategyEngineService 通过 listener 调）。
+     * <p>
+     * LONG  : newSL = minEma × (1 - buffer%)；trailing 时只朝上移
+     * SHORT : newSL = maxEma × (1 + buffer%)；trailing 时只朝下移
+     * emaTrailingEnabled=0 时允许倒退（波段止损）。
+     * </p>
+     */
+    public void updateEmaTrailStopLoss(Strategy strategy, BigDecimal minEma, BigDecimal maxEma) {
+        if (strategy.getEmaTrailPeriod() == null || strategy.getEmaTrailPeriod() <= 0) return;
+        if (strategy.getEmaTrailBufferPct() == null
+                || strategy.getEmaTrailBufferPct().compareTo(BigDecimal.ZERO) <= 0) return;
+
+        List<Position> openPositions = positionManagementService.findOpenPositionsByStrategy(strategy.getId());
+        if (openPositions.isEmpty()) return;
+
+        // buffer 是百分比（0.5 = 0.5%），转小数
+        BigDecimal bufferFrac = strategy.getEmaTrailBufferPct()
+                .divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP);
+        boolean trailingOnly = strategy.getEmaTrailingEnabled() == null
+                || strategy.getEmaTrailingEnabled() == 1;
+
+        for (Position position : openPositions) {
+            try {
+                boolean isShort = position.getSide() == PositionSide.SHORT;
+                BigDecimal newSL = isShort
+                        ? maxEma.multiply(BigDecimal.ONE.add(bufferFrac)).setScale(8, RoundingMode.HALF_UP)
+                        : minEma.multiply(BigDecimal.ONE.subtract(bufferFrac)).setScale(8, RoundingMode.HALF_UP);
+
+                BigDecimal existing = position.getStopLoss();
+                boolean shouldUpdate;
+                if (existing == null) {
+                    shouldUpdate = true;
+                } else if (!trailingOnly) {
+                    shouldUpdate = true;   // 波段模式：允许倒退
+                } else {
+                    // trailing：LONG 只升（newSL > existing），SHORT 只降（newSL < existing）
+                    shouldUpdate = isShort
+                            ? newSL.compareTo(existing) < 0
+                            : newSL.compareTo(existing) > 0;
+                }
+                if (!shouldUpdate) {
+                    log.debug("[EMA_TRAIL SL] Skipped (unfavorable move): position={} existing={} new={} trailingOnly={}",
+                            position.getId(), existing, newSL, trailingOnly);
+                    continue;
+                }
+
+                position.setStopLoss(newSL);
+                positionManagementService.updateStopLossOnly(position);
+                log.info("[EMA_TRAIL SL] Updated: strategy={} position={} side={} minEma={} maxEma={} buffer={}% newSL={} trailing={}",
+                        strategy.getName(), position.getId(), position.getSide(),
+                        minEma, maxEma, strategy.getEmaTrailBufferPct(), newSL, trailingOnly);
+            } catch (Exception e) {
+                log.error("[EMA_TRAIL SL] Error updating position {}: {}", position.getId(), e.getMessage(), e);
+            }
+        }
+    }
+
     public void updateSuperTrendStopLoss(Strategy strategy, BigDecimal superTrendValue, boolean trendUp) {
         if (strategy.getSuperTrendSlOffsetPct() == null
                 || strategy.getSuperTrendSlOffsetPct().compareTo(BigDecimal.ZERO) <= 0) {

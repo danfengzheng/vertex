@@ -664,6 +664,20 @@ public class PositionManagementService {
     }
 
     /**
+     * 精准更新止损价（仅更新 stop_loss 列）—— EMA_TRAIL 等动态止损更新用。
+     * <p>
+     * 不影响 stopLossStage / superTrendStopLoss / 峰值追踪等并发写入的字段。
+     * </p>
+     */
+    public void updateStopLossOnly(Position position) {
+        positionMapper.update(null, new LambdaUpdateWrapper<Position>()
+                .eq(Position::getId, position.getId())
+                .set(Position::getStopLoss, position.getStopLoss()));
+        log.debug("[EMA_TRAIL SL] Persisted position={} stopLoss={}",
+                position.getId(), position.getStopLoss());
+    }
+
+    /**
      * 计算策略所有已关闭仓位的累计已实现盈亏
      */
     public BigDecimal getTotalRealizedPnl(Long strategyId, Long accountId) {

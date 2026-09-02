@@ -7,7 +7,7 @@ import type { KLineInterval } from './quote';
  */
 
 /** 指标类型 */
-export type IndicatorType = 'MA' | 'EMA' | 'RSI' | 'MACD' | 'BOLL' | 'KDJ' | 'ATR' | 'VWAP' | 'STOCH_RSI' | 'WR' | 'SAR' | 'ADX' | 'SUPERTREND' | 'VOL_CONFIRM' | 'OBV' | 'DIVERGENCE';
+export type IndicatorType = 'MA' | 'EMA' | 'RSI' | 'MACD' | 'BOLL' | 'KDJ' | 'ATR' | 'VWAP' | 'STOCH_RSI' | 'WR' | 'SAR' | 'ADX' | 'SUPERTREND' | 'VOL_CONFIRM' | 'OBV' | 'DIVERGENCE' | 'DUAL_EMA_TREND';
 
 /** 信号类型 */
 export type SignalType = 'BUY' | 'SELL' | 'NEUTRAL';
@@ -30,6 +30,7 @@ export const INDICATOR_TYPE_LABELS: Record<IndicatorType, string> = {
   VOL_CONFIRM: 'VOL (成交量确认)',
   OBV: 'OBV (能量潮)',
   DIVERGENCE: '背离指标 (Divergence)',
+  DUAL_EMA_TREND: '双 EMA 趋势判定 (fast/slow + close 确认)',
 };
 
 /** 信号类型显示映射 */
@@ -150,6 +151,14 @@ export interface StrategyVO {
   exitOnOppositeVoteRatio?: number | null;
   /** 止损熔断开关（1=启用），止损触发且亏损时暂停开仓 24 小时 */
   pauseOnStopLoss?: number;
+  /** EMA_TRAIL 动态止损 —— EMA 周期，默认 21；null=不启用 */
+  emaTrailPeriod?: number | null;
+  /** 取最近 N 根 EMA 的极值，默认 20 */
+  emaTrailLookback?: number | null;
+  /** buffer 百分比（0.5 = 0.5%）*/
+  emaTrailBufferPct?: number | null;
+  /** 1=只朝有利方向移动；0=每根 K 线重算允许倒退 */
+  emaTrailingEnabled?: number | null;
   /** 交易暂停截止时间（UTC ISO字符串），非 null 表示当前处于止损熔断期 */
   tradingPausedUntil?: string | null;
   /** 分阶段止盈：第1档触发价百分比 */
@@ -232,6 +241,10 @@ export interface StrategyCreateDTO {
   exitOnOppositeVoteRatio?: number | null;
   /** 止损熔断开关（true=启用），止损触发且亏损时暂停开仓 24 小时 */
   pauseOnStopLoss?: boolean;
+  emaTrailPeriod?: number | null;
+  emaTrailLookback?: number | null;
+  emaTrailBufferPct?: number | null;
+  emaTrailingEnabled?: number | null;
   /** 分阶段止盈第1档 */
   takeProfitPct1?: number;
   takeProfitSize1?: number;
@@ -291,6 +304,10 @@ export interface StrategyUpdateDTO {
   exitOnOppositeVoteRatio?: number | null;
   /** 止损熔断开关（true=启用，false=关闭） */
   pauseOnStopLoss?: boolean;
+  emaTrailPeriod?: number | null;
+  emaTrailLookback?: number | null;
+  emaTrailBufferPct?: number | null;
+  emaTrailingEnabled?: number | null;
   minSignalStrength?: number;
   /** 分阶段止盈第1档 */
   takeProfitPct1?: number;

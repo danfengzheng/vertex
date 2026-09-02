@@ -676,6 +676,11 @@ export const StrategyConfig = () => {
         superTrendSlOffsetPct: record.superTrendSlOffsetPct,
         exitOnOppositeVoteRatio: record.exitOnOppositeVoteRatio,
         pauseOnStopLoss: record.pauseOnStopLoss === 1,
+        // EMA_TRAIL 动态止损（4 参数）
+        emaTrailPeriod: record.emaTrailPeriod,
+        emaTrailLookback: record.emaTrailLookback,
+        emaTrailBufferPct: record.emaTrailBufferPct,
+        emaTrailingEnabled: record.emaTrailingEnabled ?? 1,
         // 分阶段止盈
         takeProfitPct1: record.takeProfitPct1,
         takeProfitSize1: record.takeProfitSize1,
@@ -746,6 +751,7 @@ export const StrategyConfig = () => {
           'trailingActivationMultiplier', 'trailingDistanceMultiplier',
           'atrInterval', 'maxHoldingBars', 'trailingDropPct', 'superTrendSlOffsetPct',
           'exitOnOppositeVoteRatio',
+          'emaTrailPeriod', 'emaTrailLookback', 'emaTrailBufferPct', 'emaTrailingEnabled',
           'takeProfitPct1', 'takeProfitSize1',
           'takeProfitPct2', 'takeProfitSize2',
           'takeProfitPct3', 'takeProfitSize3',
@@ -1655,6 +1661,42 @@ export const StrategyConfig = () => {
                   label={t('text.trading.pauseOnStopLoss')}
                   tooltip={t('text.trading.pauseOnStopLossTip')}
                   valuePropName="checked"
+                >
+                  <Switch />
+                </Form.Item>
+
+                {/* EMA_TRAIL 动态止损（4 参数）—— emaTrailPeriod 非空即启用 */}
+                <Form.Item
+                  name="emaTrailPeriod"
+                  label={t('text.trading.emaTrailPeriod')}
+                  tooltip={t('text.trading.emaTrailPeriodTip')}
+                >
+                  <InputNumber min={5} max={200} step={1} style={{ width: 140 }} placeholder="21" />
+                </Form.Item>
+
+                <Form.Item
+                  name="emaTrailLookback"
+                  label={t('text.trading.emaTrailLookback')}
+                  tooltip={t('text.trading.emaTrailLookbackTip')}
+                >
+                  <InputNumber min={1} max={200} step={1} style={{ width: 140 }} placeholder="20" />
+                </Form.Item>
+
+                <Form.Item
+                  name="emaTrailBufferPct"
+                  label={t('text.trading.emaTrailBufferPct')}
+                  tooltip={t('text.trading.emaTrailBufferPctTip')}
+                >
+                  <InputNumber min={0.05} max={5} step={0.05} style={{ width: 140 }} addonAfter="%" placeholder="0.5" />
+                </Form.Item>
+
+                <Form.Item
+                  name="emaTrailingEnabled"
+                  label={t('text.trading.emaTrailingEnabled')}
+                  tooltip={t('text.trading.emaTrailingEnabledTip')}
+                  valuePropName="checked"
+                  getValueFromEvent={(checked) => (checked ? 1 : 0)}
+                  getValueProps={(v) => ({ checked: v === 1 || v === undefined || v === null })}
                 >
                   <Switch />
                 </Form.Item>

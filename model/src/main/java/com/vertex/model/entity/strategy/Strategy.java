@@ -245,6 +245,20 @@ public class Strategy extends BaseEntity {
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private java.time.LocalDateTime tradingPausedUntil;
 
+    // ─── EMA_TRAIL 动态止损（可选，任一字段设置即视为启用）───────────
+    /** EMA 周期（默认 21）；null=不启用 EMA_TRAIL */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Integer emaTrailPeriod;
+    /** 取最近 N 根 EMA 的极值（默认 20），min(EMA) 对 LONG，max(EMA) 对 SHORT */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Integer emaTrailLookback;
+    /** buffer 百分比（0.5 = 0.5%）；LONG=min×(1-buf)，SHORT=max×(1+buf) */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private BigDecimal emaTrailBufferPct;
+    /** 1=trailing 只朝有利方向移动（LONG 只升不降）；0=每根 K 线重算允许倒退 */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private Integer emaTrailingEnabled;
+
     // ─── Provenance：从模板创建时记录 ───────────────
 
     /** 源模板 id（null=手动创建；非 null=从模板生成） */

@@ -85,6 +85,11 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setSuperTrendSlOffsetPct(dto.getSuperTrendSlOffsetPct());
         strategy.setExitOnOppositeVoteRatio(dto.getExitOnOppositeVoteRatio());
         strategy.setPauseOnStopLoss(dto.getPauseOnStopLoss() != null && dto.getPauseOnStopLoss() ? 1 : 0);
+        // EMA_TRAIL 动态止损（4 参数）
+        strategy.setEmaTrailPeriod(dto.getEmaTrailPeriod());
+        strategy.setEmaTrailLookback(dto.getEmaTrailLookback());
+        strategy.setEmaTrailBufferPct(dto.getEmaTrailBufferPct());
+        strategy.setEmaTrailingEnabled(dto.getEmaTrailingEnabled());
         // 分阶段止盈（固定3档）
         strategy.setTakeProfitPct1(dto.getTakeProfitPct1());
         strategy.setTakeProfitSize1(dto.getTakeProfitSize1());
@@ -261,6 +266,11 @@ public class StrategyServiceImpl implements IStrategyService {
         copy.setTakeProfitPct3(source.getTakeProfitPct3());
         copy.setTakeProfitSize3(source.getTakeProfitSize3());
         copy.setMoveStopToBreakevenAfterStage(source.getMoveStopToBreakevenAfterStage());
+        // EMA_TRAIL 动态止损
+        copy.setEmaTrailPeriod(source.getEmaTrailPeriod());
+        copy.setEmaTrailLookback(source.getEmaTrailLookback());
+        copy.setEmaTrailBufferPct(source.getEmaTrailBufferPct());
+        copy.setEmaTrailingEnabled(source.getEmaTrailingEnabled());
         // tradingPausedUntil 不复制：副本是新策略，不继承暂停状态
 
         strategyMapper.insert(copy);

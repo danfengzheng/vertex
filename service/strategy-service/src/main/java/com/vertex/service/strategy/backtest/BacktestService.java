@@ -341,6 +341,26 @@ public class BacktestService {
                 && strategy.getSuperTrendSlOffsetPct().compareTo(BigDecimal.ZERO) > 0;
         BigDecimal superTrendStopLossPrice = null; // 当前 SuperTrend 止损价，null=未初始化/已平仓
 
+        // EMA_TRAIL 动态止损（emaTrailPeriod > 0 且 buffer > 0 时启用）
+        // 预计算主周期 EMA 系列（一次 O(n)），运行时按索引取 lookback 切片求 min/max。
+        boolean hasEmaTrail = strategy.getEmaTrailPeriod() != null && strategy.getEmaTrailPeriod() > 0
+                && strategy.getEmaTrailBufferPct() != null
+                && strategy.getEmaTrailBufferPct().compareTo(BigDecimal.ZERO) > 0;
+        int emaTrailFastPeriod = hasEmaTrail ? strategy.getEmaTrailPeriod() : 0;
+        int emaTrailLookback   = hasEmaTrail
+                ? (strategy.getEmaTrailLookback() != null && strategy.getEmaTrailLookback() > 0
+                        ? strategy.getEmaTrailLookback() : 20)
+                : 0;
+        BigDecimal emaTrailBufferFrac = hasEmaTrail
+                ? strategy.getEmaTrailBufferPct().divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+        boolean emaTrailingOnlyFav = !hasEmaTrail
+                || strategy.getEmaTrailingEnabled() == null
+                || strategy.getEmaTrailingEnabled() == 1;
+        double[] emaTrailSeries = hasEmaTrail && klines != null && klines.size() >= emaTrailFastPeriod
+                ? computeEmaSeriesInline(klines, emaTrailFastPeriod)
+                : null;
+
         // 分阶段止盈状态（与实盘保持一致；启用条件：size1 > 0 且 pct1 > 0）
         boolean hasStagedTp = strategy.getTakeProfitSize1() != null
                 && strategy.getTakeProfitSize1().compareTo(BigDecimal.ZERO) > 0
@@ -445,6 +465,41 @@ public class BacktestService {
                     // SHORT：用当根 K 线最低价更新峰值（最低价越低越优）
                     BigDecimal low = currentKline.getLow() != null ? currentKline.getLow() : currentPrice;
                     if (peakPrice == null || low.compareTo(peakPrice) < 0) peakPrice = low;
+                }
+            }
+
+            // ── EMA_TRAIL 动态止损更新（每根 K 线，与实盘 StrategyEngineService 一致）─────
+            // 关键：使用 [i-lookback..i-1] 已收盘 K 线的 EMA 计算 min/max，
+            //      再和当根 K 线的 high/low 比较触发。避免用当根 close 计算 SL 再和当根低点比 —— 前视偏差。
+            // LONG 用 min×(1-buffer)，SHORT 用 max×(1+buffer)；trailing 时只朝有利方向移动。
+            if (inPosition && hasEmaTrail && emaTrailSeries != null && i > emaTrailFastPeriod) {
+                boolean isShortForEma = positionSide == PositionSide.SHORT;
+                int windowEnd = i - 1;    // 只用已收盘 K 线
+                int from = Math.max(emaTrailFastPeriod, windowEnd - emaTrailLookback + 1);
+                double minEma = Double.MAX_VALUE, maxEma = -Double.MAX_VALUE;
+                for (int k = from; k <= windowEnd; k++) {
+                    if (emaTrailSeries[k] < minEma) minEma = emaTrailSeries[k];
+                    if (emaTrailSeries[k] > maxEma) maxEma = emaTrailSeries[k];
+                }
+                if (minEma < Double.MAX_VALUE) {
+                    BigDecimal newSl = isShortForEma
+                            ? BigDecimal.valueOf(maxEma).multiply(BigDecimal.ONE.add(emaTrailBufferFrac))
+                                    .setScale(8, RoundingMode.HALF_UP)
+                            : BigDecimal.valueOf(minEma).multiply(BigDecimal.ONE.subtract(emaTrailBufferFrac))
+                                    .setScale(8, RoundingMode.HALF_UP);
+                    boolean shouldUpdate;
+                    if (stopLossPrice == null) {
+                        shouldUpdate = true;
+                    } else if (!emaTrailingOnlyFav) {
+                        shouldUpdate = true;
+                    } else {
+                        shouldUpdate = isShortForEma
+                                ? newSl.compareTo(stopLossPrice) < 0
+                                : newSl.compareTo(stopLossPrice) > 0;
+                    }
+                    if (shouldUpdate) {
+                        stopLossPrice = newSl;
+                    }
                 }
             }
 
@@ -1389,6 +1444,28 @@ public class BacktestService {
      * @param period ATR 周期（通常为 14）
      * @return ATR 值；若数据不足则返回 null
      */
+    /**
+     * 计算完整 EMA 系列 —— 与实盘 StrategyEngineService.computeEmaSeries 语义一致。
+     * 索引 [0, period-1] 位置返回 seed；[period, size-1] 是真实 EMA。
+     */
+    private static double[] computeEmaSeriesInline(List<KLine> klines, int period) {
+        int n = klines.size();
+        double[] out = new double[n];
+        if (n < period) return out;
+        double multiplier = 2.0 / (period + 1);
+        double seed = 0;
+        for (int i = 0; i < period; i++) seed += klines.get(i).getClose().doubleValue();
+        seed /= period;
+        for (int i = 0; i < period; i++) out[i] = seed;
+        double ema = seed;
+        for (int i = period; i < n; i++) {
+            double close = klines.get(i).getClose().doubleValue();
+            ema = close * multiplier + ema * (1 - multiplier);
+            out[i] = ema;
+        }
+        return out;
+    }
+
     private BigDecimal computeAtrFromList(List<KLine> klines, int period) {
         if (klines == null || klines.size() < 2) return null;
         // 取末尾 period×3+1 根以保证 Wilder 平滑预热充分

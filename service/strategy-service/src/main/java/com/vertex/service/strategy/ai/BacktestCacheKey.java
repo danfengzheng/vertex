@@ -82,6 +82,11 @@ public final class BacktestCacheKey {
         snapshot.put("superTrendSlOffsetPct", normBd(strategy.getSuperTrendSlOffsetPct()));
         snapshot.put("exitOnOppositeVoteRatio", normBd(strategy.getExitOnOppositeVoteRatio()));
         snapshot.put("pauseOnStopLoss", strategy.getPauseOnStopLoss());
+        // EMA_TRAIL 动态止损（4 字段影响回测结果 → 必须进 hash）
+        snapshot.put("emaTrailPeriod", strategy.getEmaTrailPeriod());
+        snapshot.put("emaTrailLookback", strategy.getEmaTrailLookback());
+        snapshot.put("emaTrailBufferPct", normBd(strategy.getEmaTrailBufferPct()));
+        snapshot.put("emaTrailingEnabled", strategy.getEmaTrailingEnabled());
 
         // 止盈（单级 + 分阶段）
         snapshot.put("takeProfitPct", normBd(strategy.getTakeProfitPct()));

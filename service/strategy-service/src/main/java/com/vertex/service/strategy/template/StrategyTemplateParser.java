@@ -150,6 +150,11 @@ public class StrategyTemplateParser {
         setIntIfPresent(tpl, "maxHoldingBars",              s::setMaxHoldingBars);
         setIntIfPresent(tpl, "moveStopToBreakevenAfterStage", s::setMoveStopToBreakevenAfterStage);
         setIntIfPresent(tpl, "pauseOnStopLoss",             s::setPauseOnStopLoss);
+        // EMA_TRAIL 4 参数
+        setIntIfPresent(tpl, "emaTrailPeriod",              s::setEmaTrailPeriod);
+        setIntIfPresent(tpl, "emaTrailLookback",            s::setEmaTrailLookback);
+        setBigDecimalIfPresent(tpl, "emaTrailBufferPct",    s::setEmaTrailBufferPct);
+        setIntIfPresent(tpl, "emaTrailingEnabled",          s::setEmaTrailingEnabled);
 
         // enum-like 字段
         Object atrInterval = tpl.get("atrInterval");
