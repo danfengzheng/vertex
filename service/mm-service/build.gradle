@@ -1,0 +1,31 @@
+description = 'mm-service - 做市模块（网格 / 对冲 / 套利）'
+
+dependencies {
+    // 内部依赖
+    implementation project(':api')
+    implementation project(':model')
+    implementation project(':common:common-core')
+    implementation project(':common:common-web')
+    implementation project(':service:quote-service')      // 用其 K 线数据 + IndicatorRegistry
+    implementation project(':service:order-service')      // 复用 BinanceFuturesClient sign 逻辑
+    implementation project(':service:strategy-service')   // 用其 IndicatorRegistry 做趋势判据
+    implementation project(':framework:socket-framework-starter')
+
+    // Spring Boot
+    implementation libs.spring.boot.starter
+
+    // MyBatis Plus
+    implementation libs.mybatis.plus.boot.starter
+
+    // JSON
+    implementation libs.fastjson2
+
+    // HTTP + WebSocket
+    implementation libs.okhttp
+
+    // 配置处理
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // 测试
+    testImplementation libs.spring.boot.starter.test
+}
