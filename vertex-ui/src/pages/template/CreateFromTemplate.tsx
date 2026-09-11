@@ -33,7 +33,8 @@ export const CreateFromTemplate = () => {
     if (!id) return;
     setLoading(true);
     try {
-      const res = await templateApi.get(Number(id));
+      // 用 string 传，Number() 会让 Long 型 id 精度丢失导致 404
+      const res = await templateApi.get(id!);
       if (res.code === 200 && res.data) {
         setTpl(res.data);
         // set defaults from exposedParams

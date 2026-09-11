@@ -57,7 +57,16 @@ public class HeartbeatHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        // Bug-fix（线上事故：2026-09-03 断连 5h 无告警无重连）：
+        // 必须 fireExceptionCaught 让下游 handler（ReconnectHandler / WebSocketClientHandler）感知异常，
+        // 否则 socket read 异常被此处吞掉，ReconnectHandler 收不到 channelInactive 保底信号，
+        // 导致重连机制完全失效。
         log.error("HeartbeatHandler error on channel: {}", ctx.channel().remoteAddress(), cause);
+        try {
+            ctx.fireExceptionCaught(cause);
+        } catch (Exception ex) {
+            log.warn("HeartbeatHandler fireExceptionCaught rethrow error: {}", ex.getMessage());
+        }
         ctx.close();
     }
 }

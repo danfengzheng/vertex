@@ -127,6 +127,32 @@ public abstract class ExchangeWebSocketClient {
     }
 
     /**
+     * 看门狗获取当前连接状态。
+     */
+    public boolean isConnected() {
+        return webSocketClient != null && webSocketClient.isConnected();
+    }
+
+    /**
+     * 距上次收到消息的毫秒数。返回 -1 表示 client 尚未初始化或从未收到过消息。
+     */
+    public long getMillisSinceLastMessage() {
+        if (webSocketClient == null) return -1;
+        long last = webSocketClient.getLastMessageAt();
+        if (last <= 0) return -1;
+        return System.currentTimeMillis() - last;
+    }
+
+    /**
+     * 强制重连（看门狗触发用）。
+     */
+    public void forceReconnect() throws Exception {
+        if (webSocketClient == null) return;
+        log.warn("[{}] force reconnect triggered", exchangeConfig.getExchangeType().getCode());
+        webSocketClient.reconnect();
+    }
+
+    /**
      * 处理收到的消息
      */
     private void handleMessage(String rawMessage) {

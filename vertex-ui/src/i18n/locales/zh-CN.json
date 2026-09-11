@@ -197,6 +197,26 @@
       "backfillRecords": "已补全 {{count}} 条",
       "noSubscriptions": "当前没有活跃的订阅"
     },
+    "mm": {
+      "title": "做市策略",
+      "gridListTitle": "网格策略",
+      "startOk": "策略已启动",
+      "stopOk": "策略已停止",
+      "createOk": "已创建",
+      "updateOk": "已更新",
+      "emergencyTitle": "紧急停机",
+      "emergencyContent": "选择紧急停机模式：",
+      "editTitle": "编辑策略",
+      "newTitle": "新建策略",
+      "colName": "名称",
+      "colSymbol": "交易对",
+      "colStatus": "状态",
+      "colLayer": "保护层",
+      "colHedge": "Hedge",
+      "colLeverage": "杠杆",
+      "colWindow": "窗口",
+      "colStep": "步长"
+    },
     "strategy": {
       "title": "策略管理",
       "configTitle": "策略配置",

@@ -31,7 +31,7 @@ export const StrategyTemplateList = () => {
   };
   useEffect(() => { load(); }, []);
 
-  const onDelete = async (id: number) => {
+  const onDelete = async (id: string) => {
     try {
       await templateApi.delete(id);
       message.success(t('common.deleteSuccess', { defaultValue: '已删除' }));

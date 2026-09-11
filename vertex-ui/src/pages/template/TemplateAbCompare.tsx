@@ -8,7 +8,7 @@ import { templateApi, StrategyTemplateVO, AbCompareCandidate, TemplateBuildDTO }
 const { RangePicker } = DatePicker;
 
 interface CandidateInput {
-  templateId?: number;
+  templateId?: string;
   paramsJson: string;   // 用户手改 JSON（简单直接，避免动态表单复杂化）
 }
 

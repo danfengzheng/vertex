@@ -21,7 +21,8 @@ export interface TemplateExposedParam {
 }
 
 export interface StrategyTemplateVO {
-  id: number;
+  // ⚠️ Long id 序列化为 string 防精度丢失
+  id: string;
   code: string;
   name: string;
   description?: string;
@@ -42,7 +43,7 @@ export interface StrategyTemplateVO {
 }
 
 export interface TemplateSaveDTO {
-  id?: number;
+  id?: string;
   code?: string;
   name?: string;
   description?: string;
@@ -60,7 +61,7 @@ export interface TemplateSaveDTO {
 }
 
 export interface TemplateBuildDTO {
-  templateId: number;
+  templateId: string;
   userParams: Record<string, unknown>;
   strategyName?: string;
   backtestStartTime?: number;
@@ -75,13 +76,13 @@ export interface TemplateValidationResult {
 }
 
 export interface TemplateHistoryVO {
-  id: number;
-  templateId: number;
+  id: string;
+  templateId: string;
   version: number;
   templateJsonSnapshot: string;
   exposedParamsSnapshot: string;
   changeNote?: string;
-  changedBy?: number;
+  changedBy?: string;
   changedAt: string;
 }
 
@@ -102,7 +103,7 @@ export interface BacktestResultLite {
 
 export interface AbCompareCandidate {
   label: string;
-  templateId: number;
+  templateId: string;
   templateVersion?: number;
   returnRate?: number;
   maxDrawdown?: number;
@@ -130,22 +131,22 @@ export interface AbCompareRequest {
 export const templateApi = {
   list: (params?: { status?: string; category?: string }): Promise<ApiResponse<StrategyTemplateVO[]>> =>
     request.get('/strategy-template', { params }),
-  get: (id: number): Promise<ApiResponse<StrategyTemplateVO>> =>
+  get: (id: string | number): Promise<ApiResponse<StrategyTemplateVO>> =>
     request.get(`/strategy-template/${id}`),
   getByCode: (code: string): Promise<ApiResponse<StrategyTemplateVO>> =>
     request.get(`/strategy-template/by-code/${code}`),
   save: (dto: TemplateSaveDTO): Promise<ApiResponse<StrategyTemplateVO>> =>
     request.post('/strategy-template', dto),
-  delete: (id: number): Promise<ApiResponse<void>> =>
+  delete: (id: string | number): Promise<ApiResponse<void>> =>
     request.delete(`/strategy-template/${id}`),
-  history: (id: number): Promise<ApiResponse<TemplateHistoryVO[]>> =>
+  history: (id: string | number): Promise<ApiResponse<TemplateHistoryVO[]>> =>
     request.get(`/strategy-template/${id}/history`),
   validate: (dto: TemplateSaveDTO): Promise<ApiResponse<TemplateValidationResult>> =>
     request.post('/strategy-template/validate', dto),
 
   preview: (dto: TemplateBuildDTO): Promise<ApiResponse<Record<string, unknown>>> =>
     request.post('/strategy-template/preview', dto),
-  build: (dto: TemplateBuildDTO): Promise<ApiResponse<{ id: number; name: string }>> =>
+  build: (dto: TemplateBuildDTO): Promise<ApiResponse<{ id: string; name: string }>> =>
     request.post('/strategy-template/build', dto),
   quickBacktest: (dto: TemplateBuildDTO): Promise<ApiResponse<BacktestResultLite>> =>
     request.post('/strategy-template/quick-backtest', dto),

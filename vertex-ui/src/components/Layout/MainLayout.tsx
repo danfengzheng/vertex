@@ -31,6 +31,7 @@ import {
   MonitorOutlined,
   DeleteOutlined,
   AppstoreAddOutlined,
+  FunctionOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -289,6 +290,18 @@ export const MainLayout = () => {
           key: '/ai/config',
           icon: <SettingOutlined />,
           label: t('text.ai.configTitle'),
+        },
+      ],
+    },
+    {
+      key: 'mm',
+      icon: <FunctionOutlined />,
+      label: t('text.mm.title', { defaultValue: '做市策略' }),
+      children: [
+        {
+          key: '/mm/grid',
+          icon: <AppstoreAddOutlined />,
+          label: t('text.mm.gridListTitle', { defaultValue: '网格策略' }),
         },
       ],
     },

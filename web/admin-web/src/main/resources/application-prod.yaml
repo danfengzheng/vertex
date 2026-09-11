@@ -10,3 +10,11 @@ spring:
       initial-size: 5
       min-idle: 5
       max-active: 20
+
+vertex:
+  mm:
+    enabled: true
+    paper:
+      queue_loss_factor: 0.5    # 只填充 real trade qty 的 50%（模拟排队损失）
+      gtx_reject_rate: 0.05     # 5% 挂单随机拒绝（模拟 GTX）
+      latency_ms: 200           # 模拟 REST 延迟

@@ -11,6 +11,7 @@ include 'service:product-service'
 include 'service:quote-service'
 include 'service:strategy-service'
 include 'service:chain-analysis-service'
+include 'service:mm-service'
 include 'web:admin-web'
 include 'framework:socket-framework-starter'
 

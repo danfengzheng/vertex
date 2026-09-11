@@ -15,6 +15,9 @@ import { SignalCleanup } from '../pages/signal/SignalCleanup';
 import { StrategyTemplateList } from '../pages/template/StrategyTemplateList';
 import { CreateFromTemplate } from '../pages/template/CreateFromTemplate';
 import { TemplateAbCompare } from '../pages/template/TemplateAbCompare';
+import { GridStrategyList } from '../pages/mm/GridStrategyList';
+import { GridStrategyDetail } from '../pages/mm/GridStrategyDetail';
+import { GridStrategyForm } from '../pages/mm/GridStrategyForm';
 import { StrategyGuide } from '../pages/guide/StrategyGuide';
 import { ExchangeAccountManagement } from '../pages/trading/ExchangeAccountManagement';
 import { OrderHistory } from '../pages/trading/OrderHistory';
@@ -82,6 +85,20 @@ export const AppRouter = () => {
         } />
         <Route path="strategy/template/:id/create" element={
           <PermissionGuard path="/strategy/template"><CreateFromTemplate /></PermissionGuard>
+        } />
+
+        {/* 做市模块 */}
+        <Route path="mm/grid" element={
+          <PermissionGuard path="/mm/grid"><GridStrategyList /></PermissionGuard>
+        } />
+        <Route path="mm/grid/new" element={
+          <PermissionGuard path="/mm/grid"><GridStrategyForm /></PermissionGuard>
+        } />
+        <Route path="mm/grid/:id/edit" element={
+          <PermissionGuard path="/mm/grid"><GridStrategyForm /></PermissionGuard>
+        } />
+        <Route path="mm/grid/:id" element={
+          <PermissionGuard path="/mm/grid"><GridStrategyDetail /></PermissionGuard>
         } />
 
         {/* 交易 */}

@@ -51,6 +51,18 @@ public class WebSocketClient {
     @Getter
     private SocketSession session;
 
+    /**
+     * 最近一次收到消息的时间戳（epoch ms）。
+     * 看门狗定时检查此值，"长时无消息"就强制重连 + 告警。
+     * 每次 onMessage 更新（由 wrappedListener 触发）。
+     */
+    @Getter
+    private volatile long lastMessageAt = 0L;
+
+    /** 最近一次连接建立时间戳（用于看门狗计算"启动后无数据" ）*/
+    @Getter
+    private volatile long lastConnectedAt = 0L;
+
     public WebSocketClient(WebSocketClientConfig config, WebSocketClientHandler.WebSocketMessageListener messageListener) {
         this.config = config;
         this.messageListener = messageListener;
@@ -115,10 +127,14 @@ public class WebSocketClient {
                 public void onConnected(SocketSession s) {
                     state = SocketConnectionState.CONNECTED;
                     session = s;
+                    lastConnectedAt = System.currentTimeMillis();
+                    lastMessageAt = lastConnectedAt;   // 视为已收到"就绪信号"
                     messageListener.onConnected(s);
                 }
                 @Override
                 public void onMessage(SocketSession s, String message) {
+                    // 看门狗依据：任何消息（含心跳 pong）到达都视为"链路健康"
+                    lastMessageAt = System.currentTimeMillis();
                     messageListener.onMessage(s, message);
                 }
                 @Override
@@ -195,8 +211,22 @@ public class WebSocketClient {
             newChannel = future.channel();
             channel = newChannel;
 
-            // 等待握手完成（可能抛 WebSocketHandshakeException / 超时等）
-            clientHandler.handshakeFuture().sync();
+            // Bug-fix（线上事故 2026-09-03）：握手 sync() 无超时会永久阻塞。
+            // 若 TCP 连上但 server 不响应 WS handshake（网络分区、server 假死），
+            // 阻塞的是 RECONNECT_SCHEDULER 的调度线程 → 后续所有重连排队死锁。
+            // 改为带超时 await，超时视为握手失败 → 走 catch → rollback + 上层重试。
+            long handshakeTimeoutMs = Math.max(3000, config.getConnectTimeoutMs());
+            boolean handshakeDone = clientHandler.handshakeFuture()
+                    .await(handshakeTimeoutMs, TimeUnit.MILLISECONDS);
+            if (!handshakeDone) {
+                throw new java.util.concurrent.TimeoutException(
+                        "WebSocket handshake timeout after " + handshakeTimeoutMs + "ms on " + uri);
+            }
+            if (!clientHandler.handshakeFuture().isSuccess()) {
+                throw new IllegalStateException("WebSocket handshake failed",
+                        clientHandler.handshakeFuture().cause());
+            }
+
             state = SocketConnectionState.CONNECTED;
             session = SocketSession.getFromChannel(newChannel);
             log.info("WebSocket client connected to: {}", uri);

@@ -197,6 +197,26 @@
       "backfillRecords": "{{count}} records",
       "noSubscriptions": "No active subscriptions"
     },
+    "mm": {
+      "title": "Market Making",
+      "gridListTitle": "Grid Strategies",
+      "startOk": "Strategy started",
+      "stopOk": "Strategy stopped",
+      "createOk": "Created",
+      "updateOk": "Updated",
+      "emergencyTitle": "Emergency Stop",
+      "emergencyContent": "Select emergency mode:",
+      "editTitle": "Edit Strategy",
+      "newTitle": "New Strategy",
+      "colName": "Name",
+      "colSymbol": "Symbol",
+      "colStatus": "Status",
+      "colLayer": "Layer",
+      "colHedge": "Hedge",
+      "colLeverage": "Leverage",
+      "colWindow": "Window",
+      "colStep": "Step"
+    },
     "strategy": {
       "title": "Strategy",
       "configTitle": "Strategy Config",

@@ -29,21 +29,31 @@ public class ReconnectHandler extends ChannelInboundHandlerAdapter {
     /**
      * 全局共享的重连调度器（daemon 线程）。
      * <p>
-     * 独立于任何 channel 的 eventLoop，确保 group.shutdownGracefully() 之后
-     * 仍能继续调度下一次重连任务。
+     * <b>Bug-fix（线上事故 2026-09-03）</b>：单线程池若某次 reconnect 任务 hang 住
+     * （比如 handshake 无超时阻塞），后续所有重连任务都会排队死锁。
+     * 改为 2 线程池：一个跑当前任务，另一个即使前者 hang 住也能继续调度新任务。
      * </p>
      */
     private static final ScheduledExecutorService RECONNECT_SCHEDULER =
-            Executors.newScheduledThreadPool(1, r -> {
+            Executors.newScheduledThreadPool(2, r -> {
                 Thread t = new Thread(r, "ws-reconnect-scheduler");
                 t.setDaemon(true);
                 return t;
             });
 
+    /**
+     * <b>Bug-fix（线上事故 2026-09-03）</b>：reconnecting=true 若因未知原因永远没被 reset
+     * （例：调度线程 hang 在 handshake sync），后续 channelInactive 都会被
+     * {@code if (!reconnecting)} 挡住 → 系统永久停机。
+     * 加时间戳保护：距离 reconnectingSince > 该阈值时强制 reset。
+     */
+    private static final long RECONNECTING_STUCK_THRESHOLD_MS = 5 * 60_000L;
+
     private final ReconnectPolicy policy;
     private final Runnable reconnectTask;
     private final AtomicInteger attempts = new AtomicInteger(0);
     private volatile boolean reconnecting = false;
+    private volatile long reconnectingSinceMs = 0;
     /** 用户主动停止标志：disconnect() 显式调用 stopReconnect() 时置 true，阻止后续重连 */
     private volatile boolean stopped = false;
 
@@ -58,10 +68,33 @@ public class ReconnectHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        // Bug-fix：reconnecting 卡死保护 —— 如果距离 reconnectingSince 已超阈值仍未成功也未复位，
+        // 强制 reset 并触发新一轮 scheduleReconnect（避免"永久停机"）。
+        if (reconnecting && reconnectingSinceMs > 0
+                && System.currentTimeMillis() - reconnectingSinceMs > RECONNECTING_STUCK_THRESHOLD_MS) {
+            log.warn("[ReconnectHandler] reconnecting flag stuck for {}ms, force reset",
+                    System.currentTimeMillis() - reconnectingSinceMs);
+            reconnecting = false;
+            reconnectingSinceMs = 0;
+        }
+
         if (!reconnecting && !stopped) {
             scheduleReconnect();
         }
         super.channelInactive(ctx);
+    }
+
+    /**
+     * Bug-fix：exceptionCaught 也触发重连保底（channelInactive 未必总能触发）。
+     */
+    @Override
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+        log.warn("[ReconnectHandler] exception on channel {}: {}, will schedule reconnect",
+                ctx.channel().remoteAddress(), cause.getMessage());
+        if (!reconnecting && !stopped) {
+            scheduleReconnect();
+        }
+        super.exceptionCaught(ctx, cause);
     }
 
     @Override
@@ -69,6 +102,7 @@ public class ReconnectHandler extends ChannelInboundHandlerAdapter {
         // 连接成功，重置重试计数与状态标志
         attempts.set(0);
         reconnecting = false;
+        reconnectingSinceMs = 0;
         stopped = false;
         policy.reset();
         log.info("Connection established: {}", ctx.channel().remoteAddress());
@@ -97,6 +131,7 @@ public class ReconnectHandler extends ChannelInboundHandlerAdapter {
         }
 
         reconnecting = true;
+        reconnectingSinceMs = System.currentTimeMillis();
         log.info("Scheduling reconnect attempt {} in {}ms", attempt, delay);
 
         try {
@@ -130,6 +165,7 @@ public class ReconnectHandler extends ChannelInboundHandlerAdapter {
     public void stopReconnect() {
         stopped = true;
         reconnecting = false;
+        reconnectingSinceMs = 0;
     }
 
     /**
@@ -137,6 +173,7 @@ public class ReconnectHandler extends ChannelInboundHandlerAdapter {
      */
     public void resetReconnect() {
         reconnecting = false;
+        reconnectingSinceMs = 0;
         stopped = false;
         attempts.set(0);
         policy.reset();

@@ -15,6 +15,7 @@ dependencies {
     implementation project(':service:quote-service')
     implementation project(':service:strategy-service')
     implementation project(':service:chain-analysis-service')
+    implementation project(':service:mm-service')
 
     // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
