@@ -26,6 +26,18 @@ public interface IStrategyService {
     void disable(Long id);
 
     /**
+     * 切换策略的自动交易状态（只改 autoTrade 字段，不动其他配置）。
+     * <p>
+     * 与 update() 不同，此方法只精确设置 autoTrade，保留其他所有配置不变；
+     * 避免前端切换 autoTrade 时误清空其他"允许清空"字段。
+     * </p>
+     *
+     * @param id 策略 ID
+     * @param autoTrade 0 = 关闭自动交易；1 = 开启自动交易
+     */
+    void setAutoTrade(Long id, Integer autoTrade);
+
+    /**
      * 复制策略，生成同配置的新策略（默认禁用，名称加"(副本)"后缀）
      *
      * @param id 源策略 ID

@@ -80,6 +80,16 @@ public class StrategyController {
     }
 
     @RequiresPermission("strategy:config")
+    @PostMapping("/{id}/auto-trade/{autoTrade}")
+    @Operation(summary = "切换自动交易状态",
+               description = "只修改 autoTrade 字段（0=手动，1=自动），保留其他所有配置。" +
+                             "避免通过 /update 接口切换时误清空 stopLossPct 等允许清空的字段。")
+    public Result<Void> setAutoTrade(@PathVariable Long id, @PathVariable Integer autoTrade) {
+        strategyService.setAutoTrade(id, autoTrade);
+        return Result.success();
+    }
+
+    @RequiresPermission("strategy:config")
     @PostMapping("/{id}/copy")
     @Operation(summary = "复制策略", description = "克隆现有策略的所有配置，生成新策略（默认禁用，名称加(副本)后缀）")
     public Result<Long> copy(@PathVariable Long id) {

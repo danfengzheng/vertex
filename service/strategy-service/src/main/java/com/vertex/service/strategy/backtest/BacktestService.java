@@ -1113,11 +1113,17 @@ public class BacktestService {
                     tradeAmount = maxTradeCapital;
                 }
                 // 手续费按名义价值计算（杠杆×保证金）
+                // Bug 修复：原来 marginPaid = tradeAmount，导致平仓时"退还全部 tradeAmount"，
+                //   等同于把开仓 fee "退回"了 → 实际只扣了平仓 fee（单边），不符合双边费率语义。
+                // 修复：marginPaid = netMargin（净保证金）。这样：
+                //   开仓：capital -= tradeAmount（全部锁定）
+                //   平仓：capital += netMargin + profit（只退净保证金，openFee 永久留在了"成本"里）
+                //   净资金变化：-openFee + profit = -openFee + (pnl - closeFee) → 双边 fee 正确扣除。
                 BigDecimal openFee = tradeAmount.multiply(BigDecimal.valueOf(leverage)).multiply(config.getFeeRate());
                 BigDecimal netMargin = tradeAmount.subtract(openFee);
                 position   = netMargin.multiply(BigDecimal.valueOf(leverage)).divide(currentPrice, 8, RoundingMode.DOWN);
                 capital    = capital.subtract(tradeAmount);
-                marginPaid = tradeAmount;
+                marginPaid = netMargin;
                 entryPrice = currentPrice;
                 entryTime  = currentKline.getOpenTime();
                 inPosition = true;

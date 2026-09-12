@@ -180,6 +180,12 @@ public class StrategyServiceImpl implements IStrategyService {
         strategy.setMoveStopToBreakevenAfterStage(dto.getMoveStopToBreakevenAfterStage());
         validateStagedTakeProfit(strategy);
 
+        // EMA_TRAIL 动态止损（4 参数）—— 与 create/copy 保持一致，允许 UPDATE 修改
+        strategy.setEmaTrailPeriod(dto.getEmaTrailPeriod());
+        strategy.setEmaTrailLookback(dto.getEmaTrailLookback());
+        strategy.setEmaTrailBufferPct(dto.getEmaTrailBufferPct());
+        strategy.setEmaTrailingEnabled(dto.getEmaTrailingEnabled());
+
         strategyMapper.updateById(strategy);
     }
 
@@ -403,6 +409,21 @@ public class StrategyServiceImpl implements IStrategyService {
         }
         strategy.setEnabled(0);
         strategyMapper.updateById(strategy);
+    }
+
+    @Override
+    public void setAutoTrade(Long id, Integer autoTrade) {
+        if (autoTrade == null || (autoTrade != 0 && autoTrade != 1)) {
+            throw new BizException(GlobalError.PARAM_ERROR);
+        }
+        Strategy strategy = strategyMapper.selectById(id);
+        if (strategy == null) {
+            throw new BizException(GlobalError.STRATEGY_NOT_FOUND);
+        }
+        strategy.setAutoTrade(autoTrade);
+        strategyMapper.updateById(strategy);
+        log.info("[SetAutoTrade] strategy={} id={} autoTrade → {}",
+                strategy.getName(), id, autoTrade);
     }
 
     @Override
