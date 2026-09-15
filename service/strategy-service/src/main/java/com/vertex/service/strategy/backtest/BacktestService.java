@@ -487,18 +487,30 @@ public class BacktestService {
                                     .setScale(8, RoundingMode.HALF_UP)
                             : BigDecimal.valueOf(minEma).multiply(BigDecimal.ONE.subtract(emaTrailBufferFrac))
                                     .setScale(8, RoundingMode.HALF_UP);
-                    boolean shouldUpdate;
-                    if (stopLossPrice == null) {
-                        shouldUpdate = true;
-                    } else if (!emaTrailingOnlyFav) {
-                        shouldUpdate = true;
+
+                    // ★ Bug 修复：SL 必须在正确一侧（SHORT: SL > current，LONG: SL < current），
+                    //   否则跳过更新，避免"SHORT SL 落到当前价下方 → 立即触发 → 虚构盈利"
+                    //   触发场景：EMA 由于历史价格 lagging 在当前价下方（如趋势反转刚开始时）
+                    boolean slOnWrongSide = isShortForEma
+                            ? newSl.compareTo(currentPrice) <= 0
+                            : newSl.compareTo(currentPrice) >= 0;
+                    if (slOnWrongSide) {
+                        log.debug("[EMA_TRAIL] Skip SL update: newSl={} would be on wrong side of currentPrice={} (isShort={})",
+                                newSl, currentPrice, isShortForEma);
                     } else {
-                        shouldUpdate = isShortForEma
-                                ? newSl.compareTo(stopLossPrice) < 0
-                                : newSl.compareTo(stopLossPrice) > 0;
-                    }
-                    if (shouldUpdate) {
-                        stopLossPrice = newSl;
+                        boolean shouldUpdate;
+                        if (stopLossPrice == null) {
+                            shouldUpdate = true;
+                        } else if (!emaTrailingOnlyFav) {
+                            shouldUpdate = true;
+                        } else {
+                            shouldUpdate = isShortForEma
+                                    ? newSl.compareTo(stopLossPrice) < 0
+                                    : newSl.compareTo(stopLossPrice) > 0;
+                        }
+                        if (shouldUpdate) {
+                            stopLossPrice = newSl;
+                        }
                     }
                 }
             }

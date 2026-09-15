@@ -1460,6 +1460,21 @@ public class TradeExecutionService {
                         ? maxEma.multiply(BigDecimal.ONE.add(bufferFrac)).setScale(8, RoundingMode.HALF_UP)
                         : minEma.multiply(BigDecimal.ONE.subtract(bufferFrac)).setScale(8, RoundingMode.HALF_UP);
 
+                // ★ Bug 修复：SL 必须在正确一侧（SHORT: SL > current，LONG: SL < current），
+                //   否则跳过更新，避免"SL 落到当前价错误一侧 → 立即触发平仓"
+                //   触发场景：EMA 由于历史价格 lagging 在错误一侧（趋势反转刚开始时常见）
+                BigDecimal currentPrice = position.getCurrentPrice();
+                if (currentPrice != null && currentPrice.compareTo(BigDecimal.ZERO) > 0) {
+                    boolean slOnWrongSide = isShort
+                            ? newSL.compareTo(currentPrice) <= 0
+                            : newSL.compareTo(currentPrice) >= 0;
+                    if (slOnWrongSide) {
+                        log.info("[EMA_TRAIL SL] Skip: newSL={} on wrong side of currentPrice={} (isShort={}) position={}",
+                                newSL, currentPrice, isShort, position.getId());
+                        continue;
+                    }
+                }
+
                 BigDecimal existing = position.getStopLoss();
                 boolean shouldUpdate;
                 if (existing == null) {
