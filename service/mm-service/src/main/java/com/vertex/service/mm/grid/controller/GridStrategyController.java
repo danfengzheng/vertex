@@ -3,8 +3,11 @@ package com.vertex.service.mm.grid.controller;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.vertex.common.core.annotation.RequiresPermission;
 import com.vertex.service.mm.grid.dto.EmergencyStopRequest;
+import com.vertex.service.mm.grid.dto.GridPreviewRequest;
 import com.vertex.service.mm.grid.dto.GridStrategyDTO;
 import com.vertex.service.mm.grid.dto.StartRequest;
+import com.vertex.service.mm.grid.service.GridPreviewService;
+import com.vertex.service.mm.grid.vo.GridPreviewVO;
 import com.vertex.service.mm.grid.entity.GridEvent;
 import com.vertex.service.mm.grid.entity.GridOrder;
 import com.vertex.service.mm.grid.entity.GridPnlSnapshot;
@@ -54,6 +57,16 @@ public class GridStrategyController {
     private final TrendScoreEvaluator scoreEvaluator;
     private final MarketQuoteCache marketQuoteCache;
     private final GridBacktestService backtestService;
+    private final GridPreviewService previewService;
+
+    // ─── 预览（不落库，纯计算）─────────────────────────────────
+
+    @RequiresPermission("mm:grid")
+    @PostMapping("/preview")
+    @Operation(summary = "网格策略预览（等差/等比 + 满仓/均价/保证金/强平/单轮利润）")
+    public Result<GridPreviewVO> preview(@RequestBody GridPreviewRequest req) {
+        return Result.success(previewService.preview(req));
+    }
 
     // ─── CRUD ────────────────────────────────────────────────
 

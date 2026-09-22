@@ -151,8 +151,9 @@ public class GridEngine implements UserStreamListener {
             }
         }
 
-        // 只有 OPEN 单成交需要补挂 CLOSE 单
-        if (isOpen) {
+        // V1: OPEN 成交 → 挂 CLOSE + 标记 HELD；CLOSE 成交 → 释放 HELD + 重挂 OPEN
+        // 两种情况都要过 SlidingWindow 才能维持 SlotState 三态机（DESIGN_V1_SIMPLE §1.4）
+        {
             SlidingWindowManager.FillResponse response = slidingWindow.onOrderFilled(
                     strategy, original.getGridPrice(), event.getSide(),
                     event.getPositionSide(), original.getRole(),

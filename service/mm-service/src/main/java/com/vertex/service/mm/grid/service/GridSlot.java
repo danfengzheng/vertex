@@ -30,5 +30,41 @@ public class GridSlot {
     private Long shortSideOrderId;
     private String shortSideClientId;
 
+    /**
+     * V1 网格占用不变量（DESIGN_V1_SIMPLE §1.4）：
+     * OPEN 单成交后至配对 CLOSE 单成交前，该 slot 在对应 positionSide 上视为 POSITION_HELD，
+     * 滑动窗口不得在此 slot 重新挂新的 OPEN 单，避免重复开仓累积超额头寸。
+     */
+    @lombok.Builder.Default
+    private boolean longPositionHeld = false;
+    @lombok.Builder.Default
+    private boolean shortPositionHeld = false;
+
     private LocalDateTime lastActivityAt;
+
+    // ─── 三态机（DESIGN_V1_SIMPLE §1.4）─────────────────────
+    public SlotState longState() {
+        if (longPositionHeld) return SlotState.POSITION_HELD;
+        if (longSideOrderId != null) return SlotState.OPEN_ORDER_LIVE;
+        return SlotState.EMPTY;
+    }
+
+    public SlotState shortState() {
+        if (shortPositionHeld) return SlotState.POSITION_HELD;
+        if (shortSideOrderId != null) return SlotState.OPEN_ORDER_LIVE;
+        return SlotState.EMPTY;
+    }
+
+    public SlotState stateOf(String positionSide) {
+        return "SHORT".equalsIgnoreCase(positionSide) ? shortState() : longState();
+    }
+
+    public enum SlotState {
+        /** 无活单也无未平头寸 —— 允许挂开仓单 */
+        EMPTY,
+        /** 已挂 OPEN 单等待成交 —— 无需重复挂 */
+        OPEN_ORDER_LIVE,
+        /** OPEN 已成交、CLOSE 单在别处挂着 —— 禁止再挂 OPEN */
+        POSITION_HELD
+    }
 }

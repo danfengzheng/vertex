@@ -9,6 +9,8 @@ export type GridStatus = 'STOPPED' | 'RUNNING' | 'PAUSED' | 'EMERGENCY_STOPPED';
 export type EmergencyMode = 'SOFT_STOP' | 'GRACEFUL_CLOSE' | 'LIMIT_LADDER_CLOSE' | 'MARKET_FALLBACK';
 export type ProtectionLayer = 'NORMAL' | 'LAYER1' | 'LAYER2' | 'LAYER3' | 'LAYER4' | 'EMERGENCY';
 export type ExecutionMode = 'PAPER' | 'LIVE';
+export type GridSide = 'LONG_ONLY' | 'SHORT_ONLY' | 'BOTH';
+export type GridMode = 'ARITHMETIC' | 'GEOMETRIC';
 
 /** 网格策略实体（对应后端 GridStrategy）*/
 export interface GridStrategyVO {
@@ -20,6 +22,13 @@ export interface GridStrategyVO {
   symbol: string;
   accountId: number;
   status?: GridStatus;
+
+  // ─── V1 简化版新增（DESIGN_V1_SIMPLE.md）─────────
+  side?: GridSide;
+  gridMode?: GridMode;
+  lowerPrice?: number | null;
+  upperPrice?: number | null;
+  gridCount?: number | null;
 
   centerPrice?: number | null;
   stepPct?: number | null;
@@ -234,6 +243,73 @@ export interface BacktestResult {
   events?: string[];
 }
 
+// ─── Preview（V1 简化版）────────────────────────────
+export interface GridPreviewRequest {
+  symbol?: string;
+  side?: GridSide;
+  mode?: GridMode;
+  lowerPrice?: number;
+  upperPrice?: number;
+  gridCount?: number;
+  qtyPerGrid?: number;
+  currentPrice?: number;
+  leverage?: number;
+  feeRate?: number;
+  maintenanceMarginRate?: number;
+  windowSizePerSide?: number;
+}
+
+export interface GridPreviewSideProjection {
+  slots: number;
+  maxQty: number;
+  maxNotional: number;
+  avgPrice: number;
+  requiredMargin: number;
+  estLiquidationPrice: number;
+}
+
+export interface GridPreviewVO {
+  basics?: {
+    symbol?: string;
+    side?: GridSide;
+    mode?: GridMode;
+    lowerPrice?: number;
+    upperPrice?: number;
+    gridCount?: number;
+    qtyPerGrid?: number;
+    currentPrice?: number;
+    leverage?: number;
+    feeRate?: number;
+  };
+  distribution?: {
+    stepPricesFirstFew?: number[];
+    stepPricesLastFew?: number[];
+    avgStepAbsolute?: number;
+    stepPct?: number;
+    netProfitPerGridPct?: number;
+  };
+  windowCoverage?: {
+    stepAbsolute?: number;
+    stepPct?: number;
+    windowSize?: number;
+    sideCoverageAbsolute?: number;
+    sideCoveragePct?: number;
+    note?: string;
+  };
+  longSide?: GridPreviewSideProjection;
+  shortSide?: GridPreviewSideProjection;
+  totals?: {
+    totalRequiredMargin?: number;
+    maxAggregateNotional?: number;
+  };
+  roundProfit?: {
+    grossPct?: number;
+    netPct?: number;
+    netUsdtPerRound?: number;
+  };
+  warnings?: string[];
+}
+
 export const mmGridApi = {
   // ⚠️ id 一律用 string —— Long 型 id 超过 Number.MAX_SAFE_INTEGER，Number() 会丢精度导致 404
   list: (): Promise<ApiResponse<GridStrategyVO[]>> => request.get('/mm/grid'),
@@ -260,4 +336,8 @@ export const mmGridApi = {
     request.get(`/mm/grid/${id}/pnl`, { params: { limit } }),
   backtest: (id: string | number, config: BacktestConfig): Promise<ApiResponse<BacktestResult>> =>
     request.post(`/mm/grid/${id}/backtest`, config),
+
+  /** 预览：等差/等比 + 满仓/均价/保证金/强平/单轮利润，不落库 */
+  preview: (req: GridPreviewRequest): Promise<ApiResponse<GridPreviewVO>> =>
+    request.post('/mm/grid/preview', req),
 };

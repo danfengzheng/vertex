@@ -8,6 +8,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { mmGridApi, GridStrategyVO } from '../../api/mmGrid';
 import { exchangeAccountApi, ExchangeAccountVO } from '../../api/trading';
+import GridPreviewPanel from './GridPreviewPanel';
 
 /**
  * 网格策略创建 / 编辑表单
@@ -112,6 +113,8 @@ export const GridStrategyForm = () => {
           <Form form={form} layout="vertical" initialValues={{
             exchange: 'binance-usdcm',
             executionMode: 'PAPER',
+            side: 'BOTH',
+            gridMode: 'ARITHMETIC',
             paperQueueLossFactor: 0.5,
             paperGtxRejectRate: 0.05,
             paperSmartPricingEnabled: 1,
@@ -119,10 +122,11 @@ export const GridStrategyForm = () => {
             hedgeMode: 1,
             longSideEnabled: 1,
             shortSideEnabled: 1,
-            adaptiveStepEnabled: 1,
-            trendProtectionEnabled: 1,
+            // V1 默认：自适应步长 + 趋势保护 关闭（V2 特性，V1 用户显式启用才生效）
+            adaptiveStepEnabled: 0,
+            trendProtectionEnabled: 0,
             windowSizePerSide: 5,
-            baseStepPct: 0.8,
+            // baseStepPct 不设默认值：V1 会根据 lower/upper/gridCount/gridMode 自动推导
             minimumStepSafetyMultiplier: 5.0,
             trendLayer1Interval: '5m',
             trendLayer2Interval: '15m',
@@ -233,24 +237,96 @@ export const GridStrategyForm = () => {
               </Col>
             </Row>
 
-            {/* 网格几何 */}
-            <Divider titlePlacement="start">网格几何</Divider>
+            {/* 网格几何 —— V1 简化版：区间 + 等差/等比 + 方向 + 预览 */}
+            <Divider titlePlacement="start">网格几何 (V1)</Divider>
             <Row gutter={16}>
+              <Col xs={24} md={4}>
+                <Form.Item name="side" label="方向" rules={[{ required: true }]}
+                           tooltip="LONG_ONLY 只做多；SHORT_ONLY 只做空；BOTH 双向（需 Hedge Mode）">
+                  <Select options={[
+                    { value: 'LONG_ONLY', label: '📈 只做多' },
+                    { value: 'SHORT_ONLY', label: '📉 只做空' },
+                    { value: 'BOTH', label: '↕️ 双向' },
+                  ]} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={4}>
+                <Form.Item name="gridMode" label="价格分布" rules={[{ required: true }]}
+                           tooltip="等差：每格固定金额；等比：每格固定百分比">
+                  <Select options={[
+                    { value: 'ARITHMETIC', label: '等差' },
+                    { value: 'GEOMETRIC', label: '等比' },
+                  ]} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={4}>
+                <Form.Item name="lowerPrice" label="区间下限" rules={[{ required: true }]}>
+                  <InputNumber min={0} step={1} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={4}>
+                <Form.Item name="upperPrice" label="区间上限" rules={[{ required: true }]}>
+                  <InputNumber min={0} step={1} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item name="gridCount" label="网格数量" rules={[{ required: true }]}
+                           tooltip="区间分成多少格（价位数 = 格数 + 1）">
+                  <InputNumber min={2} max={500} step={1} style={{ width: '100%' }} />
+                </Form.Item>
+              </Col>
               <Col xs={24} md={8}>
                 <Form.Item name="qtyPerGrid" label="单格数量" rules={[{ required: true }]}
-                           tooltip="每个网格线的挂单数量。ETH 建议 0.01-0.5">
+                           tooltip="每格挂单数量。ETH 建议 0.01-0.5">
                   <InputNumber min={0.001} step={0.001} style={{ width: '100%' }} />
                 </Form.Item>
               </Col>
               <Col xs={24} md={8}>
-                <Form.Item name="windowSizePerSide" label="每侧窗口大小" tooltip="每侧挂多少档，共 N×2 挂单">
+                <Form.Item name="windowSizePerSide" label="每侧窗口大小"
+                           tooltip="每侧挂多少档（增量挂单，不一次挂满）">
                   <InputNumber min={1} max={20} style={{ width: '100%' }} />
                 </Form.Item>
               </Col>
+            </Row>
+
+            {/* 预览面板 —— 独立行，参数变化 debounce 300ms 自动刷新 */}
+            <Row gutter={16} style={{ marginBottom: 16 }}>
+              <Col xs={24}>
+                <Form.Item shouldUpdate noStyle>
+                  {({ getFieldsValue }) => {
+                    const v = getFieldsValue([
+                      'symbol', 'side', 'gridMode',
+                      'lowerPrice', 'upperPrice', 'gridCount',
+                      'qtyPerGrid', 'leverage', 'windowSizePerSide',
+                    ]);
+                    const currentPrice = v.lowerPrice && v.upperPrice
+                      ? (Number(v.lowerPrice) + Number(v.upperPrice)) / 2
+                      : undefined;
+                    return (
+                      <GridPreviewPanel req={{
+                        symbol: v.symbol,
+                        side: v.side,
+                        mode: v.gridMode,
+                        lowerPrice: v.lowerPrice,
+                        upperPrice: v.upperPrice,
+                        gridCount: v.gridCount,
+                        qtyPerGrid: v.qtyPerGrid,
+                        currentPrice,
+                        leverage: v.leverage,
+                        windowSizePerSide: v.windowSizePerSide,
+                      }} />
+                    );
+                  }}
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Divider titlePlacement="start">进阶（V2 自适应/风控 - V1 可留空）</Divider>
+            <Row gutter={16}>
               <Col xs={24} md={8}>
-                <Form.Item name="baseStepPct" label="基础步长%" rules={[{ required: true }]}
-                           tooltip="自适应步长的基线，自适应会在此基础上乘倍数">
-                  <InputNumber min={0.05} max={5} step={0.05} style={{ width: '100%' }} addonAfter="%" />
+                <Form.Item name="baseStepPct" label="基础步长% (V1 自动推导)"
+                           tooltip="V1 会根据 lower/upper/gridCount/gridMode 自动填入此字段；V2 自适应步长把它当作基线倍率的起点">
+                  <InputNumber min={0.05} max={5} step={0.05} style={{ width: '100%' }} addonAfter="%" disabled />
                 </Form.Item>
               </Col>
               <Col xs={24} md={8}>

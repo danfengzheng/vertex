@@ -112,6 +112,53 @@ public class GridStrategyService {
         // 防御：runtime 字段不允许通过 PUT 修改（避免前端 form 回填时误清零运行时状态）
         clearRuntimeFields(patch);
 
+        // ─── V1 简化版：若 patch 里带 side，同步覆盖 enabled 两位（§2.2）─
+        if (patch.getSide() != null) {
+            switch (patch.getSide()) {
+                case "LONG_ONLY":
+                    patch.setLongSideEnabled(1);
+                    patch.setShortSideEnabled(0);
+                    break;
+                case "SHORT_ONLY":
+                    patch.setLongSideEnabled(0);
+                    patch.setShortSideEnabled(1);
+                    break;
+                case "BOTH":
+                    patch.setLongSideEnabled(1);
+                    patch.setShortSideEnabled(1);
+                    break;
+                default:
+                    // no-op：未识别的 side 值走 mapper 直接落库让 DB ENUM 报错
+                    break;
+            }
+        }
+
+        // ─── V1: 若几何配置变化 → 同步刷新 baseStepPct（DESIGN_V1_SIMPLE §1.2）───
+        boolean geomChanged = patch.getLowerPrice() != null || patch.getUpperPrice() != null
+                || patch.getGridCount() != null || patch.getGridMode() != null;
+        if (geomChanged) {
+            BigDecimal lower = patch.getLowerPrice() != null ? patch.getLowerPrice() : existing.getLowerPrice();
+            BigDecimal upper = patch.getUpperPrice() != null ? patch.getUpperPrice() : existing.getUpperPrice();
+            Integer count = patch.getGridCount() != null ? patch.getGridCount() : existing.getGridCount();
+            String mode = patch.getGridMode() != null ? patch.getGridMode() : existing.getGridMode();
+            if (lower != null && upper != null && count != null && count >= 2
+                    && lower.signum() > 0 && upper.compareTo(lower) > 0 && mode != null) {
+                BigDecimal derived;
+                if ("GEOMETRIC".equalsIgnoreCase(mode)) {
+                    double ratio = Math.pow(upper.doubleValue() / lower.doubleValue(), 1.0 / count);
+                    derived = BigDecimal.valueOf((ratio - 1.0) * 100.0)
+                            .setScale(4, java.math.RoundingMode.HALF_UP);
+                } else {
+                    BigDecimal mid = lower.add(upper).divide(BigDecimal.valueOf(2), 8, java.math.RoundingMode.HALF_UP);
+                    BigDecimal absStep = upper.subtract(lower).divide(BigDecimal.valueOf(count), 8, java.math.RoundingMode.HALF_UP);
+                    derived = absStep.divide(mid, 8, java.math.RoundingMode.HALF_UP)
+                            .multiply(BigDecimal.valueOf(100)).setScale(4, java.math.RoundingMode.HALF_UP);
+                }
+                patch.setBaseStepPct(derived);
+                log.info("[V1] strategy={} geometry updated → baseStepPct={}%", id, derived);
+            }
+        }
+
         // 记录变更（简化：只记录 patch 里 非 null 且和原值不同的字段）
         recordChanges(id, existing, patch, updateBy);
 
@@ -190,6 +237,14 @@ public class GridStrategyService {
         }
         if ("EMERGENCY_STOPPED".equals(strategy.getStatus())) {
             throw new IllegalStateException("strategy in EMERGENCY_STOPPED, manual recovery required");
+        }
+
+        // ─── V1 简化版：BOTH 侧必须 Hedge Mode（DESIGN_V1_SIMPLE §6）──
+        if ("BOTH".equalsIgnoreCase(strategy.getSide())
+                && (strategy.getHedgeMode() == null || strategy.getHedgeMode() != 1)) {
+            throw new IllegalStateException(
+                    "side=BOTH 必须开启 Hedge Mode（双向持仓）。请在币安账户设置中改为双向持仓模式，" +
+                    "或将策略 side 改为 LONG_ONLY / SHORT_ONLY。");
         }
 
         BigDecimal step = strategy.getBaseStepPct();
@@ -395,10 +450,63 @@ public class GridStrategyService {
     private void applyDefaults(GridStrategy s) {
         if (s.getStatus() == null) s.setStatus("STOPPED");
         if (s.getHedgeMode() == null) s.setHedgeMode(1);
-        if (s.getLongSideEnabled() == null) s.setLongSideEnabled(1);
-        if (s.getShortSideEnabled() == null) s.setShortSideEnabled(1);
-        if (s.getAdaptiveStepEnabled() == null) s.setAdaptiveStepEnabled(1);
-        if (s.getTrendProtectionEnabled() == null) s.setTrendProtectionEnabled(1);
+
+        // ─── V1 简化版：side ↔ longSideEnabled/shortSideEnabled 同步 ─────
+        // (DESIGN_V1_SIMPLE §2.2) side 是主字段，enabled 位是冗余快照供 V2 分侧风控使用
+        if (s.getSide() == null) s.setSide("BOTH");
+        switch (s.getSide()) {
+            case "LONG_ONLY":
+                s.setLongSideEnabled(1);
+                s.setShortSideEnabled(0);
+                break;
+            case "SHORT_ONLY":
+                s.setLongSideEnabled(0);
+                s.setShortSideEnabled(1);
+                break;
+            case "BOTH":
+            default:
+                s.setLongSideEnabled(1);
+                s.setShortSideEnabled(1);
+                break;
+        }
+        if (s.getGridMode() == null) s.setGridMode("ARITHMETIC");
+
+        // ─── V1 简化版：从几何配置自动推导 baseStepPct（DESIGN_V1_SIMPLE §1.2）───
+        // 步长在 V1 里由 lower/upper/count/mode 唯一决定，用户不用再填 baseStepPct；
+        // V2 引擎依赖 stepPct 做滑动窗口，所以这里帮它反推填入。
+        if (s.getLowerPrice() != null && s.getUpperPrice() != null
+                && s.getGridCount() != null && s.getGridCount() >= 2
+                && s.getLowerPrice().signum() > 0
+                && s.getUpperPrice().compareTo(s.getLowerPrice()) > 0) {
+            BigDecimal derivedStepPct;
+            if ("GEOMETRIC".equalsIgnoreCase(s.getGridMode())) {
+                double ratio = Math.pow(
+                        s.getUpperPrice().doubleValue() / s.getLowerPrice().doubleValue(),
+                        1.0 / s.getGridCount());
+                derivedStepPct = BigDecimal.valueOf((ratio - 1.0) * 100.0)
+                        .setScale(4, java.math.RoundingMode.HALF_UP);
+            } else {
+                // ARITHMETIC：用区间中位价换算成 %（供 V2 stepPct 使用；引擎实际用绝对步长时用 (upper-lower)/count）
+                BigDecimal midPrice = s.getLowerPrice().add(s.getUpperPrice())
+                        .divide(BigDecimal.valueOf(2), 8, java.math.RoundingMode.HALF_UP);
+                BigDecimal absStep = s.getUpperPrice().subtract(s.getLowerPrice())
+                        .divide(BigDecimal.valueOf(s.getGridCount()), 8, java.math.RoundingMode.HALF_UP);
+                derivedStepPct = absStep.divide(midPrice, 8, java.math.RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(100))
+                        .setScale(4, java.math.RoundingMode.HALF_UP);
+            }
+            // 只在用户没显式覆盖时才写入（用户填了非默认值的 baseStepPct 优先，兼容纯 V2 模式）
+            if (s.getBaseStepPct() == null
+                    || s.getBaseStepPct().compareTo(BigDecimal.ZERO) <= 0) {
+                s.setBaseStepPct(derivedStepPct);
+                log.info("[V1] strategy={} auto baseStepPct={}% derived from {}/{}~{}/count={}",
+                        s.getId(), derivedStepPct, s.getGridMode(),
+                        s.getLowerPrice(), s.getUpperPrice(), s.getGridCount());
+            }
+        }
+        // V1 默认关闭 V2 自适应/趋势保护（DESIGN_V1_SIMPLE §0）
+        if (s.getAdaptiveStepEnabled() == null) s.setAdaptiveStepEnabled(0);
+        if (s.getTrendProtectionEnabled() == null) s.setTrendProtectionEnabled(0);
         if (s.getWindowSizePerSide() == null) s.setWindowSizePerSide(5);
         if (s.getBaseStepPct() == null) s.setBaseStepPct(new BigDecimal("0.8"));
         if (s.getMinimumStepSafetyMultiplier() == null) s.setMinimumStepSafetyMultiplier(new BigDecimal("5.0"));

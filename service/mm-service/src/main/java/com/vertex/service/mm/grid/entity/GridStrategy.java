@@ -37,6 +37,18 @@ public class GridStrategy extends BaseEntity {
     /** STOPPED / RUNNING / PAUSED / EMERGENCY_STOPPED */
     private String status;
 
+    // ─── V1 简化版新增（DESIGN_V1_SIMPLE.md）─────────────────────
+    /** LONG_ONLY / SHORT_ONLY / BOTH */
+    private String side;
+    /** ARITHMETIC (等差) / GEOMETRIC (等比) */
+    private String gridMode;
+    /** 区间下限 */
+    private BigDecimal lowerPrice;
+    /** 区间上限 */
+    private BigDecimal upperPrice;
+    /** 网格数量（价位数 = count + 1） */
+    private Integer gridCount;
+
     // ─── 网格几何 ─────────────────────────────────
     @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal centerPrice;

@@ -28,6 +28,17 @@ public class GridState {
     private volatile BigDecimal stepPct;
     private volatile int windowSizePerSide;
 
+    /**
+     * V1 浮动网格：等差模式的绝对步长（USDT），从 (upper-lower)/count 精确计算。
+     * <p>非 null 时表示 V1 ARITHMETIC 模式，slot 价用 center ± i × absoluteStep。
+     * GEOMETRIC 模式此字段保持 null，slot 价用 center × (1 ± stepFrac × i) 逼近。
+     * V2 模式（未填 V1 几何字段）也保持 null。</p>
+     */
+    private volatile BigDecimal absoluteStep;
+
+    /** V1 模式记录 gridMode（ARITHMETIC / GEOMETRIC），供 slot 价计算分派 */
+    private volatile String gridMode;
+
     /** BUY grid 挂单（价格降序：靠近中枢的在最上）*/
     private final NavigableMap<BigDecimal, GridSlot> lowerSlots =
             new ConcurrentSkipListMap<>(Comparator.reverseOrder());
@@ -64,20 +75,22 @@ public class GridState {
 
     // ─── 辅助：统计当前活跃挂单数 ────────────────────────
 
-    /** 当前 LONG 侧活跃开仓单（BUY grid）数 */
+    /** 当前 LONG 侧活跃开仓单（BUY grid）数 —— 排除 sentinel（PLACE 意图已生成但 orderId 未回填）*/
     public int countLongOpenOrders() {
         int n = 0;
         for (GridSlot s : lowerSlots.values()) {
-            if (s.getLongSideOrderId() != null) n++;
+            Long id = s.getLongSideOrderId();
+            if (id != null && id != SlidingWindowManager.PENDING_PLACE_SENTINEL) n++;
         }
         return n;
     }
 
-    /** 当前 SHORT 侧活跃开仓单（SELL grid）数 */
+    /** 当前 SHORT 侧活跃开仓单（SELL grid）数 —— 同上，排除 sentinel */
     public int countShortOpenOrders() {
         int n = 0;
         for (GridSlot s : upperSlots.values()) {
-            if (s.getShortSideOrderId() != null) n++;
+            Long id = s.getShortSideOrderId();
+            if (id != null && id != SlidingWindowManager.PENDING_PLACE_SENTINEL) n++;
         }
         return n;
     }

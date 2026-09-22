@@ -143,6 +143,7 @@ public class GridRecoveryService {
                 .eq(GridOrder::getGridStrategyId, s.getId())
                 .eq(GridOrder::getStatus, "LIVE"));
         int refilled = 0;
+        int heldSlotsMarked = 0;
         for (GridOrder o : liveOrders) {
             if (o.getGridPrice() == null || o.getPositionSide() == null) continue;
             Long exchangeId = null;
@@ -156,7 +157,30 @@ public class GridRecoveryService {
                 gridEngine.trackClientOrder(o.getClientOrderId(), s.getId());
             }
             refilled++;
+
+            // V1 崩溃恢复（DESIGN_V1_SIMPLE §3.3 关键要点 3）：
+            // LIVE 的 CLOSE 单 → 说明对应的 OPEN 已成交但未 pair 完；把原 OPEN 单的 gridIndex 标为 POSITION_HELD
+            if ("CLOSE".equalsIgnoreCase(o.getRole()) && o.getPairOrderId() != null) {
+                GridOrder pairedOpen = orderMapper.selectById(o.getPairOrderId());
+                if (pairedOpen != null && pairedOpen.getGridPrice() != null) {
+                    var state = slidingWindow.getState(s.getId());
+                    if (state != null) {
+                        var slot = state.getLowerSlots().get(pairedOpen.getGridPrice());
+                        if (slot == null) slot = state.getUpperSlots().get(pairedOpen.getGridPrice());
+                        if (slot != null) {
+                            if ("LONG".equalsIgnoreCase(pairedOpen.getPositionSide())) {
+                                slot.setLongPositionHeld(true);
+                            } else if ("SHORT".equalsIgnoreCase(pairedOpen.getPositionSide())) {
+                                slot.setShortPositionHeld(true);
+                            }
+                            heldSlotsMarked++;
+                        }
+                    }
+                }
+            }
         }
+        log.info("[Recovery] strategy={} refilled {} live orders, marked {} slots POSITION_HELD",
+                s.getId(), refilled, heldSlotsMarked);
 
         // 4. 重订市场数据 WS（refCount 幂等）
         bookTickerSubscriber.subscribe(s.getSymbol());

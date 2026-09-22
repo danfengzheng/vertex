@@ -128,15 +128,27 @@ public class OrderIntentExecutor {
                             payload.put("errorMessage", r.getErrorMessage());
                             eventLogger.warn(intent.getStrategyId(), "GTX_REJECTED", payload);
                             summary.gtxRejected++;
+                            // V1: PLACE 失败 → 复位 refill sentinel，避免 slot 卡在 OPEN_ORDER_LIVE 假态
+                            slidingWindow.clearPendingSentinel(intent.getStrategyId(),
+                                    intent.getPrice(), intent.getPositionSide());
                         } else {
                             log.warn("[OrderExec] place failed strategy={} price={} err={}",
                                     intent.getStrategyId(), intent.getPrice(), r.getErrorMessage());
                             summary.placeFailed++;
+                            slidingWindow.clearPendingSentinel(intent.getStrategyId(),
+                                    intent.getPrice(), intent.getPositionSide());
                         }
                     }
                 } catch (Exception ex) {
                     log.error("[OrderExec] place batch error strategy={}: {}", strategyId, ex.getMessage(), ex);
                     summary.placeFailed += batch.size();
+                    // 整批异常 → 复位这批所有 intent 的 sentinel
+                    for (var intent : batch) {
+                        try {
+                            slidingWindow.clearPendingSentinel(intent.getStrategyId(),
+                                    intent.getPrice(), intent.getPositionSide());
+                        } catch (Exception ignored) {}
+                    }
                 }
             }
         });

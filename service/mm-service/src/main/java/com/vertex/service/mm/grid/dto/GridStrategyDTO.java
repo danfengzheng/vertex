@@ -17,6 +17,15 @@ public class GridStrategyDTO {
     private String symbol;
     private Long accountId;
 
+    // ─── V1 简化版新增（DESIGN_V1_SIMPLE.md）─────────────
+    /** LONG_ONLY / SHORT_ONLY / BOTH */
+    private String side;
+    /** ARITHMETIC / GEOMETRIC */
+    private String gridMode;
+    private BigDecimal lowerPrice;
+    private BigDecimal upperPrice;
+    private Integer gridCount;
+
     private Integer windowSizePerSide;
     private BigDecimal qtyPerGrid;
     private BigDecimal baseStepPct;
