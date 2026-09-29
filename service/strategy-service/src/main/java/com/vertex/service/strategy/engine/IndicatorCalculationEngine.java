@@ -71,13 +71,33 @@ public class IndicatorCalculationEngine {
         int maxHistory = properties.getEngine().getMaxKlineHistory();
         Map<KLineInterval, List<KLine>> klinesByInterval = new HashMap<>();
 
+        // 触发 bar 的 openTime：手动触发时 barProvider 无锁定时间，回退到主周期最新 bar
+        Long triggerTime = barProvider.getTriggerTime();
+        if (triggerTime == null) {
+            List<KLine> latestPrimary = barProvider.getBars(strategy.getInterval(), 1);
+            if (!latestPrimary.isEmpty()) {
+                triggerTime = latestPrimary.get(latestPrimary.size() - 1).getOpenTime();
+            }
+        }
+
         for (Map.Entry<KLineInterval, Integer> entry : maxRequired.entrySet()) {
             KLineInterval iv = entry.getKey();
             int fetchSize = Math.min(entry.getValue() * warmup + 10, maxHistory);
+            boolean isHigherInterval = iv.getMillis() > strategy.getInterval().getMillis();
 
-            // 大周期二级指标：barProvider 返回 closeTime < triggerTime 的已收盘 bar，
-            // 当前周期部分状态由 PartialBar 追加（步骤3），消除 Lookahead Bias
-            List<KLine> bars = barProvider.getBars(iv, fetchSize);
+            // 大周期二级指标：只保留当前大周期之前的 bar（openTime < periodStart），
+            // 当前周期部分状态由 PartialBar 追加（步骤3），消除 Lookahead Bias。
+            // 实盘在大周期最后一根主周期 bar 触发时（如 5m 20:55 / 1h 20:00），
+            // 1h 20:00 往往已收盘入库且 openTime <= triggerTime，若不剔除会与 PartialBar 重复；
+            // 回测 BacktestBarProvider 本就不含该 bar。多取 1 根再截断，保证两边窗口长度一致。
+            List<KLine> bars = barProvider.getBars(iv, isHigherInterval ? fetchSize + 1 : fetchSize);
+            if (isHigherInterval && triggerTime != null) {
+                long periodStart = (triggerTime / iv.getMillis()) * iv.getMillis();
+                List<KLine> closedBefore = bars.stream()
+                        .filter(k -> k.getOpenTime() < periodStart)
+                        .toList();
+                bars = closedBefore.subList(Math.max(0, closedBefore.size() - fetchSize), closedBefore.size());
+            }
             klinesByInterval.put(iv, bars);
 
             if (log.isDebugEnabled() && !bars.isEmpty()) {
@@ -91,11 +111,7 @@ public class IndicatorCalculationEngine {
 
         // ── 步骤3：为大周期追加 PartialBar（用主周期已收盘 bars 实时聚合）────────
         List<KLine> primaryBars = klinesByInterval.get(strategy.getInterval());
-        if (primaryBars != null && !primaryBars.isEmpty()) {
-            long triggerTime = barProvider.getTriggerTime() != null
-                    ? barProvider.getTriggerTime()
-                    : primaryBars.get(primaryBars.size() - 1).getOpenTime();
-
+        if (primaryBars != null && !primaryBars.isEmpty() && triggerTime != null) {
             for (KLineInterval iv : new HashSet<>(klinesByInterval.keySet())) {
                 if (iv.equals(strategy.getInterval())) continue;
                 if (iv.getMillis() <= strategy.getInterval().getMillis()) continue;
