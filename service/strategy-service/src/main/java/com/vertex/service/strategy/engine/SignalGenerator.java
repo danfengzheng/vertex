@@ -73,10 +73,27 @@ public class SignalGenerator {
                            List<IndicatorResult> results,
                            List<KLine> klines) {
 
-        // 汇总所有指标的 values，供条件判断和 Signal.indicators 字段使用
-        Map<String, Double> allValues = new HashMap<>();
-        for (IndicatorResult r : results) {
-            if (r != null) allValues.putAll(r.getValues());
+        // 汇总所有指标的 values，供跨指标条件回退查找和 Signal.indicators 字段使用。
+        // 同类指标配在多个周期时字段同名（如 VOL_CONFIRM 与 VOL_CONFIRM[1h] 都输出 volRatio），
+        // 直接 putAll 会互相覆盖，因此：
+        //   1. 主周期指标：写无前缀字段（兼容历史数据与旧配置）
+        //   2. 非主周期指标：写 "TYPE[周期].字段"，无前缀字段仅在未被占用时补充
+        Map<String, Double> allValues = new LinkedHashMap<>();
+        for (int i = 0; i < results.size(); i++) {
+            IndicatorResult r = results.get(i);
+            if (r != null && !isOtherInterval(configs.get(i), strategy)) {
+                allValues.putAll(r.getValues());
+            }
+        }
+        for (int i = 0; i < results.size(); i++) {
+            IndicatorResult r = results.get(i);
+            StrategyIndicatorConfig c = configs.get(i);
+            if (r == null || !isOtherInterval(c, strategy)) continue;
+            String prefix = c.getIndicatorType().getCode() + "[" + c.getInterval().getCode() + "].";
+            r.getValues().forEach((field, value) -> {
+                allValues.put(prefix + field, value);
+                allValues.putIfAbsent(field, value);
+            });
         }
 
         StringBuilder descBuilder = new StringBuilder();
@@ -321,17 +338,23 @@ public class SignalGenerator {
         return SignalSuggestion.NEUTRAL;
     }
 
+    /** 指标是否配置了不同于策略主周期的独立周期 */
+    private boolean isOtherInterval(StrategyIndicatorConfig config, Strategy strategy) {
+        return config.getInterval() != null && config.getInterval() != strategy.getInterval();
+    }
+
     /**
      * 判断条件列表是否全部满足（AND 逻辑）。
-     * 先从 allValues（全局值表）查找字段，找不到时回退到当前指标的 values。
+     * 先从当前指标自己的 values 查找字段（避免被其它周期同名字段覆盖），
+     * 找不到时回退到 allValues（跨指标引用，支持 "TYPE[周期].字段" 形式）。
      */
     private boolean evalConditions(List<FilterCondition> conditions,
                                    Map<String, Double> allValues,
                                    IndicatorResult result) {
         if (conditions == null || conditions.isEmpty()) return false;
         for (FilterCondition cond : conditions) {
-            Double actual = allValues.getOrDefault(cond.getField(),
-                    result.getValues().get(cond.getField()));
+            Double actual = result.getValues().get(cond.getField());
+            if (actual == null) actual = allValues.get(cond.getField());
             if (actual == null || !evalCondition(actual, cond.getOp(), cond.getThreshold())) {
                 return false;
             }

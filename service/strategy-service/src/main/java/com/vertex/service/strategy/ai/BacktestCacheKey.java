@@ -39,7 +39,7 @@ public final class BacktestCacheKey {
      * 回测引擎版本号。BacktestService 重大变更时手工 +1（或换成 git commit hash 自动注入）。
      * 一旦改动，所有旧缓存自动失效，所有用户重新计算回测。
      */
-    public static final String ENGINE_VERSION = "v1.0";
+    public static final String ENGINE_VERSION = "v1.1";
 
     private BacktestCacheKey() {}
 

@@ -1693,8 +1693,18 @@ public class TradeExecutionService {
         try {
             // 多取 3 倍 period：前 period 根用作 Wilder 平滑种子，再 period 根用于充分预热，
             // 最后 1 根用于计算 True Range（需要 prevClose）。
-            List<KLine> klines = klineStore.query(
-                    exchange, symbol, interval, null, null, period * 3 + 1, true);
+            // 必须降序取最新 bar：升序 + 无时间区间会从 RocksDB 前缀起点读到最老的数据。
+            // 多取 1 根以便剔除当前未收盘 bar（与回测只用已收盘 bar 对齐），再翻转为升序。
+            List<KLine> latest = klineStore.query(
+                    exchange, symbol, interval, null, null, period * 3 + 2, false);
+            List<KLine> klines = null;
+            if (latest != null) {
+                klines = new java.util.ArrayList<>(latest.stream()
+                        .filter(k -> !Boolean.FALSE.equals(k.getClosed()))
+                        .limit(period * 3 + 1)
+                        .toList());
+                java.util.Collections.reverse(klines);
+            }
             if (klines == null || klines.size() < 2) {
                 log.warn("[ATR] Insufficient kline data for {} {} {}: got {}",
                         exchange, symbol, interval, klines == null ? 0 : klines.size());
