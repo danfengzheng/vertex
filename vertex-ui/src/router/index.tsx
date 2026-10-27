@@ -18,6 +18,10 @@ import { TemplateAbCompare } from '../pages/template/TemplateAbCompare';
 import { GridStrategyList } from '../pages/mm/GridStrategyList';
 import { GridStrategyDetail } from '../pages/mm/GridStrategyDetail';
 import { GridStrategyForm } from '../pages/mm/GridStrategyForm';
+import { FarbStrategyList } from '../pages/farb/FarbStrategyList';
+import { FarbStrategyDetail } from '../pages/farb/FarbStrategyDetail';
+import { FarbStrategyForm } from '../pages/farb/FarbStrategyForm';
+import { FarbBacktest } from '../pages/farb/FarbBacktest';
 import { StrategyGuide } from '../pages/guide/StrategyGuide';
 import { ExchangeAccountManagement } from '../pages/trading/ExchangeAccountManagement';
 import { OrderHistory } from '../pages/trading/OrderHistory';
@@ -99,6 +103,23 @@ export const AppRouter = () => {
         } />
         <Route path="mm/grid/:id" element={
           <PermissionGuard path="/mm/grid"><GridStrategyDetail /></PermissionGuard>
+        } />
+
+        {/* 资金费套利 */}
+        <Route path="farb" element={
+          <PermissionGuard path="/farb"><FarbStrategyList /></PermissionGuard>
+        } />
+        <Route path="farb/new" element={
+          <PermissionGuard path="/farb"><FarbStrategyForm /></PermissionGuard>
+        } />
+        <Route path="farb/:id/edit" element={
+          <PermissionGuard path="/farb"><FarbStrategyForm /></PermissionGuard>
+        } />
+        <Route path="farb/:id" element={
+          <PermissionGuard path="/farb"><FarbStrategyDetail /></PermissionGuard>
+        } />
+        <Route path="farb/backtest" element={
+          <PermissionGuard path="/farb"><FarbBacktest /></PermissionGuard>
         } />
 
         {/* 交易 */}

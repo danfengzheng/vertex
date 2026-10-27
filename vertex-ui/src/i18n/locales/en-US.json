@@ -197,6 +197,11 @@
       "backfillRecords": "{{count}} records",
       "noSubscriptions": "No active subscriptions"
     },
+    "farb": {
+      "title": "Funding Arb",
+      "listTitle": "Strategies",
+      "backtest": "Backtest"
+    },
     "mm": {
       "title": "Market Making",
       "gridListTitle": "Grid Strategies",

@@ -32,6 +32,7 @@ import {
   DeleteOutlined,
   AppstoreAddOutlined,
   FunctionOutlined,
+  DollarOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '../LanguageSwitcher';
@@ -302,6 +303,23 @@ export const MainLayout = () => {
           key: '/mm/grid',
           icon: <AppstoreAddOutlined />,
           label: t('text.mm.gridListTitle', { defaultValue: '网格策略' }),
+        },
+      ],
+    },
+    {
+      key: 'farb',
+      icon: <DollarOutlined />,
+      label: t('text.farb.title', { defaultValue: '资金费套利' }),
+      children: [
+        {
+          key: '/farb',
+          icon: <AppstoreOutlined />,
+          label: t('text.farb.listTitle', { defaultValue: '策略列表' }),
+        },
+        {
+          key: '/farb/backtest',
+          icon: <ThunderboltOutlined />,
+          label: t('text.farb.backtest', { defaultValue: '回测' }),
         },
       ],
     },

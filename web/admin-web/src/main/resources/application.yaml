@@ -38,9 +38,15 @@ knife4j:
           - com.vertex.service.strategy.controller
           - com.vertex.service.order.controller
           - com.vertex.service.chain.controller
+          - com.vertex.service.farb.controller
+          - com.vertex.service.farb.backtest
 
 # 系统配置
 vertex:
+  # 资金费套利模块（默认关，改为 true 启用）
+  farb:
+    enabled: true
+    data-collector-enabled: true
   i18n:
     # 是否开启多语言key自动拼接
     enable: false

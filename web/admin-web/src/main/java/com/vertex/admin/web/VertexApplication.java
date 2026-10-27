@@ -27,10 +27,16 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @SpringBootApplication
 @ComponentScan(
         basePackages = "com.vertex",
-        excludeFilters = @ComponentScan.Filter(
-                type = FilterType.REGEX,
-                pattern = "com\\.vertex\\.service\\.mm\\..*"
-        )
+        excludeFilters = {
+                @ComponentScan.Filter(
+                        type = FilterType.REGEX,
+                        pattern = "com\\.vertex\\.service\\.mm\\..*"
+                ),
+                @ComponentScan.Filter(
+                        type = FilterType.REGEX,
+                        pattern = "com\\.vertex\\.service\\.farb\\..*"
+                )
+        }
 )
 @MapperScan("com.vertex.service.*.mapper")
 @EnableScheduling

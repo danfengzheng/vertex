@@ -1,0 +1,26 @@
+# funding-arb-service 配置示例
+# 引用方式：主项目 application.yml 里 spring.profiles.include: farb 或直接把下面片段合并
+vertex:
+  farb:
+    # 总开关：改为 true 才启动本模块
+    enabled: false
+    # 是否启动 DataCollector（可与策略主逻辑分离，只跑数据收集）
+    data-collector-enabled: true
+
+    # Binance endpoint
+    binance-usdm-base-url: https://fapi.binance.com
+    binance-spot-base-url: https://api.binance.com
+
+    # DataCollector 频率（Sprint 1 默认值）
+    premium-index-pull-sec: 30
+    oi-lsr-pull-min: 5
+    taker-bsr-pull-min: 15
+    vol-pull-min: 60
+    universe-refresh-min: 60
+
+    # 拉取并发与超时
+    concurrent-pullers: 10
+    pull-timeout-ms: 5000
+
+    # RocksDB 信号 TTL（天，0 = 不过期）
+    signal-ttl-days: 180

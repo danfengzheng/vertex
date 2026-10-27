@@ -83,8 +83,15 @@ public class BinanceFuturesClient {
         }
 
         // LIMIT 订单：按 PRICE_FILTER tickSize 向下截断价格（避免 Binance 精度拒单）
+        // 支持 timeInForce 可选："GTC"（默认）/ "GTX"（post-only）/ "IOC"
+        String timeInForce = "GTC";
+        String effectiveType = type;
+        if (type != null && type.startsWith("LIMIT_")) {
+            timeInForce = type.substring("LIMIT_".length());   // "LIMIT_GTX" → "GTX"
+            effectiveType = "LIMIT";
+        }
         BigDecimal alignedPrice = price;
-        if ("LIMIT".equals(type) && price != null && price.compareTo(BigDecimal.ZERO) > 0) {
+        if ("LIMIT".equals(effectiveType) && price != null && price.compareTo(BigDecimal.ZERO) > 0) {
             alignedPrice = alignToTickSize(cacheKey, binanceSymbol, base, marketType, price);
             if (alignedPrice.compareTo(price) != 0) {
                 log.info("[Futures] Price aligned by tickSize: {} → {} ({})", price, alignedPrice, binanceSymbol);
@@ -94,10 +101,10 @@ public class BinanceFuturesClient {
         StringBuilder params = new StringBuilder();
         params.append("symbol=").append(binanceSymbol);
         params.append("&side=").append(side);
-        params.append("&type=").append(type);
+        params.append("&type=").append(effectiveType);
         params.append("&quantity=").append(alignedQty.stripTrailingZeros().toPlainString());
-        if ("LIMIT".equals(type) && alignedPrice != null) {
-            params.append("&timeInForce=GTC");
+        if ("LIMIT".equals(effectiveType) && alignedPrice != null) {
+            params.append("&timeInForce=").append(timeInForce);
             params.append("&price=").append(alignedPrice.stripTrailingZeros().toPlainString());
         }
         if (isHedgeMode(apiKey, apiSecret, marketType)) {
@@ -131,6 +138,33 @@ public class BinanceFuturesClient {
                 .build();
 
         return executeRequest(request, "placeOrder");
+    }
+
+    /**
+     * 撤单
+     */
+    public JSONObject cancelOrder(String apiKey, String apiSecret,
+                                   String symbol, String exchangeOrderId, MarketType marketType) {
+        String base = baseUrl(marketType);
+        String binanceSymbol = toBinanceSymbol(symbol);
+        String endpoint = marketType == MarketType.USDM ? "/fapi/v1/order" : "/dapi/v1/order";
+
+        StringBuilder params = new StringBuilder();
+        params.append("symbol=").append(binanceSymbol);
+        params.append("&orderId=").append(exchangeOrderId);
+        params.append("&recvWindow=").append(properties.getBinance().getRecvWindow());
+        params.append("&timestamp=").append(System.currentTimeMillis());
+
+        String signature = sign(params.toString(), apiSecret);
+        params.append("&signature=").append(signature);
+
+        Request request = new Request.Builder()
+                .url(base + endpoint + "?" + params)
+                .delete()
+                .addHeader("X-MBX-APIKEY", apiKey)
+                .build();
+
+        return executeRequest(request, "cancelOrder");
     }
 
     /**

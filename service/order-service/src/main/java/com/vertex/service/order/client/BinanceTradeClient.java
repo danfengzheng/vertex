@@ -110,6 +110,11 @@ public class BinanceTradeClient {
             }
         }
 
+        // LIMIT_MAKER 也需要按 tick 对齐 price
+        if ("LIMIT_MAKER".equals(type) && price != null && price.compareTo(BigDecimal.ZERO) > 0) {
+            alignedPrice = alignToTickSize(binanceSymbol, price);
+        }
+
         StringBuilder params = new StringBuilder();
         params.append("symbol=").append(binanceSymbol);
         params.append("&side=").append(side);
@@ -117,6 +122,9 @@ public class BinanceTradeClient {
         params.append("&quantity=").append(alignedQty.stripTrailingZeros().toPlainString());
         if ("LIMIT".equals(type) && alignedPrice != null) {
             params.append("&timeInForce=GTC");
+            params.append("&price=").append(alignedPrice.stripTrailingZeros().toPlainString());
+        } else if ("LIMIT_MAKER".equals(type) && alignedPrice != null) {
+            // LIMIT_MAKER：post-only，不需要 timeInForce
             params.append("&price=").append(alignedPrice.stripTrailingZeros().toPlainString());
         }
         params.append("&recvWindow=").append(properties.getBinance().getRecvWindow());

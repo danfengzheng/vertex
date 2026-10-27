@@ -197,6 +197,11 @@
       "backfillRecords": "已补全 {{count}} 条",
       "noSubscriptions": "当前没有活跃的订阅"
     },
+    "farb": {
+      "title": "资金费套利",
+      "listTitle": "策略列表",
+      "backtest": "回测"
+    },
     "mm": {
       "title": "做市策略",
       "gridListTitle": "网格策略",

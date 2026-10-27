@@ -1,0 +1,32 @@
+description = 'funding-arb-service - 资金费率套利模块（现货 + USDM 期货 delta 中性）'
+
+dependencies {
+    // 内部依赖
+    implementation project(':api')
+    implementation project(':model')
+    implementation project(':common:common-core')
+    implementation project(':common:common-web')
+    implementation project(':service:order-service')      // 复用 BinanceTradeClient + spot 下单能力
+    implementation project(':service:quote-service')      // 复用 RocksDBManager (信号时序存储)
+
+    // Spring Boot
+    implementation libs.spring.boot.starter
+
+    // MyBatis Plus (业务实体走 MySQL)
+    implementation libs.mybatis.plus.boot.starter
+
+    // JSON
+    implementation libs.fastjson2
+
+    // HTTP client (Binance REST)
+    implementation libs.okhttp
+
+    // RocksDB (quote-service 用 implementation 引入，非 api，下游拿不到，此处必须显式声明)
+    implementation libs.rocksdb
+
+    // 配置处理
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
+    // 测试
+    testImplementation libs.spring.boot.starter.test
+}
