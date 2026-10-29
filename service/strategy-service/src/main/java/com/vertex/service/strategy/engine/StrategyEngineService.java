@@ -68,6 +68,9 @@ public class StrategyEngineService {
     /** 节流：记录每个策略的上次执行时间戳（毫秒） */
     private final ConcurrentHashMap<Long, Long> lastEvalTimeMap = new ConcurrentHashMap<>();
 
+    /** 冷静期状态（内存态）：exit 后同一根 K 的信号不执行交易，和回测 closedByStopOrTp 对齐 */
+    private final StrategyCooldownState cooldownState;
+
     /**
      * 同一策略的 runStrategy 必须串行执行，防止以下并发场景：
      * <ul>
@@ -416,13 +419,40 @@ public class StrategyEngineService {
         if (tradeExecutionListener != null && strategy.getAutoTrade() != null
                 && strategy.getAutoTrade() == 1
                 && meetsStrengthThreshold(strategy, signal)) {
-            try {
-                tradeExecutionListener.onSignal(strategy, signal);
-            } catch (Exception e) {
-                log.error("Trade execution failed for strategy [{}]: {}",
-                        strategy.getName(), e.getMessage(), e);
+            // 冷静期判定：exit 发生在当前 K 后，同一根 K 的信号屏蔽（和回测 closedByStopOrTp 对齐）
+            //   起算基准：exit 时刻所在 K 的 openTime
+            //   过期条件：下一根 K 的 openTime > exitBarOpenTime
+            if (isInExitCooldown(strategy, signal)) {
+                log.info("[Cooldown] Strategy [{}] within exit cooldown, skip trade execution for signal {} (K={}ms)",
+                        strategy.getName(), signal.getSignalType(), signal.getSignalTime());
+            } else {
+                try {
+                    tradeExecutionListener.onSignal(strategy, signal);
+                } catch (Exception e) {
+                    log.error("Trade execution failed for strategy [{}]: {}",
+                            strategy.getName(), e.getMessage(), e);
+                }
             }
         }
+    }
+
+    /**
+     * 判断信号是否仍在"出场冷静期"内。
+     * <p>
+     * 当前 K 的 openTime = (signalTime / intervalMs) × intervalMs。
+     * 若该 openTime ≤ 上次 exit 所在 K 的 openTime，则同一根 K 内，屏蔽交易执行。
+     * </p>
+     */
+    private boolean isInExitCooldown(Strategy strategy, Signal signal) {
+        if (strategy == null || strategy.getInterval() == null
+                || signal == null || signal.getSignalTime() == null) {
+            return false;
+        }
+        long intervalMs = strategy.getInterval().getMillis();
+        if (intervalMs <= 0) return false;
+        long signalTimeMs = signal.getSignalTime();   // Signal.signalTime 是 Long（毫秒）
+        long currentBarOpen = (signalTimeMs / intervalMs) * intervalMs;
+        return cooldownState.inCooldown(strategy.getId(), currentBarOpen);
     }
 
     // ─── 辅助方法 ───────────────────────────────────────────────

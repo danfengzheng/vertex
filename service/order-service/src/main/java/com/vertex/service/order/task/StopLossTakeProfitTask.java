@@ -45,6 +45,9 @@ public class StopLossTakeProfitTask {
         }
 
         for (Position position : openPositions) {
+            // mid-bar close 标志：本任务是实盘 mid-bar 的唯一入口（10s 轮询探测价格），
+            // 任何触发 close 都应启动策略冷静期，和回测的 closedByStopOrTp 行为对齐。
+            PositionManagementService.markMidBarClose();
             try {
                 // 获取当前价格
                 BigDecimal currentPrice = paperTradingService.getCurrentPrice(
@@ -195,6 +198,9 @@ public class StopLossTakeProfitTask {
             } catch (Exception e) {
                 log.error("[SL/TP Task] Error checking position {}: {}",
                         position.getId(), e.getMessage(), e);
+            } finally {
+                // 清理 mid-bar close 标志，避免线程池复用时标志泄露到其他任务
+                PositionManagementService.clearMidBarCloseMark();
             }
         }
     }

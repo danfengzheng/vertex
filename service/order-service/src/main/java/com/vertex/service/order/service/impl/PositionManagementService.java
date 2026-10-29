@@ -4,11 +4,13 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.vertex.model.entity.strategy.Strategy;
 import com.vertex.model.entity.trading.*;
+import com.vertex.model.event.PositionClosedEvent;
 import com.vertex.service.order.mapper.OrderMapper;
 import com.vertex.service.order.mapper.PositionMapper;
 import com.vertex.service.order.mapper.StrategyRefMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -32,6 +34,32 @@ public class PositionManagementService {
     private final PositionMapper positionMapper;
     private final OrderMapper orderMapper;
     private final StrategyRefMapper strategyRefMapper;
+    private final ApplicationEventPublisher eventPublisher;
+
+    /**
+     * 冷静期触发标志（ThreadLocal）：
+     * mid-bar 关仓路径（StopLossTakeProfitTask）在调用 close 之前 set，
+     * 调用链结束后 closePosition 读取此 flag 决定是否发事件触发冷静期。
+     * <p>
+     * 信号驱动的 close（SIGNAL_REVERSE / 指标出场 / 时间止损 / NEUTRAL vote）不 set 此 flag，
+     * 因为它们和 signal 在同一处理周期内，不需要跨 bar 屏蔽。
+     * </p>
+     */
+    private static final ThreadLocal<Boolean> MID_BAR_CLOSE_FLAG = ThreadLocal.withInitial(() -> false);
+
+    /** 由 mid-bar 入口（StopLossTakeProfitTask）在 close 前调用，标记"本次 close 需要触发冷静期"*/
+    public static void markMidBarClose() {
+        MID_BAR_CLOSE_FLAG.set(true);
+    }
+
+    /** 调用链结束后清理 ThreadLocal（防止跨任务复用线程时标志泄露）*/
+    public static void clearMidBarCloseMark() {
+        MID_BAR_CLOSE_FLAG.remove();
+    }
+
+    private boolean isMidBarClose() {
+        return Boolean.TRUE.equals(MID_BAR_CLOSE_FLAG.get());
+    }
 
     // ─── 核心入口 ─────────────────────────────────────────────
 
@@ -319,6 +347,23 @@ public class PositionManagementService {
 
         log.info("Position {} closed: {} {} closePrice={} pnl={}",
                 position.getSide(), position.getExchange(), position.getSymbol(), closePrice, pnl);
+
+        // 发布 PositionClosedEvent：strategy-service 的 StrategyCooldownState 据此启动冷静期。
+        // 仅在 mid-bar 关仓路径（StopLossTakeProfitTask 设置的 ThreadLocal flag）下触发，
+        // 信号驱动的 close（SIGNAL_REVERSE / 指标出场 / 时间止损 / NEUTRAL vote）不触发，
+        // 避免对"下一根 K"的信号产生过度屏蔽。
+        if (position.getStrategyId() != null && isMidBarClose()) {
+            try {
+                eventPublisher.publishEvent(new PositionClosedEvent(
+                        position.getStrategyId(),
+                        System.currentTimeMillis(),
+                        "MID_BAR_CLOSE"
+                ));
+            } catch (Exception ex) {
+                log.warn("[Close] Failed to publish PositionClosedEvent for position {}: {}",
+                        position.getId(), ex.getMessage());
+            }
+        }
         return true;
     }
 
